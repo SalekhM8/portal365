@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -31,10 +31,11 @@ interface ClassData {
   instructor: string
   time: string
   location: string
-  maxParticipants: number
+  duration: number
+  canAccess: boolean
 }
 
-export default function CustomerDashboard() {
+function DashboardContent() {
   const searchParams = useSearchParams()
   const userEmail = searchParams.get('email')
   const [loading, setLoading] = useState(true)
@@ -334,5 +335,13 @@ export default function CustomerDashboard() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+export default function CustomerDashboard() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
   )
 } 
