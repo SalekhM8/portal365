@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "prisma generate && prisma db push && next build --no-lint",
+    "build": "prisma generate && prisma db push && npx tsx prisma/seed.ts && next build --no-lint",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
