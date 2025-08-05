@@ -1,16 +1,19 @@
 import { prisma } from './prisma'
 
-// ============================================================================
-// VAT OPTIMIZATION ENGINE
-// ============================================================================
+// Local type definitions (will be replaced when Prisma generates)
+type BusinessEntity = {
+  id: string
+  name: string
+  vatThreshold: number
+  payments: any[]
+}
 
-// Local type definitions to avoid import issues
 type VATRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'EXCEEDED'
-type RoutingMethod = 'SERVICE_PREFERENCE' | 'HEADROOM_OPTIMIZED' | 'LOAD_BALANCING' | 'FALLBACK' | 'MANUAL_OVERRIDE'
+type RoutingMethod = 'LOAD_BALANCING' | 'VAT_OPTIMIZED' | 'SERVICE_PREFERENCE' | 'HEADROOM_OPTIMIZED' | 'MANUAL_OVERRIDE'
 type RoutingConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'FORCED'
 type MembershipType = 'WEEKEND_ADULT' | 'WEEKEND_UNDER18' | 'FULL_ADULT' | 'FULL_UNDER18' | 'PERSONAL_TRAINING' | 'WOMENS_CLASSES' | 'WELLNESS_PACKAGE' | 'CORPORATE'
 
-interface VATPosition {
+export interface VATPosition {
   entityId: string
   entityName: string
   currentRevenue: number
@@ -21,23 +24,25 @@ interface VATPosition {
   projectedYearEnd: number
 }
 
-export interface RoutingOptions {
-  amount: number
-  membershipType?: MembershipType
-  adminOverride?: {
-    entityId: string
-    reason: string
-  }
-}
-
-export interface RoutingResult {
+export interface RoutingDecision {
   selectedEntityId: string
   routingReason: string
   routingMethod: RoutingMethod
   confidence: RoutingConfidence
-  availableEntities: VATPosition[]
   thresholdDistance: number
+  availableEntities: VATPosition[]
   decisionTimeMs: number
+}
+
+export interface RoutingOptions {
+  amount: number
+  membershipType?: MembershipType
+  customerPreference?: string
+  adminOverride?: {
+    entityId: string
+    reason: string
+    userId: string
+  }
 }
 
 // ============================================================================
@@ -70,24 +75,23 @@ export class VATCalculationEngine {
     const positions: VATPosition[] = []
 
     for (const entity of entities) {
-      const currentRevenue = entity.payments.reduce((sum: number, payment: { amount: number | string }) => 
-        sum + Number(payment.amount), 0
-      )
+      // Calculate total revenue for the VAT year
+      const totalRevenue = entity.payments.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0)
       
-      const headroom = Number(entity.vatThreshold) - currentRevenue
+      const headroom = Number(entity.vatThreshold) - totalRevenue
       const monthlyAverage = this.calculateMonthlyAverage(entity.payments)
       const projectedYearEnd = this.projectYearEndRevenue(
-        currentRevenue, 
+        totalRevenue, 
         monthlyAverage
       )
       
       positions.push({
         entityId: entity.id,
         entityName: entity.name,
-        currentRevenue,
+        currentRevenue: totalRevenue,
         vatThreshold: Number(entity.vatThreshold),
         headroom,
-        riskLevel: this.calculateRiskLevel(currentRevenue, Number(entity.vatThreshold)),
+        riskLevel: this.calculateRiskLevel(totalRevenue, Number(entity.vatThreshold)),
         monthlyAverage,
         projectedYearEnd
       })
@@ -116,7 +120,7 @@ export class VATCalculationEngine {
   /**
    * Calculate monthly average from payments
    */
-  private static calculateMonthlyAverage(payments: { amount: number | string }[]): number {
+  private static calculateMonthlyAverage(payments: any[]): number {
     if (payments.length === 0) return 0
     
     const vatYearStart = this.getCurrentVATYearStart()
@@ -200,7 +204,7 @@ export class IntelligentVATRouter {
   /**
    * Main routing function - determines optimal entity for payment
    */
-  static async routePayment(options: RoutingOptions): Promise<RoutingResult> {
+  static async routePayment(options: RoutingOptions): Promise<RoutingDecision> {
     const startTime = Date.now()
     
     // Get current VAT positions
@@ -221,7 +225,7 @@ export class IntelligentVATRouter {
     // Apply business logic routing
     const selectedEntity = this.selectOptimalEntity(viableEntities, options)
     
-    const decision: RoutingResult = {
+    const decision: RoutingDecision = {
       selectedEntityId: selectedEntity.entityId,
       routingReason: this.generateRoutingReason(selectedEntity, viableEntities, options),
       routingMethod: this.determineRoutingMethod(options),
@@ -318,7 +322,7 @@ export class IntelligentVATRouter {
     options: RoutingOptions, 
     vatPositions: VATPosition[], 
     startTime: number
-  ): RoutingResult {
+  ): RoutingDecision {
     const selectedEntity = vatPositions.find(e => e.entityId === options.adminOverride!.entityId)
     
     if (!selectedEntity) {
