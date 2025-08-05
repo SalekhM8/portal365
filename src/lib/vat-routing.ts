@@ -1,16 +1,16 @@
 import { prisma } from './prisma'
-import { BusinessEntity } from '../generated/prisma'
 
 // ============================================================================
-// TYPES & INTERFACES
+// VAT OPTIMIZATION ENGINE
 // ============================================================================
 
-export type VATRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'EXCEEDED'
-export type RoutingMethod = 'SERVICE_BASED' | 'LOAD_BALANCING' | 'MANUAL_OVERRIDE' | 'VAT_OPTIMIZATION' | 'SERVICE_PREFERENCE' | 'HEADROOM_OPTIMIZED'
-export type RoutingConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'FORCED'
-export type MembershipType = 'WEEKEND_ADULT' | 'WEEKEND_UNDER18' | 'FULL_ADULT' | 'FULL_UNDER18' | 'PERSONAL_TRAINING' | 'WOMENS_CLASSES' | 'WELLNESS_PACKAGE' | 'CORPORATE'
+// Local type definitions to avoid import issues
+type VATRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'EXCEEDED'
+type RoutingMethod = 'SERVICE_PREFERENCE' | 'HEADROOM_OPTIMIZED' | 'LOAD_BALANCING' | 'FALLBACK' | 'MANUAL_OVERRIDE'
+type RoutingConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'FORCED'
+type MembershipType = 'WEEKEND_ADULT' | 'WEEKEND_UNDER18' | 'FULL_ADULT' | 'FULL_UNDER18' | 'PERSONAL_TRAINING' | 'WOMENS_CLASSES' | 'WELLNESS_PACKAGE' | 'CORPORATE'
 
-export interface VATPosition {
+interface VATPosition {
   entityId: string
   entityName: string
   currentRevenue: number
@@ -21,25 +21,23 @@ export interface VATPosition {
   projectedYearEnd: number
 }
 
-export interface RoutingDecision {
+export interface RoutingOptions {
+  amount: number
+  membershipType?: MembershipType
+  adminOverride?: {
+    entityId: string
+    reason: string
+  }
+}
+
+export interface RoutingResult {
   selectedEntityId: string
   routingReason: string
   routingMethod: RoutingMethod
   confidence: RoutingConfidence
-  thresholdDistance: number
   availableEntities: VATPosition[]
+  thresholdDistance: number
   decisionTimeMs: number
-}
-
-export interface RoutingOptions {
-  amount: number
-  membershipType?: MembershipType
-  customerPreference?: string
-  adminOverride?: {
-    entityId: string
-    reason: string
-    userId: string
-  }
 }
 
 // ============================================================================
@@ -72,7 +70,7 @@ export class VATCalculationEngine {
     const positions: VATPosition[] = []
 
     for (const entity of entities) {
-      const currentRevenue = entity.payments.reduce((sum, payment) => 
+      const currentRevenue = entity.payments.reduce((sum: number, payment: any) => 
         sum + Number(payment.amount), 0
       )
       
@@ -202,7 +200,7 @@ export class IntelligentVATRouter {
   /**
    * Main routing function - determines optimal entity for payment
    */
-  static async routePayment(options: RoutingOptions): Promise<RoutingDecision> {
+  static async routePayment(options: RoutingOptions): Promise<RoutingResult> {
     const startTime = Date.now()
     
     // Get current VAT positions
@@ -223,7 +221,7 @@ export class IntelligentVATRouter {
     // Apply business logic routing
     const selectedEntity = this.selectOptimalEntity(viableEntities, options)
     
-    const decision: RoutingDecision = {
+    const decision: RoutingResult = {
       selectedEntityId: selectedEntity.entityId,
       routingReason: this.generateRoutingReason(selectedEntity, viableEntities, options),
       routingMethod: this.determineRoutingMethod(options),
@@ -320,7 +318,7 @@ export class IntelligentVATRouter {
     options: RoutingOptions, 
     vatPositions: VATPosition[], 
     startTime: number
-  ): RoutingDecision {
+  ): RoutingResult {
     const selectedEntity = vatPositions.find(e => e.entityId === options.adminOverride!.entityId)
     
     if (!selectedEntity) {

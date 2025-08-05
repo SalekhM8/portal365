@@ -1,16 +1,26 @@
-import { DefaultSession, DefaultUser } from 'next-auth'
-import { UserRole, UserStatus } from '@/generated/prisma'
+import NextAuth from 'next-auth'
+
+// Local type definitions
+type UserRole = 'CUSTOMER' | 'ADMIN' | 'INSTRUCTOR' | 'SUPER_ADMIN'
+type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'PENDING'
 
 declare module 'next-auth' {
   interface Session {
     user: {
       id: string
+      email: string
+      firstName: string
+      lastName: string
       role: UserRole
       status: UserStatus
-    } & DefaultSession['user']
+    }
   }
 
-  interface User extends DefaultUser {
+  interface User {
+    id: string
+    email: string
+    firstName: string
+    lastName: string
     role: UserRole
     status: UserStatus
   }
