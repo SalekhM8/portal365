@@ -1,17 +1,16 @@
 import { prisma } from './prisma'
 
-// Local type definitions (will be replaced when Prisma generates)
-type BusinessEntity = {
-  id: string
-  name: string
-  vatThreshold: number
-  payments: any[]
-}
-
 type VATRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'EXCEEDED'
 type RoutingMethod = 'LOAD_BALANCING' | 'VAT_OPTIMIZED' | 'SERVICE_PREFERENCE' | 'HEADROOM_OPTIMIZED' | 'MANUAL_OVERRIDE'
 type RoutingConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'FORCED'
 type MembershipType = 'WEEKEND_ADULT' | 'WEEKEND_UNDER18' | 'FULL_ADULT' | 'FULL_UNDER18' | 'PERSONAL_TRAINING' | 'WOMENS_CLASSES' | 'WELLNESS_PACKAGE' | 'CORPORATE'
+
+// Simple payment type to avoid any
+type PaymentData = {
+  amount: number | string
+  status: string
+  createdAt: Date
+}
 
 export interface VATPosition {
   entityId: string
@@ -76,7 +75,7 @@ export class VATCalculationEngine {
 
     for (const entity of entities) {
       // Calculate total revenue for the VAT year
-      const totalRevenue = entity.payments.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0)
+      const totalRevenue = entity.payments.reduce((sum: number, payment: PaymentData) => sum + Number(payment.amount), 0)
       
       const headroom = Number(entity.vatThreshold) - totalRevenue
       const monthlyAverage = this.calculateMonthlyAverage(entity.payments)
@@ -120,7 +119,7 @@ export class VATCalculationEngine {
   /**
    * Calculate monthly average from payments
    */
-  private static calculateMonthlyAverage(payments: any[]): number {
+  private static calculateMonthlyAverage(payments: PaymentData[]): number {
     if (payments.length === 0) return 0
     
     const vatYearStart = this.getCurrentVATYearStart()
