@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, CheckCircle2, Crown, ArrowLeft, Dumbbell, GraduationCap, Heart, Sparkles } from 'lucide-react'
 import Link from 'next/link'
+import { signIn } from 'next-auth/react'
 
 // Business configurations
 const businessConfigs = {
@@ -204,6 +205,23 @@ function RegisterContent() {
       const result = await response.json()
 
       if (result.success) {
+        // Auto-login the user immediately after registration
+        try {
+          const loginResult = await signIn('credentials', {
+            email: result.user.email,
+            password: result.user.password,
+            redirect: false
+          })
+          
+          if (loginResult?.ok) {
+            console.log('✅ User automatically logged in after registration')
+          } else {
+            console.warn('⚠️ Auto-login failed, but continuing with flow')
+          }
+        } catch (loginError) {
+          console.warn('⚠️ Auto-login error:', loginError)
+        }
+        
         // Check if subscription creation succeeded and requires payment
         if (result.subscription?.clientSecret) {
           // Redirect to payment page with client secret (handles both SetupIntent and PaymentIntent)

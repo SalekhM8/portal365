@@ -2,6 +2,7 @@
 
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
+import { signIn } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CheckCircle, ArrowRight, CreditCard } from 'lucide-react'
@@ -27,9 +28,10 @@ function SuccessContent() {
         setUserEmail(userEmail)
         setIsProcessing(false)
         
-        // Wait 2 seconds then redirect to dashboard
+        // Wait 2 seconds then redirect to dashboard (user is already logged in)
         setTimeout(() => {
-          router.push(`/dashboard?email=${encodeURIComponent(userEmail)}`)
+          router.push('/dashboard')
+          router.refresh()
         }, 2000)
         
         return
@@ -38,10 +40,53 @@ function SuccessContent() {
       // SetupIntent flow: setup completed, need to process via API
       if (setupCompleted === 'true' && subscriptionId) {
         console.log('✅ Setup completed, processing subscription...')
-        // This flow should be handled by the payment page API call
-        // If we reach here, something went wrong - redirect back to payment
-        setError('Payment setup incomplete. Please try again.')
-        setIsProcessing(false)
+        
+        try {
+          setIsProcessing(true)
+          
+          // Get the setup intent ID from URL parameters
+          const setupIntentId = searchParams.get('setup_intent')
+          
+          if (!setupIntentId) {
+            setError('Missing setup intent information')
+            setIsProcessing(false)
+            return
+          }
+          
+          // Call our API to process prorated billing
+          const response = await fetch('/api/confirm-payment', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              setupIntentId: setupIntentId,
+              subscriptionId: subscriptionId
+            })
+          })
+
+          const confirmResult = await response.json()
+
+          if (confirmResult.success) {
+            // Success! User is already logged in, just redirect to dashboard
+            console.log('✅ Payment processed successfully')
+            setUserEmail(confirmResult.user.email)
+            setIsProcessing(false)
+            
+            // Wait 2 seconds then redirect to dashboard (user is already authenticated)
+            setTimeout(() => {
+              router.push('/dashboard')
+              router.refresh() // Refresh to ensure session is current
+            }, 2000)
+          } else {
+            setError(confirmResult.error || 'Failed to complete subscription setup')
+            setIsProcessing(false)
+          }
+        } catch (error) {
+          setError('Failed to complete subscription setup')
+          setIsProcessing(false)
+        }
+        
         return
       }
       
@@ -69,9 +114,10 @@ function SuccessContent() {
             setUserEmail(result.user.email)
             setIsProcessing(false)
             
-            // Redirect to dashboard after 2 seconds
+            // Redirect to dashboard after 2 seconds (user is already authenticated)
             setTimeout(() => {
-              router.push(`/dashboard?email=${encodeURIComponent(result.user.email)}`)
+              router.push('/dashboard')
+              router.refresh()
             }, 2000)
           } else {
             setError(result.error || 'Failed to confirm payment')
@@ -141,6 +187,16 @@ function SuccessContent() {
               </p>
             </div>
 
+            {/* Payment Information */}
+            <div className="bg-blue-50 p-4 rounded-lg text-left">
+              <h4 className="font-semibold text-blue-800 mb-2">📅 Your Billing Schedule</h4>
+              <div className="text-sm text-blue-700 space-y-1">
+                <p><strong>Today's Payment:</strong> Prorated for the rest of this month</p>
+                <p><strong>Next Payment:</strong> 1st September - Full monthly amount</p>
+                <p><strong>Future Payments:</strong> Automatically on the 1st of every month</p>
+              </div>
+            </div>
+
             {isProcessing ? (
               <div className="space-y-2">
                 <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
@@ -154,7 +210,10 @@ function SuccessContent() {
                   Redirecting to your dashboard...
                 </p>
                 <Button 
-                  onClick={() => router.push(`/dashboard?email=${encodeURIComponent(userEmail || '')}`)}
+                  onClick={() => {
+                    router.push('/dashboard')
+                    router.refresh()
+                  }}
                   className="w-full"
                 >
                   Go to Dashboard

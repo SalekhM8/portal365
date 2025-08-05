@@ -5,27 +5,16 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get the session
+    // Get the session - user must be properly logged in
     const session = await getServerSession(authOptions) as any
-    let userEmail: string | null = null
-
-    // Check if we have a session with user
-    if (session?.user) {
-      userEmail = session.user.email
-    } else {
-      // Check URL parameters for email (post-registration flow)
-      const { searchParams } = new URL(request.url)
-      userEmail = searchParams.get('email')
-    }
-
-    // Must have either session or email parameter
-    if (!userEmail) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    let userId: string
     
-    // Use email to find user (works for both session and post-registration flow)
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized - Please log in' }, { status: 401 })
+    }
+
+    const userEmail = session.user.email
+    
+    // Find user and verify they're a customer
     const user = await prisma.user.findUnique({
       where: { email: userEmail },
       select: { id: true, role: true }
@@ -35,7 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
-    userId = user.id
+    const userId = user.id
 
     console.log('🔍 Fetching real customer dashboard data for:', userId)
 

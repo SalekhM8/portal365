@@ -117,11 +117,12 @@ async function handleSetupIntentConfirmation(body: { setupIntentId: string, subs
     }
   })
 
-  // 8. Update membership status
+  // 8. Update membership status and next billing date
   await prisma.membership.updateMany({
     where: { userId: subscription.userId },
     data: {
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      nextBillingDate: nextBillingDate // Set to 1st of next month to match Stripe trial end
     }
   })
 

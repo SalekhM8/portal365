@@ -43,6 +43,9 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(validatedData.password, 12)
     
+    // Store plain password temporarily for auto-login (will be cleared after use)
+    const plainPassword = validatedData.password
+    
     // Create user
     const user = await prisma.user.create({
       data: {
@@ -75,8 +78,13 @@ export async function POST(request: NextRequest) {
         accessPermissions: JSON.stringify(membershipDetails.accessPermissions),
         scheduleAccess: JSON.stringify(membershipDetails.scheduleAccess),
         ageCategory: validatedData.membershipType.includes('UNDER18') ? 'YOUTH' : 'ADULT',
-        billingDay: new Date().getDate(),
-        nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+        billingDay: 1, // Always bill on the 1st of the month
+        nextBillingDate: (() => {
+          // Set to 1st of next month to match prorated billing strategy
+          const now = new Date()
+          const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+          return nextMonth
+        })()
       }
     })
     
@@ -107,7 +115,8 @@ export async function POST(request: NextRequest) {
           id: user.id,
           firstName: user.firstName,
           lastName: user.lastName,
-          email: user.email
+          email: user.email,
+          password: plainPassword // For auto-login only, will be used immediately
         },
         membership: {
           type: validatedData.membershipType,
@@ -140,7 +149,8 @@ export async function POST(request: NextRequest) {
           id: user.id,
           firstName: user.firstName,
           lastName: user.lastName,
-          email: user.email
+          email: user.email,
+          password: plainPassword // For auto-login only
         },
         membership: {
           type: validatedData.membershipType,

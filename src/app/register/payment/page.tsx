@@ -44,7 +44,17 @@ function PaymentPageContent() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Elements 
+          {/* Payment Explanation */}
+          <div className="bg-blue-50 p-4 rounded-lg mb-6">
+            <h4 className="font-semibold text-blue-800 mb-2">💳 Payment Schedule</h4>
+            <div className="text-sm text-blue-700 space-y-1">
+              <p><strong>Today:</strong> Prorated payment for the rest of this month</p>
+              <p><strong>1st of next month:</strong> Full monthly subscription begins</p>
+              <p><strong>Future:</strong> Automatic monthly billing on the 1st</p>
+            </div>
+          </div>
+          
+          <Elements
             stripe={stripePromise} 
             options={{
               clientSecret,
@@ -104,35 +114,9 @@ function PaymentForm({ subscriptionId }: { subscriptionId: string | null }) {
         if (result.error) {
           setError(result.error.message || 'Setup failed')
           setIsProcessing(false)
-        } else {
-          // Setup completed - call our API to process prorated billing
-          const setupIntent = (result as any).setupIntent
-          try {
-            const response = await fetch('/api/confirm-payment', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                setupIntentId: setupIntent.id,
-                subscriptionId: subscriptionId
-              })
-            })
-
-            const confirmResult = await response.json()
-
-            if (confirmResult.success) {
-              // Redirect to success page
-              window.location.href = `/register/success?subscription_id=${subscriptionId}&payment_completed=true&user_email=${encodeURIComponent(confirmResult.user.email)}`
-            } else {
-              setError(confirmResult.error || 'Failed to complete subscription setup')
-              setIsProcessing(false)
-            }
-          } catch (err) {
-            setError('Failed to complete subscription setup')
-            setIsProcessing(false)
-          }
         }
+        // Note: If successful, Stripe will redirect to return_url automatically
+        // The success page will handle the API call to process prorated billing
       } else {
         // Use confirmPayment for PaymentIntent
         const result = await stripe.confirmPayment({
