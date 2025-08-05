@@ -125,7 +125,8 @@ export default function AdminDashboard() {
     }
     
     // ✅ ADD role check (keeping your hasPermission pattern)
-    if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN') {
+    const user = session?.user as any
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
       window.location.href = '/dashboard'
       return
     }
