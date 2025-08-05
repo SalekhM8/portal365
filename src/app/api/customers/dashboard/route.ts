@@ -1,22 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
   try {
-    // Check for email parameter (post-registration flow)
-    const { searchParams } = new URL(request.url)
-    const emailParam = searchParams.get('email')
-    
+    // Get the session
+    const session = await getServerSession(authOptions) as any
+    let userEmail: string | null = null
+
+    // Check if we have a session with user
+    if (session?.user) {
+      userEmail = session.user.email
+    } else {
+      // Check URL parameters for email (post-registration flow)
+      const { searchParams } = new URL(request.url)
+      userEmail = searchParams.get('email')
+    }
+
+    // Must have either session or email parameter
+    if (!userEmail) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     let userId: string
     
-    if (emailParam) {
+    if (userEmail) {
       // Post-registration flow: authenticate by email
-      console.log('🔍 Post-registration authentication for email:', emailParam)
+      console.log('🔍 Post-registration authentication for email:', userEmail)
       
       const user = await prisma.user.findUnique({
-        where: { email: emailParam },
+        where: { email: userEmail },
         select: { id: true, role: true }
       })
       
