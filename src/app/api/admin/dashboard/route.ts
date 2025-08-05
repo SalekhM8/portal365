@@ -7,7 +7,7 @@ import { VATCalculationEngine } from '@/lib/vat-routing'
 export async function GET() {
   try {
     // ✅ REUSE your existing auth pattern
-    const session = await getServerSession(authOptions)
+    const session = await getServerSession(authOptions) as any
     
     if (!session || !session.user || !hasPermission(session.user.role, 'ADMIN')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
