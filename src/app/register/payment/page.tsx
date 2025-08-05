@@ -14,7 +14,7 @@ if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
-export default function PaymentPage() {
+function PaymentPageContent() {
   const searchParams = useSearchParams()
   const clientSecret = searchParams.get('client_secret')
   const subscriptionId = searchParams.get('subscription_id')
@@ -58,6 +58,14 @@ export default function PaymentPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <PaymentPageContent />
+    </Suspense>
   )
 }
 

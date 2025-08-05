@@ -145,4 +145,12 @@ function SuccessContent() {
       </Card>
     </div>
   )
+}
+
+export default function RegistrationSuccessPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SuccessContent />
+    </Suspense>
+  )
 } 
