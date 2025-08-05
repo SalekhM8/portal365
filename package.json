@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "prisma generate && prisma db push && npx tsx prisma/seed.ts && next build --no-lint",
+    "build": "next build --no-lint",
+    "postbuild": "prisma generate",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "npx tsx prisma/seed.ts",
+    "db:setup": "prisma generate && prisma db push && npx tsx prisma/seed.ts"
   },
   "prisma": {
     "seed": "ts-node --require tsconfig-paths/register prisma/seed.ts"
