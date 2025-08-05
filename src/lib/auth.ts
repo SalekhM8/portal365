@@ -4,9 +4,9 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from './prisma'
 
-// Define enums locally to avoid import issues
-type UserRole = 'CUSTOMER' | 'ADMIN' | 'STAFF' | 'INSTRUCTOR' | 'SUPER_ADMIN'
-type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
+// Local type definitions
+type UserRole = 'CUSTOMER' | 'ADMIN' | 'INSTRUCTOR' | 'SUPER_ADMIN'
+type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'PENDING'
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -78,6 +78,8 @@ export const authOptions: NextAuthOptions = {
           return {
             id: user.id,
             email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
             name: `${user.firstName} ${user.lastName}`,
             role: user.role,
             status: user.status
@@ -90,14 +92,14 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: any; user: any }) {
       if (user) {
         token.role = user.role
         token.status = user.status
       }
       return token
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       if (token) {
         session.user.id = token.sub!
         session.user.role = token.role as UserRole
@@ -114,20 +116,19 @@ export const authOptions: NextAuthOptions = {
 }
 
 // Helper functions for role-based access
-export const requireAuth = (requiredRole?: UserRole) => {
-  return async (req: any) => {
-    // This would be used in API routes
-    // Implementation depends on how you handle auth in API routes
+export function requireRole(role: UserRole) {
+  return function middleware() {
+    // Implementation would go here
+    return { role }
   }
 }
 
 export const hasPermission = (userRole: UserRole, requiredRole: UserRole): boolean => {
   const roleHierarchy: Record<UserRole, number> = {
     CUSTOMER: 1,
-    STAFF: 2,
-    INSTRUCTOR: 3,
-    ADMIN: 4,
-    SUPER_ADMIN: 5
+    INSTRUCTOR: 2,
+    ADMIN: 3,
+    SUPER_ADMIN: 4
   }
 
   return roleHierarchy[userRole] >= roleHierarchy[requiredRole]

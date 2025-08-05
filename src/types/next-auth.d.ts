@@ -1,5 +1,3 @@
-import NextAuth from 'next-auth'
-
 // Local type definitions
 type UserRole = 'CUSTOMER' | 'ADMIN' | 'INSTRUCTOR' | 'SUPER_ADMIN'
 type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'PENDING'

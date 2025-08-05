@@ -70,7 +70,7 @@ export class VATCalculationEngine {
     const positions: VATPosition[] = []
 
     for (const entity of entities) {
-      const currentRevenue = entity.payments.reduce((sum: number, payment: any) => 
+      const currentRevenue = entity.payments.reduce((sum: number, payment: { amount: number | string }) => 
         sum + Number(payment.amount), 0
       )
       
@@ -116,7 +116,7 @@ export class VATCalculationEngine {
   /**
    * Calculate monthly average from payments
    */
-  private static calculateMonthlyAverage(payments: any[]): number {
+  private static calculateMonthlyAverage(payments: { amount: number | string }[]): number {
     if (payments.length === 0) return 0
     
     const vatYearStart = this.getCurrentVATYearStart()

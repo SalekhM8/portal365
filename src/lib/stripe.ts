@@ -41,6 +41,16 @@ export interface SubscriptionResult {
   nextBillingDate: string
 }
 
+interface MembershipDetails {
+  monthlyPrice: number
+  name: string
+  description: string
+}
+
+interface StripeMetadata {
+  [key: string]: string
+}
+
 export class SubscriptionProcessor {
   
   /**
@@ -75,10 +85,9 @@ export class SubscriptionProcessor {
       // 4. Get or create Stripe price for this membership type
       const priceId = await this.getOrCreatePrice(membershipDetails)
 
-      // 5. Calculate prorated billing details
+      // 4. Calculate prorated billing details (priceId will be used in confirm-payment)
       const now = new Date()
       const firstOfNextMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1))
-      const trialEndTimestamp = Math.floor(firstOfNextMonth.getTime() / 1000)
       
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
       const daysRemaining = daysInMonth - now.getDate() + 1 // Include today
@@ -161,17 +170,17 @@ export class SubscriptionProcessor {
   }
 
   /**
-   * Get membership pricing details
+   * Get membership pricing and details
    */
-  private static getMembershipDetails(membershipType: string) {
-    const memberships: Record<string, { monthlyPrice: number; name: string }> = {
-      'WEEKEND_ADULT': { monthlyPrice: 59, name: 'Weekend Adult' },
-      'WEEKEND_UNDER18': { monthlyPrice: 49, name: 'Weekend Youth' },
-      'FULL_ADULT': { monthlyPrice: 89, name: 'Full Adult Access' },
-      'FULL_UNDER18': { monthlyPrice: 69, name: 'Full Youth Access' },
-      'PERSONAL_TRAINING': { monthlyPrice: 120, name: 'Personal Training' },
-      'WOMENS_CLASSES': { monthlyPrice: 65, name: "Women's Classes" },
-      'WELLNESS_PACKAGE': { monthlyPrice: 95, name: 'Wellness Package' }
+  private static getMembershipDetails(membershipType: string): MembershipDetails {
+    const memberships: Record<string, MembershipDetails> = {
+      'WEEKEND_ADULT': { monthlyPrice: 59, name: 'Weekend Adult', description: 'Monthly membership for Weekend Adult' },
+      'WEEKEND_UNDER18': { monthlyPrice: 49, name: 'Weekend Youth', description: 'Monthly membership for Weekend Youth' },
+      'FULL_ADULT': { monthlyPrice: 89, name: 'Full Adult Access', description: 'Monthly membership for Full Adult Access' },
+      'FULL_UNDER18': { monthlyPrice: 69, name: 'Full Youth Access', description: 'Monthly membership for Full Youth Access' },
+      'PERSONAL_TRAINING': { monthlyPrice: 120, name: 'Personal Training', description: 'Monthly membership for Personal Training' },
+      'WOMENS_CLASSES': { monthlyPrice: 65, name: "Women's Classes", description: 'Monthly membership for Women\'s Classes' },
+      'WELLNESS_PACKAGE': { monthlyPrice: 95, name: 'Wellness Package', description: 'Monthly membership for Wellness Package' }
     }
 
     const details = memberships[membershipType]
@@ -185,7 +194,7 @@ export class SubscriptionProcessor {
   /**
    * Get or create Stripe price for membership type (reuse existing prices)
    */
-  private static async getOrCreatePrice(membershipDetails: { monthlyPrice: number; name: string }): Promise<string> {
+  private static async getOrCreatePrice(membershipDetails: MembershipDetails): Promise<string> {
     try {
       // First, try to find existing price for this amount
       const existingPrices = await stripe.prices.list({
@@ -208,7 +217,7 @@ export class SubscriptionProcessor {
       // Create new product and price only if needed
       const product = await stripe.products.create({
         name: `${membershipDetails.name} Membership`,
-        description: `Monthly membership for ${membershipDetails.name}`,
+        description: membershipDetails.description,
         metadata: {
           type: 'gym_membership'
         }
