@@ -18,86 +18,57 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' }
+        email: { label: 'Email', type: 'email', placeholder: 'your-email@example.com' },
+        password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        console.log('🔐 Auth attempt for:', credentials?.email)
-        
         if (!credentials?.email || !credentials?.password) {
-          console.log('❌ Missing credentials')
           return null
         }
 
-        try {
-          console.log('🔍 Looking up user:', credentials.email)
-          const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
-            select: {
-              id: true,
-              email: true,
-              firstName: true,
-              lastName: true,
-              password: true,
-              role: true,
-              status: true,
-              lastLoginAt: true
-            }
-          })
+        const user = await prisma.user.findUnique({
+          where: {
+            email: credentials.email,
+          },
+        })
 
-          console.log('👤 User found:', !!user)
-          
-          if (!user || !user.password) {
-            console.log('❌ No user or password found')
-            return null
-          }
-
-          // Check if user is active
-          if (user.status !== 'ACTIVE') {
-            console.log('❌ User not active:', user.status)
-            throw new Error('Account is suspended or expired')
-          }
-
-          // Verify password
-          console.log('🔑 Verifying password...')
-          const isValidPassword = await bcrypt.compare(credentials.password, user.password)
-          console.log('🔑 Password valid:', isValidPassword)
-          
-          if (!isValidPassword) {
-            console.log('❌ Invalid password')
-            return null
-          }
-
-          // Update last login
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { lastLoginAt: new Date() }
-          })
-
-          console.log('✅ Login successful for:', user.email)
-          return {
-            id: user.id,
-            email: user.email,
-            name: `${user.firstName} ${user.lastName}`,
-            role: user.role,
-            status: user.status
-          }
-        } catch (error) {
-          console.error('❌ Auth error:', error)
+        if (!user) {
           return null
         }
-      }
-    })
+
+        const isPasswordValid = await bcrypt.compare(
+          credentials.password,
+          user.password
+        )
+
+        if (!isPasswordValid) {
+          return null
+        }
+
+        if (user.status === 'SUSPENDED') {
+          return null
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          status: user.status,
+        }
+      },
+    }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: any; user: any }) {
       if (user) {
         token.role = user.role
         token.status = user.status
       }
       return token
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       if (token) {
         session.user.id = token.sub!
         session.user.role = token.role as UserRole

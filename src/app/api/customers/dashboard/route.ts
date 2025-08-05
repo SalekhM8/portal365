@@ -25,30 +25,17 @@ export async function GET(request: NextRequest) {
 
     let userId: string
     
-    if (userEmail) {
-      // Post-registration flow: authenticate by email
-      console.log('🔍 Post-registration authentication for email:', userEmail)
-      
-      const user = await prisma.user.findUnique({
-        where: { email: userEmail },
-        select: { id: true, role: true }
-      })
-      
-      if (!user || user.role !== 'CUSTOMER') {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-      
-      userId = user.id
-    } else {
-      // Regular session-based authentication
-      const session = await getServerSession(authOptions)
-      
-      if (!session) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-      
-      userId = session.user.id
+    // Use email to find user (works for both session and post-registration flow)
+    const user = await prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { id: true, role: true }
+    })
+    
+    if (!user || user.role !== 'CUSTOMER') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    userId = user.id
 
     console.log('🔍 Fetching real customer dashboard data for:', userId)
 
@@ -110,7 +97,7 @@ export async function GET(request: NextRequest) {
     } : null
 
     // ✅ Format payment history with routing information
-    const paymentHistory = userData.payments.map(payment => ({
+    const paymentHistory = userData.payments.map((payment: any) => ({
       id: payment.id,
       amount: payment.amount,
       date: payment.createdAt.toISOString().split('T')[0],
@@ -123,7 +110,7 @@ export async function GET(request: NextRequest) {
     }))
 
     // ✅ Format class schedule with user's membership access
-    const upcomingClasses = classes.map(cls => ({
+    const upcomingClasses = classes.map((cls: any) => ({
       id: cls.id,
       name: cls.name,
       instructor: cls.instructorName,
