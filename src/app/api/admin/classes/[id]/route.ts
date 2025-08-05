@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions) as any
@@ -24,6 +24,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
+    const params = await context.params
     const classId = params.id
 
     // Check if class exists
@@ -99,7 +100,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions) as any
@@ -118,6 +119,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
+    const params = await context.params
     const classId = params.id
 
     // Check if class exists
