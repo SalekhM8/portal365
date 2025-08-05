@@ -35,9 +35,24 @@ export default function SignInPage() {
       if (result?.error) {
         setError('Invalid email or password')
       } else if (result?.ok) {
-        // Redirect based on user role (we'll add this logic later)
-        router.push('/admin')
-        router.refresh()
+        // Get user session to determine redirect
+        const response = await fetch('/api/auth/session')
+        if (response.ok) {
+          const sessionData = await response.json()
+          const userRole = sessionData?.user?.role
+          
+          // Redirect based on user role
+          if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') {
+            router.push('/admin')
+          } else {
+            router.push('/dashboard')
+          }
+          router.refresh()
+        } else {
+          // Fallback to admin if we can't determine role
+          router.push('/admin')
+          router.refresh()
+        }
       }
     } catch (error) {
       setError('Something went wrong. Please try again.')

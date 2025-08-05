@@ -23,7 +23,7 @@ const businessConfigs = {
       {
         type: 'WEEKEND_ADULT',
         displayName: 'Weekend Warrior',
-        price: 45,
+        price: 59,
         description: 'Perfect for busy schedules',
         features: ['Weekend access (Sat & Sun)', 'BJJ, MMA, Boxing, Muay Thai', 'Equipment access', 'No contract'],
         popular: false
@@ -31,7 +31,7 @@ const businessConfigs = {
       {
         type: 'FULL_ADULT',
         displayName: 'Full Access',
-        price: 70,
+        price: 89,
         description: 'Complete training freedom',
         features: ['7 days/week access', 'All martial arts classes', 'Equipment access', 'Priority access', 'Guest passes'],
         popular: true
@@ -39,7 +39,7 @@ const businessConfigs = {
       {
         type: 'WEEKEND_UNDER18',
         displayName: 'Weekend Youth',
-        price: 45,
+        price: 49,
         description: 'For young warriors under 18',
         features: ['Weekend access (Sat & Sun)', 'Youth martial arts classes', 'Equipment access', 'Parental updates'],
         popular: false
@@ -87,7 +87,7 @@ const businessConfigs = {
       {
         type: 'WOMENS_CLASSES',
         displayName: 'Basic Access',
-        price: 49,
+        price: 65,
         description: 'Essential women-only classes',
         features: ['Women-only classes', 'Self-defense training', 'Basic equipment access', 'Supportive community'],
         popular: false
@@ -111,7 +111,7 @@ const businessConfigs = {
       {
         type: 'WELLNESS_PACKAGE',
         displayName: 'Wellness Package',
-        price: 99,
+        price: 95,
         description: 'Essential wellness services',
         features: ['Massage therapy (2/month)', 'Mental health support', 'Recovery sessions', 'Wellness workshops'],
         popular: false

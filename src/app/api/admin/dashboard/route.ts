@@ -152,6 +152,82 @@ export async function GET() {
     // Get VAT positions for current state
     const vatPositions = await VATCalculationEngine.calculateVATPositions()
 
+    // Get detailed customer data with payments and routing info
+    const customers = await prisma.user.findMany({
+      where: { role: 'CUSTOMER' },
+      include: {
+        memberships: {
+          where: { status: { in: ['ACTIVE', 'PENDING_PAYMENT'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        },
+        payments: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          include: {
+            routedEntity: { select: { displayName: true } }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100
+    })
+
+    // Get recent payments with detailed info
+    const payments = await prisma.payment.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        user: { select: { firstName: true, lastName: true, email: true } },
+        routedEntity: { select: { displayName: true } },
+        routing: {
+          select: {
+            routingReason: true,
+            confidence: true,
+            routingMethod: true,
+            thresholdDistance: true
+          }
+        }
+      }
+    })
+
+    // Format the data for frontend
+    const formattedCustomers = customers.map((customer: any) => ({
+      id: customer.id,
+      name: `${customer.firstName} ${customer.lastName}`,
+      email: customer.email,
+      phone: customer.phone || 'N/A',
+      membershipType: customer.memberships[0]?.membershipType || 'None',
+      status: customer.memberships[0]?.status || 'INACTIVE',
+      joinDate: customer.createdAt.toISOString().split('T')[0],
+      lastPayment: customer.payments[0]?.createdAt.toISOString().split('T')[0] || 'N/A',
+      totalPaid: customer.payments.reduce((sum: number, payment: any) => sum + payment.amount, 0),
+      routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
+      nextBilling: customer.memberships[0]?.nextBillingDate?.toISOString().split('T')[0] || 'N/A',
+      emergencyContact: customer.emergencyContact ? JSON.parse(customer.emergencyContact) : { name: '', phone: '', relationship: '' },
+      accessHistory: {
+        lastAccess: 'N/A', // Would need AccessLog data
+        totalVisits: 0,
+        avgWeeklyVisits: 0
+      }
+    }))
+
+    const formattedPayments = payments.map((payment: any) => ({
+      id: payment.id,
+      customerName: `${payment.user.firstName} ${payment.user.lastName}`,
+      customerId: payment.userId,
+      amount: payment.amount,
+      routedToEntity: payment.routedEntity.displayName,
+      routingReason: payment.routing?.routingReason || 'Standard routing',
+      timestamp: payment.createdAt.toISOString(),
+      status: payment.status,
+      goCardlessId: payment.goCardlessPaymentId || 'N/A',
+      retryCount: payment.retryCount,
+      processingTime: payment.routing?.decisionTimeMs || 0,
+      confidence: payment.routing?.confidence || 'MEDIUM',
+      membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown'
+    }))
+
     return NextResponse.json({
       totalCustomers,
       activeSubscriptions,
@@ -160,7 +236,18 @@ export async function GET() {
       acquisitionRate: Math.round(acquisitionRate * 100) / 100,
       routingEfficiency: Math.round(routingEfficiency * 100) / 100,
       recentActivity: activities,
-      vatPositions
+      vatStatus: vatPositions,
+      customers: formattedCustomers,
+      payments: formattedPayments,
+      metrics: {
+        totalRevenue: monthlyRevenue._sum.amount || 0,
+        monthlyRecurring: monthlyRevenue._sum.amount || 0,
+        churnRate: Math.round(churnRate * 100) / 100,
+        acquisitionRate: Math.round(acquisitionRate * 100) / 100,
+        avgLifetimeValue: totalCustomers > 0 ? (monthlyRevenue._sum.amount || 0) / totalCustomers * 12 : 0,
+        paymentSuccessRate: payments.length > 0 ? (payments.filter(p => p.status === 'COMPLETED').length / payments.length) * 100 : 100,
+        routingEfficiency: Math.round(routingEfficiency * 100) / 100
+      }
     })
 
   } catch (error) {

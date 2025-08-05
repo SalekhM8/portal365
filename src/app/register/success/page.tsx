@@ -19,9 +19,10 @@ function SuccessContent() {
       const subscriptionId = searchParams.get('subscription_id')
       const paymentCompleted = searchParams.get('payment_completed')
       const userEmail = searchParams.get('user_email')
+      const setupCompleted = searchParams.get('setup_completed')
       
+      // New flow: payment already completed via API call
       if (paymentCompleted === 'true' && userEmail) {
-        // New flow: payment already completed, no API call needed
         console.log('✅ Payment already completed during registration')
         setUserEmail(userEmail)
         setIsProcessing(false)
@@ -34,45 +35,66 @@ function SuccessContent() {
         return
       }
       
-      // Legacy flow: confirm payment via API
-      const paymentIntent = searchParams.get('payment_intent')
-      const redirectStatus = searchParams.get('redirect_status')
-
-      if (!subscriptionId || !paymentIntent || redirectStatus !== 'succeeded') {
-        setError('Invalid payment confirmation')
+      // SetupIntent flow: setup completed, need to process via API
+      if (setupCompleted === 'true' && subscriptionId) {
+        console.log('✅ Setup completed, processing subscription...')
+        // This flow should be handled by the payment page API call
+        // If we reach here, something went wrong - redirect back to payment
+        setError('Payment setup incomplete. Please try again.')
         setIsProcessing(false)
         return
       }
+      
+      // Legacy PaymentIntent flow: confirm payment via API
+      const paymentIntent = searchParams.get('payment_intent')
+      const redirectStatus = searchParams.get('redirect_status')
 
-      try {
-        // Call API to confirm payment and update subscription status
-        const response = await fetch('/api/confirm-payment', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            subscriptionId,
-            paymentIntentId: paymentIntent
+      if (paymentIntent && redirectStatus === 'succeeded' && subscriptionId) {
+        try {
+          // Call API to confirm payment and update subscription status
+          const response = await fetch('/api/confirm-payment', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              paymentIntentId: paymentIntent,
+              subscriptionId: subscriptionId
+            })
           })
-        })
 
-        const result = await response.json()
+          const result = await response.json()
 
-        if (result.success) {
-          setUserEmail(result.user.email)
-          // Wait 2 seconds then redirect to customer dashboard with email
-          setTimeout(() => {
-            router.push(`/dashboard?email=${encodeURIComponent(result.user.email)}`)
-          }, 2000)
-        } else {
+          if (result.success) {
+            setUserEmail(result.user.email)
+            setIsProcessing(false)
+            
+            // Redirect to dashboard after 2 seconds
+            setTimeout(() => {
+              router.push(`/dashboard?email=${encodeURIComponent(result.user.email)}`)
+            }, 2000)
+          } else {
+            setError(result.error || 'Failed to confirm payment')
+            setIsProcessing(false)
+          }
+        } catch (error) {
           setError('Failed to confirm payment')
+          setIsProcessing(false)
         }
-      } catch (err) {
-        setError('Failed to process payment confirmation')
-      } finally {
-        setIsProcessing(false)
+        return
       }
+      
+      // If we get here, we don't have the right parameters
+      console.error('Missing required parameters:', {
+        subscriptionId,
+        paymentCompleted,
+        userEmail,
+        setupCompleted,
+        paymentIntent,
+        redirectStatus
+      })
+      setError('Invalid payment confirmation - missing required parameters')
+      setIsProcessing(false)
     }
 
     handleSuccess()
