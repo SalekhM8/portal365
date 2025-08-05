@@ -117,7 +117,7 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
       include: {
         user: { select: { firstName: true, lastName: true, email: true } },
-        businessEntity: { select: { displayName: true } }
+        routedEntity: { select: { displayName: true } }
       }
     })
 
@@ -137,7 +137,7 @@ export async function GET() {
     const activities = [
       ...recentPayments.map((payment: any) => ({
         type: 'payment',
-        description: `${payment.user?.firstName} ${payment.user?.lastName} paid £${payment.amount} via ${payment.businessEntity?.displayName}`,
+        description: `${payment.user?.firstName} ${payment.user?.lastName} paid £${payment.amount} via ${payment.routedEntity?.displayName}`,
         timestamp: payment.createdAt,
         amount: `£${payment.amount}`
       })),
