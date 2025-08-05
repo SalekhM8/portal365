@@ -78,13 +78,22 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-4">
           <Link href="/auth/signin">
-            <Button variant="outline">Sign In</Button>
+            <Button variant="outline">Customer Login</Button>
           </Link>
           <Link href="/auth/signin">
             <Button variant="outline">Admin Login</Button>
           </Link>
         </div>
       </nav>
+
+      {/* Login Info */}
+      <div className="container mx-auto px-6 pt-4">
+        <div className="text-center">
+          <p className="text-xs text-muted-foreground">
+            Both buttons lead to the same login page - you'll be automatically directed to the correct dashboard based on your account type
+          </p>
+        </div>
+      </div>
 
       {/* Hero Section */}
       <section className="container mx-auto px-6 py-16 text-center space-y-8">

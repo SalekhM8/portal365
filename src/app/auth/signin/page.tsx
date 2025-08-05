@@ -72,7 +72,7 @@ export default function SignInPage() {
             </div>
             Portal365
           </Link>
-          <p className="text-muted-foreground">Admin Access</p>
+          <p className="text-muted-foreground">Sign in to your account</p>
         </div>
 
         {/* Sign In Form */}
@@ -81,9 +81,9 @@ export default function SignInPage() {
             <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <Shield className="h-6 w-6 text-primary" />
             </div>
-            <CardTitle className="text-2xl">Sign In</CardTitle>
+            <CardTitle className="text-2xl">Welcome Back</CardTitle>
             <CardDescription>
-              Enter your credentials to access the admin dashboard
+              Enter your credentials to access your account
             </CardDescription>
           </CardHeader>
           <CardContent>
