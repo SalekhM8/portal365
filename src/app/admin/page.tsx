@@ -231,10 +231,20 @@ export default function AdminDashboard() {
             Complete business oversight, customer management, and VAT optimization
           </p>
         </div>
-        <Button onClick={() => signOut()} variant="outline" className="flex items-center gap-2">
-          <LogOut className="h-4 w-4" />
-          Log Out
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            onClick={() => window.location.href = '/admin/classes'}
+            variant="outline" 
+            className="flex items-center gap-2"
+          >
+            <Calendar className="h-4 w-4" />
+            Manage Classes
+          </Button>
+          <Button onClick={() => signOut()} variant="outline" className="flex items-center gap-2">
+            <LogOut className="h-4 w-4" />
+            Log Out
+          </Button>
+        </div>
       </div>
 
       {/* Critical Alerts */}
