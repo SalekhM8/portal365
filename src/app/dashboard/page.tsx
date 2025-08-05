@@ -32,6 +32,7 @@ interface ClassData {
   time: string
   location: string
   duration: number
+  maxParticipants: number
   canAccess: boolean
 }
 
