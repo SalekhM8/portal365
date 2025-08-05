@@ -1,13 +1,13 @@
 'use client'
 
 import { useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Calendar, CreditCard, User, Clock, MapPin, Users, LogOut } from 'lucide-react'
+import { Calendar, CreditCard, User, Clock, MapPin, Users, LogOut, Settings, Crown } from 'lucide-react'
 
 interface MembershipData {
   type: string
@@ -38,6 +38,7 @@ interface ClassData {
 
 function DashboardContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const userEmail = searchParams.get('email')
   const [loading, setLoading] = useState(true)
   const [membershipData, setMembershipData] = useState<MembershipData | null>(null)
@@ -130,7 +131,7 @@ function DashboardContent() {
 
   return (
     <div className="container mx-auto p-6 space-y-8">
-      {/* Header with Logout */}
+      {/* Header with Navigation */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Customer Dashboard</h1>
@@ -138,9 +139,47 @@ function DashboardContent() {
             Welcome back{userEmail ? `, ${userEmail.split('@')[0]}` : ''}! Here's your Aura MMA overview.
           </p>
         </div>
-        <Button variant="outline" onClick={handleLogout} className="flex items-center gap-2">
-          <LogOut className="h-4 w-4" />
-          Logout
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => router.push('/dashboard/membership')}
+            className="hidden sm:flex"
+          >
+            <Crown className="h-4 w-4 mr-2" />
+            Manage Plan
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => router.push('/dashboard/payment-methods')}
+            className="hidden sm:flex"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            Payment Methods
+          </Button>
+          <Button variant="outline" onClick={handleLogout}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
+        </div>
+      </div>
+
+      {/* Mobile Navigation */}
+      <div className="flex gap-2 sm:hidden">
+        <Button
+          variant="outline"
+          onClick={() => router.push('/dashboard/membership')}
+          className="flex-1"
+        >
+          <Crown className="h-4 w-4 mr-2" />
+          Manage Plan
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => router.push('/dashboard/payment-methods')}
+          className="flex-1"
+        >
+          <CreditCard className="h-4 w-4 mr-2" />
+          Payment
         </Button>
       </div>
 
