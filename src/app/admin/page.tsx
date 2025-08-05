@@ -37,7 +37,8 @@ import {
   Phone,
   Mail,
   AlertCircle,
-  LogOut
+  LogOut,
+  X
 } from 'lucide-react'
 
 interface VATStatus {
@@ -103,6 +104,27 @@ interface BusinessMetrics {
   routingEfficiency: number
 }
 
+interface AnalyticsData {
+  membershipCLV: {
+    FULL_ADULT?: number
+    WEEKEND_ADULT?: number
+    PERSONAL_TRAINING?: number
+    WOMENS_CLASSES?: number
+    WELLNESS_PACKAGE?: number
+    [key: string]: number | undefined
+  }
+  acquisitionDetails: {
+    thisMonth: number
+    lastMonth: number
+    growthRate: number
+  }
+  operationalMetrics: {
+    autoRoutingRate: number
+    manualOverrideRate: number
+    avgDecisionTime: number
+  }
+}
+
 export default function AdminDashboard() {
   const { data: session, status } = useSession() // ✅ ENABLE real session management
   const [vatStatus, setVatStatus] = useState<VATStatus[]>([])
@@ -110,6 +132,7 @@ export default function AdminDashboard() {
   const [payments, setPayments] = useState<PaymentDetail[]>([])
   const [businessMetrics, setBusinessMetrics] = useState<BusinessMetrics | null>(null)
   const [recentActivity, setRecentActivity] = useState<any[]>([])
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null) // 🚀 NEW: Real analytics data
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -158,7 +181,8 @@ export default function AdminDashboard() {
       setCustomers(data.customers)
       setPayments(data.payments)
       setBusinessMetrics(data.metrics)
-      setRecentActivity(data.recentActivity) // Assuming recentActivity is part of the response
+      setRecentActivity(data.recentActivity)
+      setAnalytics(data.analytics) // 🚀 NEW: Real analytics data
       
       console.log(`✅ Real admin data loaded: ${data.customers.length} customers, ${data.payments.length} payments`)
       
@@ -219,6 +243,20 @@ export default function AdminDashboard() {
 
   const getVATProgress = (current: number, threshold: number) => {
     return (current / threshold) * 100
+  }
+
+  // 🚀 NEW: Get icon component for activity type
+  const getActivityIcon = (iconName: string) => {
+    switch (iconName) {
+      case 'UserPlus': return UserPlus
+      case 'CreditCard': return CreditCard
+      case 'AlertCircle': return AlertCircle
+      case 'TrendingUp': return TrendingUp
+      case 'CheckCircle': return CheckCircle
+      case 'X': return X
+      case 'AlertTriangle': return AlertTriangle
+      default: return Activity
+    }
   }
 
   return (
@@ -367,10 +405,7 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="space-y-4">
                   {recentActivity.length > 0 ? recentActivity.map((activity, index) => {
-                      const IconComponent = activity.icon === 'UserPlus' ? UserPlus 
-                        : activity.icon === 'CreditCard' ? CreditCard 
-                        : activity.icon === 'AlertCircle' ? AlertCircle 
-                        : Activity
+                      const IconComponent = getActivityIcon(activity.icon)
                       
                       return (
                         <div key={index} className="flex items-center space-x-3">
@@ -379,6 +414,11 @@ export default function AdminDashboard() {
                             <p className="text-sm font-medium">{activity.message}</p>
                             <p className="text-xs text-muted-foreground">{activity.detail}</p>
                           </div>
+                          {activity.amount && (
+                            <div className="text-sm font-semibold text-muted-foreground">
+                              {activity.amount}
+                            </div>
+                          )}
                         </div>
                       )
                     }) : (
@@ -720,20 +760,28 @@ export default function AdminDashboard() {
                 <CardTitle>Customer Lifetime Value</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">£{businessMetrics?.avgLifetimeValue}</div>
+                <div className="text-3xl font-bold">£{businessMetrics?.avgLifetimeValue || 0}</div>
                 <p className="text-sm text-muted-foreground">Average across all memberships</p>
                 <div className="mt-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Full Memberships</span>
-                    <span>£2,340</span>
+                    <span>£{analytics?.membershipCLV?.FULL_ADULT || 0}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Weekend Memberships</span>
-                    <span>£1,520</span>
+                    <span>£{analytics?.membershipCLV?.WEEKEND_ADULT || 0}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Personal Training</span>
-                    <span>£3,200</span>
+                    <span>£{analytics?.membershipCLV?.PERSONAL_TRAINING || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Women's Classes</span>
+                    <span>£{analytics?.membershipCLV?.WOMENS_CLASSES || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Wellness Package</span>
+                    <span>£{analytics?.membershipCLV?.WELLNESS_PACKAGE || 0}</span>
                   </div>
                 </div>
               </CardContent>
@@ -744,20 +792,20 @@ export default function AdminDashboard() {
                 <CardTitle>Member Acquisition</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{businessMetrics?.acquisitionRate}%</div>
+                <div className="text-3xl font-bold">{Math.round(businessMetrics?.acquisitionRate || 0)}%</div>
                 <p className="text-sm text-muted-foreground">Monthly growth rate</p>
                 <div className="mt-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>This month</span>
-                    <span>+47 members</span>
+                    <span>+{analytics?.acquisitionDetails?.thisMonth || 0} members</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Last month</span>
-                    <span>+42 members</span>
+                    <span>+{analytics?.acquisitionDetails?.lastMonth || 0} members</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span>Referrals</span>
-                    <span>23% of new members</span>
+                    <span>Growth rate</span>
+                    <span>{Math.round(analytics?.acquisitionDetails?.growthRate || 0)}%</span>
                   </div>
                 </div>
               </CardContent>
@@ -768,20 +816,20 @@ export default function AdminDashboard() {
                 <CardTitle>Operational Efficiency</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{businessMetrics?.routingEfficiency}%</div>
+                <div className="text-3xl font-bold">{Math.round(businessMetrics?.routingEfficiency || 0)}%</div>
                 <p className="text-sm text-muted-foreground">VAT routing accuracy</p>
                 <div className="mt-4 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Auto-routing</span>
-                    <span>98.5%</span>
+                    <span>{analytics?.operationalMetrics?.autoRoutingRate || 0}%</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Manual override</span>
-                    <span>1.5%</span>
+                    <span>{analytics?.operationalMetrics?.manualOverrideRate || 0}%</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span>Avg decision time</span>
-                    <span>1.2 seconds</span>
+                    <span>{analytics?.operationalMetrics?.avgDecisionTime || 1.2} seconds</span>
                   </div>
                 </div>
               </CardContent>

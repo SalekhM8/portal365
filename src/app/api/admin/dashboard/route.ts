@@ -80,6 +80,51 @@ export async function GET() {
       _sum: { amount: true }
     })
 
+    // Get total revenue all time
+    const totalRevenue = await prisma.payment.aggregate({
+      where: { status: 'CONFIRMED' },
+      _sum: { amount: true }
+    })
+
+    // Calculate Customer Lifetime Value by membership type
+    const membershipAnalytics = await prisma.user.findMany({
+      where: { role: 'CUSTOMER' },
+      include: {
+        memberships: {
+          where: { status: { in: ['ACTIVE', 'PENDING_PAYMENT'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        },
+        payments: {
+          where: { status: 'CONFIRMED' }
+        }
+      }
+    })
+
+    const membershipStats = membershipAnalytics.reduce((acc: any, customer) => {
+      const membershipType = customer.memberships[0]?.membershipType || 'NO_MEMBERSHIP'
+      const totalPaid = customer.payments.reduce((sum, payment) => sum + payment.amount, 0)
+      const monthsActive = customer.memberships[0] 
+        ? Math.max(1, Math.ceil((Date.now() - customer.memberships[0].startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)))
+        : 0
+      
+      if (!acc[membershipType]) {
+        acc[membershipType] = { totalRevenue: 0, customerCount: 0, totalMonths: 0 }
+      }
+      
+      acc[membershipType].totalRevenue += totalPaid
+      acc[membershipType].customerCount += 1
+      acc[membershipType].totalMonths += monthsActive
+      
+      return acc
+    }, {})
+
+    // Calculate CLV for each membership type
+    const membershipCLV = Object.entries(membershipStats).reduce((acc: any, [type, stats]: [string, any]) => {
+      acc[type] = stats.customerCount > 0 ? Math.round(stats.totalRevenue / stats.customerCount) : 0
+      return acc
+    }, {})
+
     // Get customers with their subscriptions for routing efficiency
     const customersWithSubs = await prisma.user.findMany({
       where: { role: 'CUSTOMER' },
@@ -111,9 +156,14 @@ export async function GET() {
         return sum + Math.abs(Number(count) - idealDistribution)
       }, 0) / totalRouted * 100) : 100
 
-    // Get recent activity (last 10 activities)
+    // 🚀 COMPREHENSIVE ACTIVITY TRACKING
+    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
+    // Get recent payments (successes and failures)
     const recentPayments = await prisma.payment.findMany({
-      take: 5,
+      take: 10,
+      where: { createdAt: { gte: last7Days } },
       orderBy: { createdAt: 'desc' },
       include: {
         user: { select: { firstName: true, lastName: true, email: true } },
@@ -121,33 +171,130 @@ export async function GET() {
       }
     })
 
+    // Get recent signups
     const recentSignups = await prisma.user.findMany({
-      take: 5,
-      where: { role: 'CUSTOMER' },
+      take: 10,
+      where: { 
+        role: 'CUSTOMER',
+        createdAt: { gte: last7Days }
+      },
       orderBy: { createdAt: 'desc' },
       select: {
         firstName: true,
         lastName: true,
         email: true,
-        createdAt: true
+        createdAt: true,
+        memberships: {
+          take: 1,
+          select: { membershipType: true }
+        }
       }
     })
 
-    // Combine and sort activities
+    // Get recent membership changes (upgrades/downgrades)
+    const recentMembershipChanges = await prisma.membership.findMany({
+      take: 10,
+      where: { 
+        updatedAt: { gte: last7Days },
+        status: 'ACTIVE'
+      },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: { select: { firstName: true, lastName: true, email: true } }
+      }
+    })
+
+    // Get recent subscription changes (cancellations, reactivations)
+    const recentSubscriptionChanges = await prisma.subscription.findMany({
+      take: 10,
+      where: { 
+        updatedAt: { gte: last7Days },
+        status: { in: ['CANCELLED', 'ACTIVE', 'SUSPENDED'] }
+      },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: { select: { firstName: true, lastName: true, email: true } }
+      }
+    })
+
+    // 🚀 COMBINE ALL ACTIVITIES WITH PROPER TYPING AND ICONS
     const activities = [
       ...recentPayments.map((payment: any) => ({
         type: 'payment',
-        description: `${payment.user?.firstName} ${payment.user?.lastName} paid £${payment.amount} via ${payment.routedEntity?.displayName}`,
+        icon: payment.status === 'CONFIRMED' ? 'CreditCard' : 'AlertCircle',
+        color: payment.status === 'CONFIRMED' ? 'text-green-600' : 'text-red-600',
+        message: payment.status === 'CONFIRMED' 
+          ? `${payment.user?.firstName} ${payment.user?.lastName} paid £${payment.amount}`
+          : `Payment failed for ${payment.user?.firstName} ${payment.user?.lastName} (£${payment.amount})`,
+        detail: `${payment.routedEntity?.displayName} • ${new Date(payment.createdAt).toLocaleString()}`,
         timestamp: payment.createdAt,
-        amount: `£${payment.amount}`
+        amount: `£${payment.amount}`,
+        status: payment.status
       })),
       ...recentSignups.map((user: any) => ({
         type: 'signup',
-        description: `${user.firstName} ${user.lastName} signed up`,
+        icon: 'UserPlus',
+        color: 'text-blue-600',
+        message: `${user.firstName} ${user.lastName} signed up`,
+        detail: `${user.memberships[0]?.membershipType || 'No membership'} • ${new Date(user.createdAt).toLocaleString()}`,
         timestamp: user.createdAt,
-        amount: null
+        amount: null,
+        status: 'NEW'
+      })),
+      ...recentMembershipChanges.map((membership: any) => ({
+        type: 'membership_change',
+        icon: 'TrendingUp',
+        color: 'text-purple-600',
+        message: `${membership.user?.firstName} ${membership.user?.lastName} changed membership`,
+        detail: `Now: ${membership.membershipType} (£${membership.monthlyPrice}) • ${new Date(membership.updatedAt).toLocaleString()}`,
+        timestamp: membership.updatedAt,
+        amount: `£${membership.monthlyPrice}`,
+        status: 'UPDATED'
+      })),
+      ...recentSubscriptionChanges.map((subscription: any) => ({
+        type: 'subscription_change',
+        icon: subscription.status === 'CANCELLED' ? 'X' : subscription.status === 'ACTIVE' ? 'CheckCircle' : 'AlertTriangle',
+        color: subscription.status === 'CANCELLED' ? 'text-red-600' 
+              : subscription.status === 'ACTIVE' ? 'text-green-600' : 'text-yellow-600',
+        message: `${subscription.user?.firstName} ${subscription.user?.lastName} subscription ${subscription.status.toLowerCase()}`,
+        detail: `${subscription.membershipType} • ${new Date(subscription.updatedAt).toLocaleString()}`,
+        timestamp: subscription.updatedAt,
+        amount: null,
+        status: subscription.status
       }))
-    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 10)
+    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 15)
+
+    // Calculate payment success rate
+    const totalPaymentsLast30Days = await prisma.payment.count({
+      where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }
+    })
+    
+    const successfulPaymentsLast30Days = await prisma.payment.count({
+      where: { 
+        createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        status: 'CONFIRMED'
+      }
+    })
+
+    const paymentSuccessRate = totalPaymentsLast30Days > 0 
+      ? (successfulPaymentsLast30Days / totalPaymentsLast30Days) * 100 
+      : 100
+
+    // Calculate detailed routing metrics
+    const totalPayments = await prisma.payment.count()
+    const routedPayments = await prisma.payment.count({
+      where: { 
+        routedEntityId: { 
+          not: "" 
+        } 
+      }
+    })
+    const actualRoutingEfficiency = totalPayments > 0 ? (routedPayments / totalPayments) * 100 : 100
+
+    // Calculate average decision time
+    const routingDecisions = await prisma.paymentRouting.aggregate({
+      _avg: { decisionTimeMs: true }
+    })
 
     // Get VAT positions for current state
     const vatPositions = await VATCalculationEngine.calculateVATPositions()
@@ -217,7 +364,7 @@ export async function GET() {
       customerName: `${payment.user.firstName} ${payment.user.lastName}`,
       customerId: payment.userId,
       amount: payment.amount,
-      routedToEntity: payment.routedEntity.displayName,
+      routedToEntity: payment.routedEntity?.displayName || 'Not Routed',
       routingReason: payment.routing?.routingReason || 'Standard routing',
       timestamp: payment.createdAt.toISOString(),
       status: payment.status,
@@ -234,19 +381,34 @@ export async function GET() {
       monthlyRevenue: monthlyRevenue._sum.amount || 0,
       churnRate: Math.round(churnRate * 100) / 100,
       acquisitionRate: Math.round(acquisitionRate * 100) / 100,
-      routingEfficiency: Math.round(routingEfficiency * 100) / 100,
+      routingEfficiency: Math.round(actualRoutingEfficiency * 100) / 100,
       recentActivity: activities,
       vatStatus: vatPositions,
       customers: formattedCustomers,
       payments: formattedPayments,
       metrics: {
-        totalRevenue: monthlyRevenue._sum.amount || 0,
+        totalRevenue: totalRevenue._sum.amount || 0,
         monthlyRecurring: monthlyRevenue._sum.amount || 0,
         churnRate: Math.round(churnRate * 100) / 100,
         acquisitionRate: Math.round(acquisitionRate * 100) / 100,
-        avgLifetimeValue: totalCustomers > 0 ? (monthlyRevenue._sum.amount || 0) / totalCustomers * 12 : 0,
-        paymentSuccessRate: payments.length > 0 ? (payments.filter(p => p.status === 'COMPLETED').length / payments.length) * 100 : 100,
-        routingEfficiency: Math.round(routingEfficiency * 100) / 100
+        avgLifetimeValue: totalCustomers > 0 ? Math.round((totalRevenue._sum.amount || 0) / totalCustomers) : 0,
+        paymentSuccessRate: Math.round(paymentSuccessRate * 100) / 100,
+        routingEfficiency: Math.round(actualRoutingEfficiency * 100) / 100
+      },
+      // 🚀 NEW: Real business analytics by membership type
+      analytics: {
+        membershipCLV,
+        membershipStats,
+        acquisitionDetails: {
+          thisMonth: thisMonthCustomers,
+          lastMonth: lastMonthCustomers,
+          growthRate: acquisitionRate
+        },
+        operationalMetrics: {
+          autoRoutingRate: Math.round(actualRoutingEfficiency * 100) / 100,
+          manualOverrideRate: Math.round((100 - actualRoutingEfficiency) * 100) / 100,
+          avgDecisionTime: routingDecisions._avg.decisionTimeMs ? Math.round(routingDecisions._avg.decisionTimeMs / 1000 * 10) / 10 : 1.2
+        }
       }
     })
 
