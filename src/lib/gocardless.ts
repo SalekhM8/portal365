@@ -266,12 +266,12 @@ export async function getRevenueSummary() {
     }
   })
 
-  return entities.map(entity => ({
+  return entities.map((entity: any) => ({
     entityId: entity.id,
     entityName: entity.name,
-    currentRevenue: entity.payments.reduce((sum, p) => sum + Number(p.amount), 0),
+    currentRevenue: entity.payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0),
     paymentCount: entity.payments.length,
     vatThreshold: Number(entity.vatThreshold),
-    headroom: Number(entity.vatThreshold) - entity.payments.reduce((sum, p) => sum + Number(p.amount), 0)
+    headroom: Number(entity.vatThreshold) - entity.payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0)
   }))
 } 
