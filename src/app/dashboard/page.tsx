@@ -130,7 +130,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
+    <div className="container mx-auto p-4 lg:p-6 space-y-6 lg:space-y-8">
       {/* Header with Navigation */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
@@ -226,10 +226,10 @@ function DashboardContent() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="classes" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="classes">Class Timetable</TabsTrigger>
-          <TabsTrigger value="payments">Payment History</TabsTrigger>
-          <TabsTrigger value="access">Access Permissions</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 h-auto">
+          <TabsTrigger value="classes" className="text-xs lg:text-sm">Timetable</TabsTrigger>
+          <TabsTrigger value="payments" className="text-xs lg:text-sm">Payments</TabsTrigger>
+          <TabsTrigger value="access" className="text-xs lg:text-sm">Access</TabsTrigger>
         </TabsList>
 
         {/* Class Timetable Tab */}

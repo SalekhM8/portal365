@@ -260,27 +260,29 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
+    <div className="container mx-auto p-4 lg:p-6 space-y-6 lg:space-y-8">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Portal365 Management Dashboard</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Portal365 Management Dashboard</h1>
+          <p className="text-sm lg:text-base text-muted-foreground">
             Complete business oversight, customer management, and VAT optimization
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 lg:gap-3">
           <Button 
             onClick={() => window.location.href = '/admin/classes'}
             variant="outline" 
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 text-xs lg:text-sm"
           >
             <Calendar className="h-4 w-4" />
-            Manage Classes
+            <span className="hidden sm:inline">Manage Classes</span>
+            <span className="sm:hidden">Classes</span>
           </Button>
-          <Button onClick={() => signOut()} variant="outline" className="flex items-center gap-2">
+          <Button onClick={() => signOut()} variant="outline" className="flex items-center gap-2 text-xs lg:text-sm">
             <LogOut className="h-4 w-4" />
-            Log Out
+            <span className="hidden sm:inline">Log Out</span>
+            <span className="sm:hidden">Logout</span>
           </Button>
         </div>
       </div>
@@ -355,13 +357,13 @@ export default function AdminDashboard() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="customers">Customer Management</TabsTrigger>
-          <TabsTrigger value="payments">Payment Details</TabsTrigger>
-          <TabsTrigger value="vat-monitor">VAT Monitor</TabsTrigger>
-          <TabsTrigger value="analytics">Business Analytics</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto">
+          <TabsTrigger value="overview" className="text-xs lg:text-sm">Overview</TabsTrigger>
+          <TabsTrigger value="customers" className="text-xs lg:text-sm">Customers</TabsTrigger>
+          <TabsTrigger value="payments" className="text-xs lg:text-sm">Payments</TabsTrigger>
+          <TabsTrigger value="vat-monitor" className="text-xs lg:text-sm">VAT</TabsTrigger>
+          <TabsTrigger value="analytics" className="text-xs lg:text-sm">Analytics</TabsTrigger>
+          <TabsTrigger value="settings" className="text-xs lg:text-sm">Settings</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
