@@ -1,16 +1,14 @@
+import NextAuth from 'next-auth'
 import { PrismaAdapter } from '@next-auth/prisma-adapter'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from './prisma'
 
-// Define types locally to avoid import issues
+// Define enums locally to avoid import issues
 type UserRole = 'CUSTOMER' | 'ADMIN' | 'STAFF' | 'INSTRUCTOR' | 'SUPER_ADMIN'
 type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
 
-// Define NextAuthOptions locally
-type NextAuthOptions = any
-
-export const authOptions: NextAuthOptions = {
+export const authOptions: any = {
   adapter: PrismaAdapter(prisma),
   session: {
     strategy: 'jwt',
@@ -34,7 +32,7 @@ export const authOptions: NextAuthOptions = {
           },
         })
 
-        if (!user) {
+        if (!user || !user.password) {
           return null
         }
 
