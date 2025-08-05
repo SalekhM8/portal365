@@ -1,102 +1,231 @@
 import Image from "next/image";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { 
+  Dumbbell, 
+  GraduationCap, 
+  Heart, 
+  Sparkles,
+  ArrowRight,
+  Users,
+  Star,
+  CheckCircle2
+} from "lucide-react";
+
+const businesses = [
+  {
+    id: 'aura_mma',
+    name: 'Aura MMA',
+    description: 'Premier martial arts training facility',
+    icon: Dumbbell,
+    color: 'bg-red-500',
+    offerings: ['Brazilian Jiu-Jitsu', 'MMA Training', 'Boxing', 'Muay Thai'],
+    membershipTypes: [
+      { name: 'Weekend Warrior', price: 59, popular: false },
+      { name: 'Full Access', price: 89, popular: true }
+    ]
+  },
+  {
+    id: 'aura_tuition',
+    name: 'Aura Tuition Company',
+    description: '1-on-1 personal training & coaching',
+    icon: GraduationCap,
+    color: 'bg-blue-500',
+    offerings: ['Personal Training', 'Nutrition Coaching', 'Technique Workshops', 'Competition Prep'],
+    membershipTypes: [
+      { name: 'Monthly Sessions', price: 120, popular: false },
+      { name: 'Unlimited Coaching', price: 200, popular: true }
+    ]
+  },
+  {
+    id: 'aura_womens',
+    name: "Aura Women's Gym",
+    description: 'Dedicated women-only fitness space',
+    icon: Heart,
+    color: 'bg-pink-500',
+    offerings: ['Women-Only Classes', 'Self-Defense', 'Yoga & Pilates', 'Strength Training'],
+    membershipTypes: [
+      { name: 'Basic Access', price: 49, popular: false },
+      { name: 'Full Women\'s Program', price: 79, popular: true }
+    ]
+  },
+  {
+    id: 'aura_wellness',
+    name: 'Aura Wellness Center',
+    description: 'Recovery, wellness & mental health',
+    icon: Sparkles,
+    color: 'bg-green-500',
+    offerings: ['Massage Therapy', 'Mental Health Support', 'Recovery Sessions', 'Wellness Programs'],
+    membershipTypes: [
+      { name: 'Wellness Package', price: 99, popular: false },
+      { name: 'Complete Wellness', price: 149, popular: true }
+    ]
+  }
+];
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+      {/* Navigation */}
+      <nav className="container mx-auto p-6 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-sm">P</span>
+          </div>
+          <span className="text-xl font-bold">Portal365</span>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+        <div className="flex items-center gap-4">
+          <Link href="/auth/signin">
+            <Button variant="outline">Sign In</Button>
+          </Link>
+          <Link href="/auth/signin">
+            <Button variant="outline">Admin Login</Button>
+          </Link>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="container mx-auto px-6 py-16 text-center space-y-8">
+        <Badge className="mx-auto">
+          <Star className="h-3 w-3 mr-1" />
+          Multi-Business Platform
+        </Badge>
+        
+        <div className="space-y-4 max-w-4xl mx-auto">
+          <h1 className="text-5xl md:text-6xl font-bold tracking-tight">
+            Welcome to{" "}
+            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Portal365
+            </span>
+          </h1>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Choose from our premium fitness and wellness businesses. 
+            One platform, multiple specialized services tailored to your goals.
+          </p>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid gap-8 md:grid-cols-3 max-w-2xl mx-auto pt-8">
+          <div className="text-center space-y-2">
+            <div className="text-3xl font-bold">4</div>
+            <p className="text-sm text-muted-foreground">Specialized Businesses</p>
+          </div>
+          <div className="text-center space-y-2">
+            <div className="text-3xl font-bold">500+</div>
+            <p className="text-sm text-muted-foreground">Active Members</p>
+          </div>
+          <div className="text-center space-y-2">
+            <div className="text-3xl font-bold">99%</div>
+            <p className="text-sm text-muted-foreground">Satisfaction Rate</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Business Selection */}
+      <section className="container mx-auto px-6 py-16 space-y-12">
+        <div className="text-center space-y-4">
+          <h2 className="text-3xl md:text-4xl font-bold">
+            Choose Your Fitness Journey
+          </h2>
+          <p className="text-xl text-muted-foreground">
+            Each business specializes in different aspects of fitness and wellness
+          </p>
+        </div>
+
+        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-2 max-w-6xl mx-auto">
+          {businesses.map((business) => {
+            const IconComponent = business.icon;
+            return (
+              <Card 
+                key={business.id} 
+                className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-primary/50"
+              >
+                <CardHeader className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-lg ${business.color} text-white`}>
+                      <IconComponent className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl">{business.name}</CardTitle>
+                      <CardDescription className="text-base">
+                        {business.description}
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                
+                <CardContent className="space-y-6">
+                  {/* Offerings */}
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-sm">What's Included:</h4>
+                    <div className="grid gap-2">
+                      {business.offerings.map((offering, index) => (
+                        <div key={index} className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                          <span>{offering}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Membership Options */}
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-sm">Membership Options:</h4>
+                    <div className="space-y-2">
+                      {business.membershipTypes.map((membership, index) => (
+                        <div key={index} className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-2">
+                            {membership.name}
+                            {membership.popular && (
+                              <Badge variant="secondary" className="text-xs">Popular</Badge>
+                            )}
+                          </span>
+                          <span className="font-semibold">£{membership.price}/mo</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* CTA Button */}
+                  <Link href={`/register?business=${business.id}`}>
+                    <Button className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      Join {business.name}
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <div className="text-center pt-8">
+          <p className="text-muted-foreground mb-4">
+            Not sure which business is right for you?
+          </p>
+          <Button variant="outline" size="lg">
+            Compare All Options
+          </Button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t bg-muted/30">
+        <div className="container mx-auto px-6 py-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
+                <span className="text-white font-bold text-xs">P</span>
+              </div>
+              <span className="font-semibold">Portal365</span>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Multi-business fitness platform
+            </div>
+          </div>
+        </div>
       </footer>
     </div>
   );

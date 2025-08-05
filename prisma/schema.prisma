@@ -1,0 +1,468 @@
+// Portal365 - Multi-Entity Gym Management System
+// Comprehensive database schema for VAT-optimized payment routing
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// BUSINESS ENTITIES - The 4 separate companies for VAT optimization
+// ============================================================================
+
+model BusinessEntity {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  displayName       String   // "Aura MMA" for customer-facing
+  description       String
+  goCardlessToken   String?  // Encrypted GoCardless access token
+  goCardlessEnv     String   @default("sandbox") // "sandbox" | "live"
+  webhookSecret     String?  // GoCardless webhook secret
+  vatThreshold      Float    @default(90000.00) // £90,000 VAT threshold
+  currentRevenue    Float    @default(0.00)
+  vatYearStart      DateTime // April 1st typically
+  vatYearEnd        DateTime // March 31st typically
+  status            String   @default("ACTIVE") // EntityStatus
+  bankDetails       String?  // Sort code, account number, etc. (JSON as string)
+  
+  // Relationships
+  payments          Payment[]
+  vatCalculations   VATCalculation[]
+  routingDecisions  PaymentRouting[]
+  preferredServices Service[]        // Services that prefer this entity
+  subscriptions     Subscription[] // Subscriptions handled by this entity
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("business_entities")
+}
+
+// ============================================================================
+// VAT TRACKING & CALCULATIONS
+// ============================================================================
+
+model VATCalculation {
+  id                  String          @id @default(cuid())
+  entityId            String
+  entity              BusinessEntity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  
+  calculationDate     DateTime        @default(now())
+  vatYearStart        DateTime
+  vatYearEnd          DateTime
+  totalRevenue        Float           @default(0.00)
+  monthlyAverage      Float           @default(0.00)
+  projectedYearEnd    Float           @default(0.00)
+  headroomRemaining   Float           @default(90000.00)
+  riskLevel           String          @default("LOW") // VATRiskLevel
+  
+  // Performance metrics
+  calculationTimeMs   Int?            // How long calculation took
+  paymentCount        Int             @default(0)
+  lastPaymentDate     DateTime?
+  
+  @@map("vat_calculations")
+}
+
+// ============================================================================
+// CUSTOMER MANAGEMENT
+// ============================================================================
+
+model User {
+  id                String            @id @default(cuid())
+  email             String            @unique
+  emailVerified     DateTime?
+  firstName         String
+  lastName          String
+  phone             String?
+  dateOfBirth       DateTime?
+  emergencyContact  String?           // JSON as string
+  medicalInfo       String?           // JSON as string
+  
+  // Authentication
+  password          String?           // Hashed password
+  role              String            @default("CUSTOMER") // UserRole
+  status            String            @default("ACTIVE") // UserStatus
+  
+  // Preferences
+  communicationPrefs String?          // JSON as string
+  profileImage      String?
+  
+  // Relationships
+  memberships       Membership[]
+  payments          Payment[]
+  bookings          Booking[]
+  accessLogs        AccessLog[]
+  biometricData     BiometricData?
+  subscriptions     Subscription[] // Subscriptions for this user
+  
+  // Audit
+  lastLoginAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@map("users")
+}
+
+// ============================================================================
+// MEMBERSHIP MANAGEMENT
+// ============================================================================
+
+model Membership {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  membershipType    String            // MembershipType
+  status            String            @default("ACTIVE") // MembershipStatus
+  startDate         DateTime          @default(now())
+  endDate           DateTime?
+  
+  // Pricing
+  monthlyPrice      Float
+  setupFee          Float             @default(0.00)
+  
+  // Access permissions
+  accessPermissions String            // JSON as string
+  scheduleAccess    String            // ScheduleAccess
+  ageCategory       String            // AgeCategory
+  
+  // Billing
+  billingDay        Int               @default(1) // Day of month for billing
+  nextBillingDate   DateTime
+  
+  // Family linking
+  familyGroupId     String?
+  isPrimaryMember   Boolean           @default(true)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@map("memberships")
+}
+
+// ============================================================================
+// PAYMENT SYSTEM & VAT ROUTING
+// ============================================================================
+
+model Payment {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Payment details
+  amount            Float
+  currency          String            @default("GBP")
+  description       String
+  
+  // GoCardless integration
+  goCardlessPaymentId String?         @unique
+  goCardlessMandateId String?
+  goCardlessStatus    String?
+  
+  // VAT routing
+  routedEntityId    String
+  routedEntity      BusinessEntity   @relation(fields: [routedEntityId], references: [id])
+  
+  // Status tracking
+  status            String            @default("PENDING") // PaymentStatus
+  failureReason     String?
+  retryCount        Int               @default(0)
+  maxRetries        Int               @default(3)
+  
+  // Timing
+  scheduledFor      DateTime?         // When payment should be taken
+  processedAt       DateTime?
+  failedAt          DateTime?
+  
+  // Relationships
+  routing           PaymentRouting?
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@map("payments")
+}
+
+// ============================================================================
+// PAYMENT ROUTING INTELLIGENCE
+// ============================================================================
+
+model PaymentRouting {
+  id                String            @id @default(cuid())
+  paymentId         String            @unique
+  payment           Payment           @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  
+  // Routing decision
+  selectedEntityId  String
+  selectedEntity    BusinessEntity   @relation(fields: [selectedEntityId], references: [id])
+  
+  // Available options at time of routing
+  availableEntities String            // JSON as string
+  
+  // Decision reasoning
+  routingReason     String
+  routingMethod     String            // RoutingMethod
+  confidence        String            // RoutingConfidence
+  
+  // VAT context
+  vatPositionSnapshot String          // JSON as string
+  thresholdDistance   Float           // How close selected entity was to threshold
+  
+  // Override information
+  adminOverride     Boolean           @default(false)
+  overrideReason    String?
+  overrideUserId    String?
+  
+  // Performance tracking
+  decisionTimeMs    Int?              // How long routing decision took
+  
+  createdAt         DateTime          @default(now())
+  
+  @@map("payment_routing")
+}
+
+// ============================================================================
+// SERVICE MANAGEMENT
+// ============================================================================
+
+model Service {
+  id                String            @id @default(cuid())
+  name              String
+  description       String
+  category          String            // ServiceCategory
+  
+  // Pricing
+  basePrice         Float
+  currency          String            @default("GBP")
+  
+  // Service configuration
+  duration          Int?              // Duration in minutes
+  maxParticipants   Int?
+  ageRestrictions   String?           // JSON as string
+  
+  // Entity alignment
+  preferredEntityId String?           // Which entity should handle this service
+  preferredEntity   BusinessEntity?  @relation(fields: [preferredEntityId], references: [id])
+  
+  // Availability
+  isActive          Boolean           @default(true)
+  availableDays     String            // JSON as string
+  availableTimes    String            // JSON as string
+  
+  // Relationships
+  classes           Class[]
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@map("services")
+}
+
+// ============================================================================
+// CLASS SCHEDULING (NO PRE-BOOKING SYSTEM)
+// ============================================================================
+
+model Class {
+  id                String            @id @default(cuid())
+  serviceId         String
+  service           Service           @relation(fields: [serviceId], references: [id])
+  
+  // Class details
+  name              String
+  description       String?
+  instructorName    String
+  
+  // Scheduling
+  dayOfWeek         Int               // 0 = Sunday, 1 = Monday, etc.
+  startTime         String            // "19:00" format
+  endTime           String            // "20:00" format
+  duration          Int               // Minutes
+  
+  // Capacity
+  maxParticipants   Int               @default(30)
+  isActive          Boolean           @default(true)
+  
+  // Access requirements
+  requiredMemberships String          // JSON as string
+  ageRestrictions     String?         // JSON as string
+  
+  // Location
+  location          String            @default("Main Gym")
+  equipment         String?           // JSON as string
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@map("classes")
+}
+
+// ============================================================================
+// ACCESS CONTROL & TRACKING
+// ============================================================================
+
+model AccessLog {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Access details
+  accessMethod      String            // AccessMethod
+  accessGranted     Boolean
+  accessReason      String            // Why access was granted/denied
+  
+  // Location and timing
+  location          String            @default("Main Entrance")
+  accessTime        DateTime          @default(now())
+  
+  // Context
+  membershipStatus  String?           // Status at time of access
+  paymentStatus     String?           // Payment status at time of access
+  
+  // Biometric context (for future)
+  biometricUsed     Boolean           @default(false)
+  
+  @@map("access_logs")
+}
+
+// Future biometric system
+model BiometricData {
+  id                String            @id @default(cuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Biometric data (encrypted)
+  biometricHash     String            // Encrypted fingerprint data
+  enrollmentDate    DateTime          @default(now())
+  lastUsed          DateTime?
+  
+  // Status
+  isActive          Boolean           @default(true)
+  failedAttempts    Int               @default(0)
+  
+  @@map("biometric_data")
+}
+
+// ============================================================================
+// SYSTEM CONFIGURATION & SETTINGS
+// ============================================================================
+
+model SystemSetting {
+  id                String            @id @default(cuid())
+  key               String            @unique
+  value             String
+  description       String?
+  category          String            @default("general")
+  
+  // Metadata
+  dataType          String            @default("string") // string, number, boolean, json
+  isSecret          Boolean           @default(false)    // For sensitive settings
+  
+  updatedAt         DateTime          @updatedAt
+  updatedBy         String?           // User ID who updated
+  
+  @@map("system_settings")
+}
+
+// Booking system for tracking attendance (not pre-booking)
+model Booking {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // What they attended
+  classId           String?
+  serviceName       String            // What service they used
+  
+  // When
+  bookingDate       DateTime          @default(now())
+  attendanceDate    DateTime          // When they actually attended
+  
+  // Status
+  attended          Boolean           @default(false)
+  notes             String?
+  
+  @@map("bookings")
+}
+
+// ============================================================================
+// SUBSCRIPTION MANAGEMENT - Recurring memberships
+// ============================================================================
+
+model Subscription {
+  id                    String   @id @default(cuid())
+  userId                String
+  stripeSubscriptionId  String   @unique // Stripe subscription ID
+  stripeCustomerId      String   // Stripe customer ID
+  routedEntityId        String   // Which business entity handles this subscription
+  membershipType        String   // FULL_ADULT, WEEKEND_ADULT, etc.
+  monthlyPrice          Float    // Monthly subscription price
+  status               String   @default("ACTIVE") // ACTIVE, PAUSED, CANCELLED, PENDING_PAYMENT
+  currentPeriodStart   DateTime // Current billing period start
+  currentPeriodEnd     DateTime // Current billing period end  
+  nextBillingDate      DateTime // Next billing date
+  cancelAtPeriodEnd    Boolean  @default(false) // Cancel at end of current period
+  
+  // Relationships
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routedEntity         BusinessEntity         @relation(fields: [routedEntityId], references: [id])
+  routing              SubscriptionRouting[]  // Routing audit trail
+  invoices             Invoice[]              // Billing history
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([stripeSubscriptionId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model SubscriptionRouting {
+  id                    String   @id @default(cuid())
+  subscriptionId        String
+  selectedEntityId      String   // Chosen entity ID
+  availableEntities     String   // JSON array of all viable entities at time of decision
+  routingReason         String   // Human-readable reason
+  routingMethod         String   // SERVICE_BASED, LOAD_BALANCING, etc.
+  confidence           String   // HIGH, MEDIUM, LOW, FORCED
+  vatPositionSnapshot  String   // JSON snapshot of VAT positions
+  thresholdDistance    Float    // Distance from VAT threshold
+  decisionTimeMs       Int      // Routing calculation time
+  
+  // Relationships
+  subscription         Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  createdAt            DateTime @default(now())
+  
+  @@index([subscriptionId])
+  @@map("subscription_routing")
+}
+
+model Invoice {
+  id                   String   @id @default(cuid())
+  subscriptionId       String
+  stripeInvoiceId      String   @unique // Stripe invoice ID
+  amount               Float    // Invoice amount
+  currency             String   @default("GBP")
+  status              String   // paid, open, void, draft
+  billingPeriodStart  DateTime // Billing period this invoice covers
+  billingPeriodEnd    DateTime
+  dueDate             DateTime
+  paidAt              DateTime?
+  
+  // Relationships
+  subscription        Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@index([subscriptionId])
+  @@index([stripeInvoiceId])
+  @@map("invoices")
+}
