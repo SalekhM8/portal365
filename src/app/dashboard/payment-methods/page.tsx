@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,6 +15,7 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 export default function PaymentMethodsPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -26,13 +27,41 @@ export default function PaymentMethodsPage() {
       return
     }
 
-    if (session?.user?.email) {
+    // Handle redirect return from Stripe if present
+    const setupIntentId = searchParams.get('setup_intent')
+    const redirectStatus = searchParams.get('redirect_status')
+    if (setupIntentId && redirectStatus === 'succeeded') {
+      // finalize by informing backend to set default payment method
+      finalizePaymentMethod(setupIntentId)
+        .then(() => fetchPaymentMethods())
+        .finally(() => {
+          // optional: clean URL params
+          const url = new URL(window.location.href)
+          url.searchParams.delete('setup_intent')
+          url.searchParams.delete('redirect_status')
+          window.history.replaceState({}, '', url.toString())
+        })
+    } else if (session?.user?.email) {
       fetchPaymentMethods()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, status])
+
+  const finalizePaymentMethod = async (setupIntentId: string) => {
+    try {
+      await fetch('/api/customers/payment-methods', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setupIntentId })
+      })
+    } catch (e) {
+      // swallow; GET will reflect current state
+    }
+  }
 
   const fetchPaymentMethods = async () => {
     try {
+      setLoading(true)
       const response = await fetch('/api/customers/payment-methods')
       const data = await response.json()
 
@@ -129,7 +158,9 @@ export default function PaymentMethodsPage() {
                 appearance: { theme: 'stripe' }
               }}
             >
-              <PaymentMethodForm onSuccess={fetchPaymentMethods} />
+              <PaymentMethodForm onSuccess={() => {
+                fetchPaymentMethods()
+              }} />
             </Elements>
           )}
         </CardContent>
@@ -165,11 +196,20 @@ function PaymentMethodForm({ onSuccess }: { onSuccess: () => void }) {
       if (result.error) {
         setError(result.error.message || 'Failed to update payment method')
       } else {
+        // If no redirect happened, Stripe may return the setupIntent
+        const setupIntentId = result.setupIntent?.id
+        if (setupIntentId && result.setupIntent.status === 'succeeded') {
+          await fetch('/api/customers/payment-methods', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ setupIntentId })
+          })
+        }
         setSuccess(true)
         setTimeout(() => {
           onSuccess()
           setSuccess(false)
-        }, 2000)
+        }, 1500)
       }
     } catch (err) {
       setError('An unexpected error occurred')

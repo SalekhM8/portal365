@@ -12,8 +12,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, CheckCircle2, Crown, ArrowLeft, Dumbbell, GraduationCap, Heart, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
+import { MEMBERSHIP_PLANS } from '@/config/memberships'
 
-// Business configurations
+// Business configurations referencing central plan data
 const businessConfigs = {
   aura_mma: {
     name: 'Aura MMA',
@@ -21,38 +22,10 @@ const businessConfigs = {
     color: 'bg-red-500',
     description: 'Premier martial arts training facility',
     memberships: [
-      {
-        type: 'WEEKEND_ADULT',
-        displayName: 'Weekend Warrior',
-        price: 59,
-        description: 'Perfect for busy schedules',
-        features: ['Weekend access (Sat & Sun)', 'BJJ, MMA, Boxing, Muay Thai', 'Equipment access', 'No contract'],
-        popular: false
-      },
-      {
-        type: 'FULL_ADULT',
-        displayName: 'Full Access',
-        price: 89,
-        description: 'Complete training freedom',
-        features: ['7 days/week access', 'All martial arts classes', 'Equipment access', 'Priority access', 'Guest passes'],
-        popular: true
-      },
-      {
-        type: 'WEEKEND_UNDER18',
-        displayName: 'Weekend Youth',
-        price: 49,
-        description: 'For young warriors under 18',
-        features: ['Weekend access (Sat & Sun)', 'Youth martial arts classes', 'Equipment access', 'Parental updates'],
-        popular: false
-      },
-      {
-        type: 'FULL_UNDER18',
-        displayName: 'Full Youth Access',
-        price: 69,
-        description: 'Complete youth program',
-        features: ['7 days/week access', 'Youth martial arts classes', 'Equipment access', 'Mentorship program'],
-        popular: false
-      }
+      { type: 'WEEKEND_ADULT', popular: false },
+      { type: 'FULL_ADULT', popular: true },
+      { type: 'WEEKEND_UNDER18', popular: false },
+      { type: 'FULL_UNDER18', popular: false }
     ]
   },
   aura_tuition: {
@@ -61,22 +34,7 @@ const businessConfigs = {
     color: 'bg-blue-500',
     description: '1-on-1 personal training & coaching',
     memberships: [
-      {
-        type: 'PERSONAL_TRAINING',
-        displayName: 'Monthly Sessions',
-        price: 120,
-        description: '4 sessions per month',
-        features: ['1-on-1 personal training', '4 sessions monthly', 'Nutrition guidance', 'Technique refinement'],
-        popular: false
-      },
-      {
-        type: 'PERSONAL_TRAINING',
-        displayName: 'Unlimited Coaching',
-        price: 200,
-        description: 'Unlimited access to coaching',
-        features: ['Unlimited 1-on-1 sessions', 'Nutrition coaching', 'Competition prep', 'Technique workshops'],
-        popular: true
-      }
+      { type: 'PERSONAL_TRAINING', popular: true }
     ]
   },
   aura_womens: {
@@ -85,22 +43,7 @@ const businessConfigs = {
     color: 'bg-pink-500',
     description: 'Dedicated women-only fitness space',
     memberships: [
-      {
-        type: 'WOMENS_CLASSES',
-        displayName: 'Basic Access',
-        price: 65,
-        description: 'Essential women-only classes',
-        features: ['Women-only classes', 'Self-defense training', 'Basic equipment access', 'Supportive community'],
-        popular: false
-      },
-      {
-        type: 'WOMENS_CLASSES',
-        displayName: "Full Women's Program",
-        price: 79,
-        description: 'Complete women-focused training',
-        features: ['All women-only classes', 'Self-defense & martial arts', 'Yoga & Pilates', 'Strength training', 'Nutrition support'],
-        popular: true
-      }
+      { type: 'WOMENS_CLASSES', popular: true }
     ]
   },
   aura_wellness: {
@@ -109,25 +52,10 @@ const businessConfigs = {
     color: 'bg-green-500',
     description: 'Recovery, wellness & mental health',
     memberships: [
-      {
-        type: 'WELLNESS_PACKAGE',
-        displayName: 'Wellness Package',
-        price: 95,
-        description: 'Essential wellness services',
-        features: ['Massage therapy (2/month)', 'Mental health support', 'Recovery sessions', 'Wellness workshops'],
-        popular: false
-      },
-      {
-        type: 'WELLNESS_PACKAGE',
-        displayName: 'Complete Wellness',
-        price: 149,
-        description: 'Comprehensive wellness program',
-        features: ['Unlimited massage therapy', 'Weekly mental health sessions', 'Recovery & rehabilitation', 'Nutrition planning', 'Stress management'],
-        popular: true
-      }
+      { type: 'WELLNESS_PACKAGE', popular: true }
     ]
   }
-}
+} as const
 
 function RegisterContent() {
   const router = useRouter()
@@ -153,12 +81,12 @@ function RegisterContent() {
 
   useEffect(() => {
     const businessParam = searchParams.get('business')
-    if (businessParam && businessConfigs[businessParam as keyof typeof businessConfigs]) {
+    if (businessParam && (businessParam in businessConfigs)) {
       setSelectedBusiness(businessParam)
     }
   }, [searchParams])
 
-  const currentBusiness = selectedBusiness ? businessConfigs[selectedBusiness as keyof typeof businessConfigs] : null
+  const currentBusiness = selectedBusiness ? (businessConfigs as any)[selectedBusiness] : null
 
   const handleInputChange = (field: string, value: string) => {
     if (field.startsWith('emergencyContact.')) {
@@ -209,7 +137,7 @@ function RegisterContent() {
         try {
           const loginResult = await signIn('credentials', {
             email: result.user.email,
-            password: result.user.password,
+            password: formData.password,
             redirect: false
           })
           
@@ -337,40 +265,43 @@ function RegisterContent() {
       <div className="space-y-6">
         <h2 className="text-2xl font-semibold">Select Your Membership</h2>
         <div className="grid gap-6 md:grid-cols-2">
-          {currentBusiness?.memberships.map((membership, index) => (
-            <Card 
-              key={index}
-              className={`cursor-pointer transition-all hover:shadow-lg ${
-                selectedMembership === membership.type 
-                  ? 'ring-2 ring-primary border-primary' 
-                  : ''
-              } ${membership.popular ? 'border-primary' : ''}`}
-              onClick={() => setSelectedMembership(membership.type)}
-            >
-              <CardHeader className="text-center space-y-2">
-                {membership.popular && (
-                  <Badge className="mx-auto w-fit">
-                    <Crown className="h-3 w-3 mr-1" />
-                    Most Popular
-                  </Badge>
-                )}
-                <CardTitle className="text-xl">{membership.displayName}</CardTitle>
-                <CardDescription>{membership.description}</CardDescription>
-                <div className="text-3xl font-bold">
-                  £{membership.price}
-                  <span className="text-sm font-normal text-muted-foreground">/month</span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {membership.features.map((feature, featureIndex) => (
-                  <div key={featureIndex} className="flex items-center gap-2 text-sm">
-                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                    <span>{feature}</span>
+          {currentBusiness?.memberships.map((membership: any, index: number) => {
+            const plan = MEMBERSHIP_PLANS[membership.type as keyof typeof MEMBERSHIP_PLANS]
+            return (
+              <Card 
+                key={index}
+                className={`cursor-pointer transition-all hover:shadow-lg ${
+                  selectedMembership === membership.type 
+                    ? 'ring-2 ring-primary border-primary' 
+                    : ''
+                } ${membership.popular ? 'border-primary' : ''}`}
+                onClick={() => setSelectedMembership(membership.type)}
+              >
+                <CardHeader className="text-center space-y-2">
+                  {membership.popular && (
+                    <Badge className="mx-auto w-fit">
+                      <Crown className="h-3 w-3 mr-1" />
+                      Most Popular
+                    </Badge>
+                  )}
+                  <CardTitle className="text-xl">{plan.displayName}</CardTitle>
+                  <CardDescription>{plan.description}</CardDescription>
+                  <div className="text-3xl font-bold">
+                    £{plan.monthlyPrice}
+                    <span className="text-sm font-normal text-muted-foreground">/month</span>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {plan.features.map((feature: string, featureIndex: number) => (
+                    <div key={featureIndex} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <span>{feature}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       </div>
 
@@ -506,7 +437,10 @@ function RegisterContent() {
                     Processing Registration...
                   </>
                 ) : (
-                  `Join ${currentBusiness?.name} - £${currentBusiness?.memberships.find(m => m.type === selectedMembership)?.price}/month`
+                  (() => {
+                    const plan = MEMBERSHIP_PLANS[selectedMembership as keyof typeof MEMBERSHIP_PLANS]
+                    return `Join ${currentBusiness?.name} - £${plan.monthlyPrice}/month`
+                  })()
                 )}
               </Button>
 

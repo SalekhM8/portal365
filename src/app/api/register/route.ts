@@ -94,8 +94,7 @@ export async function POST(request: NextRequest) {
       // ✅ CREATE SUBSCRIPTION WITH STRIPE (NEW PRORATED BILLING)
       console.log('🔄 Starting Stripe subscription creation...')
       console.log('🔍 Environment check:', {
-        stripeKeyExists: !!process.env.STRIPE_SECRET_KEY,
-        stripeKeyPreview: process.env.STRIPE_SECRET_KEY?.substring(0, 10) + '...'
+        stripeKeyExists: !!process.env.STRIPE_SECRET_KEY
       })
       
       const subscriptionResult = await SubscriptionProcessor.createSubscription({
@@ -115,8 +114,7 @@ export async function POST(request: NextRequest) {
           id: user.id,
           firstName: user.firstName,
           lastName: user.lastName,
-          email: user.email,
-          password: plainPassword // For auto-login only, will be used immediately
+          email: user.email
         },
         membership: {
           type: validatedData.membershipType,
@@ -149,8 +147,7 @@ export async function POST(request: NextRequest) {
           id: user.id,
           firstName: user.firstName,
           lastName: user.lastName,
-          email: user.email,
-          password: plainPassword // For auto-login only
+          email: user.email
         },
         membership: {
           type: validatedData.membershipType,

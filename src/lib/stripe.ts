@@ -1,8 +1,7 @@
 import Stripe from 'stripe'
 import { prisma } from './prisma'
 import { IntelligentVATRouter, RoutingOptions } from './vat-routing'
-
-console.log('🔍 Stripe Secret Key:', process.env.STRIPE_SECRET_KEY ? 'Found' : 'Missing')
+import { getPlan } from '@/config/memberships'
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('STRIPE_SECRET_KEY is not set in environment variables')
@@ -10,15 +9,8 @@ if (!process.env.STRIPE_SECRET_KEY) {
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   typescript: true,
-})
-
-console.log('✅ Stripe client initialized successfully')
-
-// Test basic Stripe connectivity
-stripe.products.list({ limit: 1 }).then(products => {
-  console.log('✅ Stripe API test successful, products found:', products.data.length)
-}).catch(error => {
-  console.error('❌ Stripe API test failed:', error.message)
+  apiVersion: '2025-06-30.basil',
+  appInfo: { name: 'Portal365', version: '1.0.0' }
 })
 
 // ============================================================================
@@ -51,7 +43,7 @@ export class SubscriptionProcessor {
       console.log('🔄 Creating subscription with 1st of month billing...')
       
       // 1. Get membership pricing details
-      const membershipDetails = this.getMembershipDetails(request.membershipType)
+      const membershipDetails = getPlan(request.membershipType)
       
       // 2. Determine optimal routing using existing VAT engine
       const routingOptions: RoutingOptions = {
@@ -73,7 +65,7 @@ export class SubscriptionProcessor {
       })
 
       // 4. Get or create Stripe price for this membership type
-      const priceId = await this.getOrCreatePrice(membershipDetails)
+      const priceId = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name })
 
       // 5. Calculate prorated billing details
       const now = new Date()
@@ -141,9 +133,6 @@ export class SubscriptionProcessor {
         }
       })
 
-      // 9. Update business entity revenue (for VAT tracking)
-      await this.updateEntityRevenue(routing.selectedEntityId, membershipDetails.monthlyPrice)
-
       console.log('✅ Setup ready - customer will complete payment method setup, then prorated billing will process')
 
       return {
@@ -158,28 +147,6 @@ export class SubscriptionProcessor {
       console.error('❌ Error creating subscription:', error)
       throw error
     }
-  }
-
-  /**
-   * Get membership pricing details
-   */
-  private static getMembershipDetails(membershipType: string) {
-    const memberships: Record<string, { monthlyPrice: number; name: string }> = {
-      'WEEKEND_ADULT': { monthlyPrice: 59, name: 'Weekend Adult' },
-      'WEEKEND_UNDER18': { monthlyPrice: 49, name: 'Weekend Youth' },
-      'FULL_ADULT': { monthlyPrice: 89, name: 'Full Adult Access' },
-      'FULL_UNDER18': { monthlyPrice: 69, name: 'Full Youth Access' },
-      'PERSONAL_TRAINING': { monthlyPrice: 120, name: 'Personal Training' },
-      'WOMENS_CLASSES': { monthlyPrice: 65, name: "Women's Classes" },
-      'WELLNESS_PACKAGE': { monthlyPrice: 95, name: 'Wellness Package' }
-    }
-
-    const details = memberships[membershipType]
-    if (!details) {
-      throw new Error(`Invalid membership type: ${membershipType}`)
-    }
-
-    return details
   }
 
   /**
@@ -230,19 +197,5 @@ export class SubscriptionProcessor {
       console.error('Error creating Stripe price:', error)
       throw error
     }
-  }
-
-  /**
-   * Update entity revenue for VAT calculations
-   */
-  private static async updateEntityRevenue(entityId: string, monthlyAmount: number): Promise<void> {
-    await prisma.businessEntity.update({
-      where: { id: entityId },
-      data: {
-        currentRevenue: {
-          increment: monthlyAmount
-        }
-      }
-    })
   }
 } 

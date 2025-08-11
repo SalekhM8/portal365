@@ -8,51 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ArrowLeft, Crown, CheckCircle2, Phone, Loader2 } from 'lucide-react'
-
-const membershipPlans = {
-  'WEEKEND_ADULT': {
-    name: 'Weekend Warrior',
-    price: 59,
-    description: 'Perfect for busy schedules',
-    features: ['Weekend access (Sat & Sun)', 'BJJ, MMA, Boxing, Muay Thai', 'Equipment access', 'No contract']
-  },
-  'FULL_ADULT': {
-    name: 'Full Access',
-    price: 89,
-    description: 'Complete training freedom',
-    features: ['7 days/week access', 'All martial arts classes', 'Equipment access', 'Priority access', 'Guest passes']
-  },
-  'WEEKEND_UNDER18': {
-    name: 'Weekend Youth',
-    price: 49,
-    description: 'For young warriors under 18',
-    features: ['Weekend access (Sat & Sun)', 'Youth martial arts classes', 'Equipment access', 'Parental updates']
-  },
-  'FULL_UNDER18': {
-    name: 'Full Youth Access',
-    price: 69,
-    description: 'Complete youth program',
-    features: ['7 days/week access', 'Youth martial arts classes', 'Equipment access', 'Mentorship program']
-  },
-  'PERSONAL_TRAINING': {
-    name: 'Personal Training',
-    price: 120,
-    description: '1-on-1 coaching sessions',
-    features: ['1-on-1 personal training', 'Nutrition guidance', 'Technique refinement', 'Flexible scheduling']
-  },
-  'WOMENS_CLASSES': {
-    name: "Women's Classes",
-    price: 65,
-    description: 'Women-only fitness space',
-    features: ['Women-only classes', 'Self-defense training', 'Supportive community', 'Specialized programs']
-  },
-  'WELLNESS_PACKAGE': {
-    name: 'Wellness Package',
-    price: 95,
-    description: 'Recovery & wellness services',
-    features: ['Massage therapy', 'Mental health support', 'Recovery sessions', 'Wellness workshops']
-  }
-}
+import { MEMBERSHIP_PLANS } from '@/config/memberships'
 
 export default function MembershipPage() {
   const { data: session, status } = useSession()
@@ -107,7 +63,7 @@ export default function MembershipPage() {
       const data = await response.json()
 
       if (data.success) {
-        setSuccess(`Successfully changed to ${membershipPlans[newPlan as keyof typeof membershipPlans].name}!`)
+        setSuccess(`Successfully changed to ${MEMBERSHIP_PLANS[newPlan as keyof typeof MEMBERSHIP_PLANS].name}!`)
         await fetchMembership() // Refresh data
       } else {
         setError(data.error || 'Failed to change membership plan')
@@ -174,10 +130,10 @@ export default function MembershipPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-semibold">
-                    {membershipPlans[currentMembership.type as keyof typeof membershipPlans]?.name || currentMembership.type}
+                    {MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.name || currentMembership.type}
                   </h3>
                   <p className="text-muted-foreground">
-                    {membershipPlans[currentMembership.type as keyof typeof membershipPlans]?.description}
+                    {MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.description}
                   </p>
                 </div>
                 <div className="text-right">
@@ -187,8 +143,8 @@ export default function MembershipPage() {
               </div>
               <div className="space-y-2">
                 <h4 className="font-medium">Included Features:</h4>
-                {membershipPlans[currentMembership.type as keyof typeof membershipPlans]?.features.map((feature, index) => (
-                  <div key={index} className="flex items-center gap-2">
+                {MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.features.map((feature) => (
+                  <div key={feature} className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                     <span className="text-sm">{feature}</span>
                   </div>
@@ -209,7 +165,7 @@ export default function MembershipPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {Object.entries(membershipPlans).map(([key, plan]) => (
+            {Object.entries(MEMBERSHIP_PLANS).map(([key, plan]) => (
               <Card 
                 key={key}
                 className={`cursor-pointer transition-all hover:shadow-md ${
@@ -220,34 +176,24 @@ export default function MembershipPage() {
                   <CardTitle className="text-lg">{plan.name}</CardTitle>
                   <CardDescription>{plan.description}</CardDescription>
                   <div className="text-2xl font-bold">
-                    £{plan.price}
+                    £{plan.monthlyPrice}
                     <span className="text-sm font-normal text-muted-foreground">/month</span>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {plan.features.map((feature, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm">
+                  {plan.features.map((feature) => (
+                    <div key={feature} className="flex items-center gap-2 text-sm">
                       <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                       <span>{feature}</span>
                     </div>
                   ))}
-                  
                   <Button
                     onClick={() => handlePlanChange(key)}
                     disabled={currentMembership?.type === key || changingTo !== null}
                     className="w-full mt-4"
-                    variant={currentMembership?.type === key ? "secondary" : "default"}
+                    variant={currentMembership?.type === key ? 'secondary' : 'default'}
                   >
-                    {changingTo === key ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Changing...
-                      </>
-                    ) : currentMembership?.type === key ? (
-                      'Current Plan'
-                    ) : (
-                      'Change to This Plan'
-                    )}
+                    {changingTo === key ? 'Changing...' : currentMembership?.type === key ? 'Current Plan' : 'Change to This Plan'}
                   </Button>
                 </CardContent>
               </Card>

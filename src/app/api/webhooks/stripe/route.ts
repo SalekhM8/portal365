@@ -64,7 +64,6 @@ async function handlePaymentSucceeded(invoice: any) {
     console.log('✅ Payment succeeded for invoice:', invoice.id)
 
     const subscriptionId = invoice.subscription
-    const customerId = invoice.customer
     const amountPaid = invoice.amount_paid / 100 // Convert from pence to pounds
 
     // Find subscription in our database
@@ -77,6 +76,30 @@ async function handlePaymentSucceeded(invoice: any) {
       console.error('❌ Subscription not found:', subscriptionId)
       return
     }
+
+    // Idempotency: if we've already recorded this invoice, skip
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { stripeInvoiceId: invoice.id }
+    })
+    if (existingInvoice) {
+      console.log('ℹ️ Invoice already processed, skipping:', invoice.id)
+      return
+    }
+
+    // Record invoice
+    await prisma.invoice.create({
+      data: {
+        subscriptionId: subscription.id,
+        stripeInvoiceId: invoice.id,
+        amount: amountPaid,
+        currency: invoice.currency.toUpperCase(),
+        status: invoice.status,
+        billingPeriodStart: new Date(invoice.lines.data[0]?.period?.start * 1000 || invoice.period_start * 1000),
+        billingPeriodEnd: new Date(invoice.lines.data[0]?.period?.end * 1000 || invoice.period_end * 1000),
+        dueDate: new Date(invoice.status_transitions?.paid_at ? invoice.status_transitions.paid_at * 1000 : Date.now()),
+        paidAt: new Date()
+      }
+    })
 
     // Update subscription status to ACTIVE
     await prisma.subscription.update({
@@ -101,7 +124,7 @@ async function handlePaymentSucceeded(invoice: any) {
         userId: subscription.userId,
         amount: amountPaid,
         currency: invoice.currency.toUpperCase(),
-        status: 'COMPLETED',
+        status: 'CONFIRMED',
         description: invoice.billing_reason === 'subscription_create' 
           ? 'Initial subscription payment (prorated)'
           : 'Monthly membership payment',
@@ -165,8 +188,6 @@ async function handlePaymentFailed(invoice: any) {
     })
 
     console.log(`❌ Payment failed for user: ${subscription.user.email} - £${amountDue}`)
-
-    // TODO: Send payment failure email notification
 
   } catch (error) {
     console.error('❌ Error handling payment failure:', error)

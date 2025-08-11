@@ -1,4 +1,6 @@
 import { prisma } from './prisma'
+import { MEMBERSHIP_PLANS, MembershipKey } from '@/config/memberships'
+import { SAFETY_BUFFER_GBP } from '@/config/routing'
 
 type VATRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'EXCEEDED'
 type RoutingMethod = 'LOAD_BALANCING' | 'VAT_OPTIMIZED' | 'SERVICE_PREFERENCE' | 'HEADROOM_OPTIMIZED' | 'MANUAL_OVERRIDE'
@@ -222,7 +224,7 @@ export class IntelligentVATRouter {
     }
     
     // Apply business logic routing
-    const selectedEntity = this.selectOptimalEntity(viableEntities, options)
+    const selectedEntity: VATPosition = await this.selectOptimalEntity(viableEntities, options)
     
     const decision: RoutingDecision = {
       selectedEntityId: selectedEntity.entityId,
@@ -242,10 +244,9 @@ export class IntelligentVATRouter {
    * Get entities that can safely handle the payment amount
    */
   private static getViableEntities(positions: VATPosition[], amount: number): VATPosition[] {
-    const SAFETY_BUFFER = 5000 // £5k safety buffer
+    const SAFETY_BUFFER = SAFETY_BUFFER_GBP
     
     return positions.filter(entity => {
-      // Must have enough headroom including safety buffer
       const safeHeadroom = entity.headroom - SAFETY_BUFFER
       return safeHeadroom >= amount && entity.riskLevel !== 'EXCEEDED'
     })
@@ -254,14 +255,13 @@ export class IntelligentVATRouter {
   /**
    * Select the optimal entity based on business rules
    */
-  private static selectOptimalEntity(
+  private static async selectOptimalEntity(
     viableEntities: VATPosition[], 
     options: RoutingOptions
-  ): VATPosition {
-    
-    // 1. Service preference routing
+  ): Promise<VATPosition> {
+    // 1. Service preference routing (DB-backed, with config fallback)
     if (options.membershipType) {
-      const preferredEntity = this.getServicePreferredEntity(viableEntities, options.membershipType)
+      const preferredEntity = await this.getServicePreferredEntity(viableEntities, options.membershipType)
       if (preferredEntity) return preferredEntity
     }
     
@@ -276,31 +276,33 @@ export class IntelligentVATRouter {
   }
 
   /**
-   * Get preferred entity based on service type
+   * Get preferred entity based on service type (DB first, config fallback)
    */
-  private static getServicePreferredEntity(
+  private static async getServicePreferredEntity(
     entities: VATPosition[], 
     membershipType: MembershipType
-  ): VATPosition | null {
-    
-    const serviceMapping: Record<MembershipType, string[]> = {
-      WEEKEND_ADULT: ['aura_mma'],
-      WEEKEND_UNDER18: ['aura_mma'],
-      FULL_ADULT: ['aura_mma'],
-      FULL_UNDER18: ['aura_mma'],
-      PERSONAL_TRAINING: ['aura_tuition'],
-      WOMENS_CLASSES: ['aura_womens'],
-      WELLNESS_PACKAGE: ['aura_wellness'],
-      CORPORATE: ['aura_wellness']
+  ): Promise<VATPosition | null> {
+    const key = (membershipType as unknown) as MembershipKey
+    const plan = MEMBERSHIP_PLANS[key]
+    const preferred = plan?.preferredEntities || []
+
+    // DB-backed: ensure a Service actually prefers this entity
+    for (const name of preferred) {
+      const found = entities.find(e => e.entityName.toLowerCase().includes(name.replace('aura_', '')))
+      if (found) {
+        const service = await prisma.service.findFirst({
+          where: { preferredEntityId: found.entityId, isActive: true }
+        })
+        if (service) return found
+      }
     }
-    
-    const preferredEntityNames = serviceMapping[membershipType] || []
-    
-    for (const entityName of preferredEntityNames) {
-      const entity = entities.find(e => e.entityName.toLowerCase().includes(entityName.split('_')[1]))
-      if (entity) return entity
+
+    // Config fallback: if no DB-backed service preference, still prefer based on plan hint
+    for (const name of preferred) {
+      const found = entities.find(e => e.entityName.toLowerCase().includes(name.replace('aura_', '')))
+      if (found) return found
     }
-    
+
     return null
   }
 
@@ -350,8 +352,12 @@ export class IntelligentVATRouter {
     const reasons: string[] = []
     
     if (options.membershipType) {
-      const servicePreferred = this.getServicePreferredEntity(available, options.membershipType)
-      if (servicePreferred?.entityId === selected.entityId) {
+      // Config-only preference check to keep this method sync (selection used DB-backed check)
+      const key = (options.membershipType as unknown) as MembershipKey
+      const plan = MEMBERSHIP_PLANS[key]
+      const preferred = plan?.preferredEntities || []
+      const preferredMatch = preferred.some(name => selected.entityName.toLowerCase().includes(name.replace('aura_', '')))
+      if (preferredMatch) {
         reasons.push('Service type alignment')
       }
     }

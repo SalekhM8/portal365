@@ -1,0 +1,1 @@
+export const SAFETY_BUFFER_GBP = 5000 // Minimum headroom buffer before routing into an entity 

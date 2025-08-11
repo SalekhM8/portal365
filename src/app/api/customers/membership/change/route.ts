@@ -3,16 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
-
-const membershipDetails = {
-  'WEEKEND_ADULT': { monthlyPrice: 59, name: 'Weekend Adult' },
-  'WEEKEND_UNDER18': { monthlyPrice: 49, name: 'Weekend Youth' },
-  'FULL_ADULT': { monthlyPrice: 89, name: 'Full Adult Access' },
-  'FULL_UNDER18': { monthlyPrice: 69, name: 'Full Youth Access' },
-  'PERSONAL_TRAINING': { monthlyPrice: 120, name: 'Personal Training' },
-  'WOMENS_CLASSES': { monthlyPrice: 65, name: "Women's Classes" },
-  'WELLNESS_PACKAGE': { monthlyPrice: 95, name: 'Wellness Package' }
-}
+import { getPlan } from '@/config/memberships'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,9 +15,11 @@ export async function POST(request: NextRequest) {
 
     const { newMembershipType } = await request.json()
 
-    if (!newMembershipType || !membershipDetails[newMembershipType as keyof typeof membershipDetails]) {
+    if (!newMembershipType) {
       return NextResponse.json({ error: 'Invalid membership type' }, { status: 400 })
     }
+
+    const newDetails = getPlan(newMembershipType)
 
     // Get user and current subscription
     const user = await prisma.user.findUnique({
@@ -54,13 +47,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You are already on this plan' }, { status: 400 })
     }
 
-    const newDetails = membershipDetails[newMembershipType as keyof typeof membershipDetails]
-
     // Update Stripe subscription
     const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId)
     
     // Get or create the new price in Stripe
-    const newPriceId = await getOrCreatePrice(newDetails)
+    const newPriceId = await getOrCreatePrice({ monthlyPrice: newDetails.monthlyPrice, name: newDetails.name })
     
     // Update the subscription in Stripe to the new price
     await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
