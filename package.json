@@ -19,6 +19,9 @@
   "prisma": {
     "seed": "ts-node --require tsconfig-paths/register prisma/seed.ts"
   },
+  "engines": {
+    "node": ">=18.18.0"
+  },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
     "@next-auth/prisma-adapter": "^1.0.7",
@@ -43,6 +46,7 @@
     "date-fns": "^4.1.0",
     "gocardless-nodejs": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
+    "lightningcss": "^1.26.0",
     "lucide-react": "^0.525.0",
     "next": "15.4.1",
     "next-auth": "^4.24.11",
