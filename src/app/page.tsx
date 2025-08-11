@@ -11,6 +11,7 @@ import {
   Star,
   CheckCircle2
 } from "lucide-react";
+import { MEMBERSHIP_PLANS } from "@/config/memberships";
 
 const businesses = [
   {
@@ -21,8 +22,8 @@ const businesses = [
     color: 'bg-red-500',
     offerings: ['Brazilian Jiu-Jitsu', 'MMA Training', 'Boxing', 'Muay Thai'],
     membershipTypes: [
-      { name: 'Weekend Warrior', price: 59, popular: false },
-      { name: 'Full Access', price: 89, popular: true }
+      { name: 'Weekend Warrior', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false },
+      { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true }
     ]
   },
   {
@@ -33,8 +34,7 @@ const businesses = [
     color: 'bg-pink-500',
     offerings: ['Women-Only Classes', 'Self-Defense', 'Yoga & Pilates', 'Strength Training'],
     membershipTypes: [
-      { name: 'Basic Access', price: 49, popular: false },
-      { name: 'Full Women\'s Program', price: 79, popular: true }
+      { name: "Women's Program", price: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice, popular: true }
     ]
   }
 ];

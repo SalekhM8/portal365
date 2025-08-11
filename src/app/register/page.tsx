@@ -407,6 +407,21 @@ function RegisterContent() {
               </div>
 
               {/* Submit Button */}
+              <div className="space-y-3">
+                <div className="text-sm text-muted-foreground">
+                  By joining, you confirm you have read and agree to our Terms & Conditions and Liability Waiver.
+                </div>
+                <div className="rounded-md border p-3 text-xs text-muted-foreground space-y-2 bg-muted/30">
+                  <p className="font-semibold text-foreground">Liability Waiver (Summary)</p>
+                  <p>
+                    I acknowledge that participation in martial arts, fitness, and related activities involves inherent risk of injury. I agree to assume full responsibility for any risks, injuries, or damages which may occur as a result of participation. I waive, release, and discharge the business and its instructors from any and all claims or causes of action arising out of my participation, except in cases of gross negligence or willful misconduct.
+                  </p>
+                  <p>
+                    Full Terms & Conditions and Waiver are available on request and at the facility reception.
+                  </p>
+                </div>
+              </div>
+
               <Button 
                 type="submit" 
                 size="lg" 
