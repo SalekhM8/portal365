@@ -8,285 +8,92 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log('🔄 Confirming payment/setup:', body)
 
-    // Handle different confirmation types
     if (body.setupIntentId) {
       return await handleSetupIntentConfirmation(body)
     } else if (body.paymentIntentId) {
       return await handlePaymentIntentConfirmation(body)
     } else {
-      return NextResponse.json({
-        success: false,
-        error: 'Missing setupIntentId or paymentIntentId'
-      }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Missing setupIntentId or paymentIntentId' }, { status: 400 })
     }
-
   } catch (error) {
     console.error('❌ Confirmation error:', error)
-    return NextResponse.json({
-      success: false,
-      error: 'Confirmation failed'
-    }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'Confirmation failed' }, { status: 500 })
   }
 }
 
-export async function handleSetupIntentConfirmation(body: { setupIntentId: string, subscriptionId: string }) {
+async function handleSetupIntentConfirmation(body: { setupIntentId: string, subscriptionId: string }) {
   const { setupIntentId, subscriptionId } = body
-
-  // 1. Verify the SetupIntent with Stripe
   const setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
-  
   if (setupIntent.status !== 'succeeded') {
-    console.error('❌ Setup not succeeded:', setupIntent.status)
-    return NextResponse.json({
-      success: false,
-      error: 'Payment method setup not completed'
-    }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'Payment method setup not completed' }, { status: 400 })
   }
-
   const paymentMethodId = setupIntent.payment_method as string
-  console.log('✅ Payment method setup confirmed:', paymentMethodId)
 
-  // 2. Get subscription record from database
-  const subscription = await prisma.subscription.findUnique({
-    where: { id: subscriptionId },
-    include: { user: true }
-  })
-
+  const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId }, include: { user: true } })
   if (!subscription) {
-    return NextResponse.json({
-      success: false,
-      error: 'Subscription not found'
-    }, { status: 404 })
+    return NextResponse.json({ success: false, error: 'Subscription not found' }, { status: 404 })
   }
-
-  // Guard: if already active, return early idempotently
   if (subscription.status === 'ACTIVE') {
-    return NextResponse.json({
-      success: true,
-      message: 'Subscription already active',
-      subscription: { id: subscription.id, status: 'ACTIVE' },
-      user: {
-        id: subscription.user.id,
-        email: subscription.user.email,
-        firstName: subscription.user.firstName,
-        lastName: subscription.user.lastName
-      }
-    })
+    return NextResponse.json({ success: true, message: 'Subscription already active', subscription: { id: subscription.id, status: 'ACTIVE' }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
   }
 
-  // 3. Extract metadata from SetupIntent
-  const proratedAmount = parseFloat(setupIntent.metadata?.proratedAmount || '0')
-  const nextBillingDate = new Date(setupIntent.metadata?.nextBillingDate || subscription.nextBillingDate)
+  const proratedAmount = parseFloat((setupIntent as any).metadata?.proratedAmount || '0')
+  const nextBillingDate = new Date((setupIntent as any).metadata?.nextBillingDate || subscription.nextBillingDate)
   const nextBillingKey = nextBillingDate.toISOString().split('T')[0]
 
-  // 4. Set payment method as default for customer
-  await stripe.customers.update(subscription.stripeCustomerId, {
-    invoice_settings: {
-      default_payment_method: paymentMethodId
-    }
-  })
+  await stripe.customers.update(subscription.stripeCustomerId, { invoice_settings: { default_payment_method: paymentMethodId } })
 
-  // 5. Create and charge prorated invoice if amount > 0 (idempotent)
   if (proratedAmount > 0) {
-    await stripe.invoiceItems.create({
-      customer: subscription.stripeCustomerId,
-      amount: Math.round(proratedAmount * 100), // Convert to pence
-      currency: 'gbp',
-      description: `Prorated membership (${new Date().toISOString().split('T')[0]} → ${nextBillingKey})`,
-      metadata: {
-        dbSubscriptionId: subscription.id,
-        reason: 'prorated_first_period'
-      }
-    }, { idempotencyKey: `prorate-item:${subscription.id}:${nextBillingKey}` })
-
-    const invoice = await stripe.invoices.create({
-      customer: subscription.stripeCustomerId,
-      auto_advance: true, // Automatically finalize and charge
-      metadata: {
-        dbSubscriptionId: subscription.id,
-        reason: 'prorated_first_period'
-      }
-    }, { idempotencyKey: `prorate-invoice:${subscription.id}:${nextBillingKey}` })
-
-    console.log('✅ Prorated invoice created and charged:', invoice.id)
+    await stripe.invoiceItems.create({ customer: subscription.stripeCustomerId, amount: Math.round(proratedAmount * 100), currency: 'gbp', description: `Prorated membership (${new Date().toISOString().split('T')[0]} → ${nextBillingKey})`, metadata: { dbSubscriptionId: subscription.id, reason: 'prorated_first_period' } }, { idempotencyKey: `prorate-item:${subscription.id}:${nextBillingKey}` })
+    await stripe.invoices.create({ customer: subscription.stripeCustomerId, auto_advance: true, metadata: { dbSubscriptionId: subscription.id, reason: 'prorated_first_period' } }, { idempotencyKey: `prorate-invoice:${subscription.id}:${nextBillingKey}` })
   }
 
-  // 6. Create Stripe subscription with trial until 1st of next month (idempotent)
   const membershipDetails = getPlan(subscription.membershipType)
   const priceId = await getOrCreatePrice(membershipDetails)
-  
   const trialEndTimestamp = Math.floor(nextBillingDate.getTime() / 1000)
-  
+
   const stripeSubscription = await stripe.subscriptions.create({
     customer: subscription.stripeCustomerId,
     items: [{ price: priceId }],
     default_payment_method: paymentMethodId,
     collection_method: 'charge_automatically',
-    trial_end: trialEndTimestamp, // Trial ends on 1st of next month
-    metadata: {
-      userId: subscription.userId,
-      membershipType: subscription.membershipType,
-      routedEntityId: subscription.routedEntityId,
-      dbSubscriptionId: subscription.id
-    }
+    trial_end: trialEndTimestamp,
+    metadata: { userId: subscription.userId, membershipType: subscription.membershipType, routedEntityId: subscription.routedEntityId, dbSubscriptionId: subscription.id }
   }, { idempotencyKey: `start-sub:${subscription.id}:${trialEndTimestamp}` })
 
-  console.log('✅ Stripe subscription created with trial until:', new Date(trialEndTimestamp * 1000))
+  await prisma.subscription.update({ where: { id: subscription.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
+  await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE', nextBillingDate } })
 
-  // 7. Update subscription status in database
-  await prisma.subscription.update({
-    where: { id: subscription.id },
-    data: {
-      stripeSubscriptionId: stripeSubscription.id, // Replace SetupIntent ID with real subscription ID
-      status: 'ACTIVE'
-    }
-  })
-
-  // 8. Update membership status and next billing date
-  await prisma.membership.updateMany({
-    where: { userId: subscription.userId },
-    data: {
-      status: 'ACTIVE',
-      nextBillingDate: nextBillingDate // Set to 1st of next month to match Stripe trial end
-    }
-  })
-
-  // 9. Create payment record for prorated amount
   if (proratedAmount > 0) {
-    await prisma.payment.create({
-      data: {
-        userId: subscription.userId,
-        amount: proratedAmount,
-        currency: 'GBP',
-        status: 'CONFIRMED',
-        description: 'Prorated first month payment',
-        routedEntityId: subscription.routedEntityId,
-        processedAt: new Date()
-      }
-    })
+    await prisma.payment.create({ data: { userId: subscription.userId, amount: proratedAmount, currency: 'GBP', status: 'CONFIRMED', description: 'Prorated first month payment', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
   }
 
-  console.log('✅ Subscription activated with prorated billing')
-
-  return NextResponse.json({
-    success: true,
-    message: 'Payment method setup completed and subscription activated',
-    subscription: {
-      id: subscription.id,
-      status: 'ACTIVE',
-      proratedAmount,
-      nextBillingDate: nextBillingKey
-    },
-    user: {
-      id: subscription.user.id,
-      email: subscription.user.email,
-      firstName: subscription.user.firstName,
-      lastName: subscription.user.lastName
-    }
-  })
+  return NextResponse.json({ success: true, message: 'Payment method setup completed and subscription activated', subscription: { id: subscription.id, status: 'ACTIVE', proratedAmount, nextBillingDate: nextBillingKey }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
 }
 
-export async function handlePaymentIntentConfirmation(body: { paymentIntentId: string, subscriptionId: string }) {
-  // Legacy flow - keep existing logic
+async function handlePaymentIntentConfirmation(body: { paymentIntentId: string, subscriptionId: string }) {
   const { subscriptionId, paymentIntentId } = body
-
-  console.log('🔄 Confirming payment:', { subscriptionId, paymentIntentId })
-
-  // 1. Verify the PaymentIntent with Stripe
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
-  
   if (paymentIntent.status !== 'succeeded') {
-    console.error('❌ Payment not succeeded:', paymentIntent.status)
-    return NextResponse.json({
-      success: false,
-      error: 'Payment not completed'
-    }, { status: 400 })
+    return NextResponse.json({ success: false, error: 'Payment not completed' }, { status: 400 })
   }
 
-  console.log('✅ Payment confirmed with Stripe')
+  const subscription = await prisma.subscription.update({ where: { id: subscriptionId }, data: { status: 'ACTIVE' }, include: { user: true } })
+  await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
+  await prisma.payment.create({ data: { userId: subscription.userId, amount: (paymentIntent.amount as number) / 100, currency: (paymentIntent.currency as string).toUpperCase(), status: 'CONFIRMED', description: 'Initial subscription payment (prorated)', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
 
-  // 2. Update subscription status in database
-  const subscription = await prisma.subscription.update({
-    where: { id: subscriptionId },
-    data: {
-      status: 'ACTIVE'
-    },
-    include: {
-      user: true
-    }
-  })
-
-  // 3. Update membership status
-  await prisma.membership.updateMany({
-    where: { userId: subscription.userId },
-    data: {
-      status: 'ACTIVE'
-    }
-  })
-
-  // 4. Create payment record
-  await prisma.payment.create({
-    data: {
-      userId: subscription.userId,
-      amount: paymentIntent.amount / 100, // Convert from pence to pounds
-      currency: paymentIntent.currency.toUpperCase(),
-      status: 'CONFIRMED',
-      description: 'Initial subscription payment (prorated)',
-      routedEntityId: subscription.routedEntityId,
-      processedAt: new Date()
-    }
-  })
-
-  console.log('✅ Database updated successfully')
-
-  return NextResponse.json({
-    success: true,
-    message: 'Payment confirmed and subscription activated',
-    subscription: {
-      id: subscription.id,
-      status: subscription.status,
-      userId: subscription.userId
-    },
-    user: {
-      id: subscription.user.id,
-      email: subscription.user.email,
-      firstName: subscription.user.firstName,
-      lastName: subscription.user.lastName
-    }
-  })
+  return NextResponse.json({ success: true, message: 'Payment confirmed and subscription activated', subscription: { id: subscription.id, status: subscription.status, userId: subscription.userId }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
 }
 
 // Helper functions
 async function getOrCreatePrice(membershipDetails: { monthlyPrice: number; name: string }): Promise<string> {
-  // Reuse existing prices
-  const existingPrices = await stripe.prices.list({
-    limit: 100,
-    active: true,
-    type: 'recurring',
-    currency: 'gbp'
-  })
-
-  const existingPrice = existingPrices.data.find(price => 
-    price.unit_amount === membershipDetails.monthlyPrice * 100 &&
-    price.recurring?.interval === 'month'
-  )
-
-  if (existingPrice) {
-    return existingPrice.id
-  }
-
-  // Create new product and price
-  const product = await stripe.products.create({
-    name: `${membershipDetails.name} Membership`,
-    description: `Monthly membership for ${membershipDetails.name}`,
-  })
-
-  const recurringPrice = await stripe.prices.create({
-    unit_amount: membershipDetails.monthlyPrice * 100,
-    currency: 'gbp',
-    recurring: { interval: 'month' },
-    product: product.id,
-  })
-
+  const existingPrices = await stripe.prices.list({ limit: 100, active: true, type: 'recurring', currency: 'gbp' })
+  const existingPrice = existingPrices.data.find(price => price.unit_amount === membershipDetails.monthlyPrice * 100 && price.recurring?.interval === 'month')
+  if (existingPrice) return existingPrice.id
+  const product = await stripe.products.create({ name: `${membershipDetails.name} Membership`, description: `Monthly membership for ${membershipDetails.name}` })
+  const recurringPrice = await stripe.prices.create({ unit_amount: membershipDetails.monthlyPrice * 100, currency: 'gbp', recurring: { interval: 'month' }, product: product.id })
   return recurringPrice.id
-} 
+}
+
+// Re-export handlers for tests only (avoids Next.js route export validation)
+export const __test__ = { handleSetupIntentConfirmation, handlePaymentIntentConfirmation } 
