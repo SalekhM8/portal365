@@ -43,7 +43,7 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     displayName: 'Full Access',
     monthlyPrice: 75,
     description: 'Complete training freedom',
-    features: ['7 days/week access', 'All martial arts classes', 'Equipment access', 'Priority access', 'Guest passes'],
+    features: ['7 days/week access', 'All martial arts classes', 'Equipment access', 'Priority access'],
     preferredEntities: ['aura_mma']
   },
   FULL_UNDER18: {
