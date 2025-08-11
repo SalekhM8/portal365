@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "prebuild": "npm rebuild lightningcss || true",
+    "prebuild": "node scripts/tailwind_shim.js && npm rebuild lightningcss || true",
     "build": "prisma generate && next build --no-lint",
     "postbuild": "prisma generate",
     "start": "next start",
