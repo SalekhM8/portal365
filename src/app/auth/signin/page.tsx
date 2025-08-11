@@ -147,19 +147,7 @@ export default function SignInPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Demo Credentials */}
-        <Card className="border-dashed">
-          <CardContent className="pt-6">
-            <div className="text-center space-y-2">
-              <h4 className="font-semibold text-sm">Demo Credentials</h4>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <p>Email: admin@portal365.com</p>
-                <p>Password: admin123</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* No demo credentials in production */}
       </div>
     </div>
   )

@@ -23,25 +23,25 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     key: 'WEEKEND_ADULT',
     name: 'Weekend Adult',
     displayName: 'Weekend Warrior',
-    monthlyPrice: 59,
+    monthlyPrice: 55,
     description: 'Perfect for busy schedules',
-    features: ['Weekend access (Sat & Sun)', 'BJJ, MMA, Boxing, Muay Thai', 'Equipment access', 'No contract'],
+    features: ['Weekend access (Fri, Sat & Sun)', 'BJJ, MMA, Boxing, Muay Thai', 'Equipment access', 'No contract'],
     preferredEntities: ['aura_mma']
   },
   WEEKEND_UNDER18: {
     key: 'WEEKEND_UNDER18',
     name: 'Weekend Youth',
     displayName: 'Weekend Youth',
-    monthlyPrice: 49,
+    monthlyPrice: 40,
     description: 'For young warriors under 18',
-    features: ['Weekend access (Sat & Sun)', 'Youth martial arts classes', 'Equipment access', 'Parental updates'],
+    features: ['Weekend access (Fri, Sat & Sun)', 'Youth martial arts classes', 'Equipment access', 'Parental updates'],
     preferredEntities: ['aura_mma']
   },
   FULL_ADULT: {
     key: 'FULL_ADULT',
     name: 'Full Adult Access',
     displayName: 'Full Access',
-    monthlyPrice: 89,
+    monthlyPrice: 75,
     description: 'Complete training freedom',
     features: ['7 days/week access', 'All martial arts classes', 'Equipment access', 'Priority access', 'Guest passes'],
     preferredEntities: ['aura_mma']
@@ -50,7 +50,7 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     key: 'FULL_UNDER18',
     name: 'Full Youth Access',
     displayName: 'Full Youth Access',
-    monthlyPrice: 69,
+    monthlyPrice: 55,
     description: 'Complete youth program',
     features: ['7 days/week access', 'Youth martial arts classes', 'Equipment access', 'Mentorship program'],
     preferredEntities: ['aura_mma']
@@ -68,7 +68,7 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     key: 'WOMENS_CLASSES',
     name: "Women's Classes",
     displayName: "Women's Program",
-    monthlyPrice: 65,
+    monthlyPrice: 25,
     description: 'Women-only fitness space',
     features: ['Women-only classes', 'Self-defense training', 'Supportive community', 'Specialized programs'],
     preferredEntities: ['aura_womens']

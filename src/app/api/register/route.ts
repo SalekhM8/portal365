@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
 function getMembershipDetails(membershipType: string) {
   const memberships: Record<string, any> = {
     'WEEKEND_ADULT': {
-      monthlyPrice: 59,
+      monthlyPrice: 55,
       setupFee: 0,
       accessPermissions: {
         martialArts: ['bjj', 'boxing', 'muay_thai'],
@@ -192,12 +192,12 @@ function getMembershipDetails(membershipType: string) {
       },
       scheduleAccess: {
         weekdays: false,
-        weekends: true,
+        weekends: true, // Fri-Sun considered weekend here
         timeSlots: ['morning', 'afternoon', 'evening']
       }
     },
     'WEEKEND_UNDER18': {
-      monthlyPrice: 49,
+      monthlyPrice: 40,
       setupFee: 0,
       accessPermissions: {
         martialArts: ['bjj', 'boxing'],
@@ -207,12 +207,12 @@ function getMembershipDetails(membershipType: string) {
       },
       scheduleAccess: {
         weekdays: false,
-        weekends: true,
+        weekends: true, // Fri-Sun
         timeSlots: ['morning', 'afternoon']
       }
     },
     'FULL_ADULT': {
-      monthlyPrice: 89,
+      monthlyPrice: 75,
       setupFee: 0,
       accessPermissions: {
         martialArts: ['bjj', 'boxing', 'muay_thai', 'mma'],
@@ -227,58 +227,28 @@ function getMembershipDetails(membershipType: string) {
       }
     },
     'FULL_UNDER18': {
-      monthlyPrice: 69,
-      setupFee: 0,
-      accessPermissions: {
-        martialArts: ['bjj', 'boxing', 'muay_thai'],
-        personalTraining: false,
-        womensClasses: false,
-        wellness: false
-      },
-      scheduleAccess: {
-        weekdays: true,
-        weekends: true,
-        timeSlots: ['morning', 'afternoon']
-      }
-    },
-    'PERSONAL_TRAINING': {
-      monthlyPrice: 120,
-      setupFee: 0,
-      accessPermissions: {
-        martialArts: ['bjj', 'boxing', 'muay_thai', 'mma'],
-        personalTraining: true,
-        womensClasses: false,
-        wellness: false
-      },
-      scheduleAccess: {
-        weekdays: true,
-        weekends: true,
-        timeSlots: ['morning', 'afternoon', 'evening']
-      }
-    },
-    'WOMENS_CLASSES': {
-      monthlyPrice: 65,
+      monthlyPrice: 55,
       setupFee: 0,
       accessPermissions: {
         martialArts: ['bjj', 'boxing'],
         personalTraining: false,
-        womensClasses: true,
+        womensClasses: false,
         wellness: false
       },
       scheduleAccess: {
         weekdays: true,
         weekends: true,
-        timeSlots: ['morning', 'afternoon', 'evening']
+        timeSlots: ['afternoon', 'evening']
       }
     },
-    'WELLNESS_PACKAGE': {
-      monthlyPrice: 95,
+    'WOMENS_CLASSES': {
+      monthlyPrice: 25,
       setupFee: 0,
       accessPermissions: {
         martialArts: [],
         personalTraining: false,
-        womensClasses: false,
-        wellness: true
+        womensClasses: true, // Access to all women's classes
+        wellness: false
       },
       scheduleAccess: {
         weekdays: true,
@@ -287,6 +257,5 @@ function getMembershipDetails(membershipType: string) {
       }
     }
   }
-  
-  return memberships[membershipType] || memberships['FULL_ADULT']
+  return memberships[membershipType]
 } 

@@ -28,15 +28,6 @@ const businessConfigs = {
       { type: 'FULL_UNDER18', popular: false }
     ]
   },
-  aura_tuition: {
-    name: 'Aura Tuition Company',
-    icon: GraduationCap,
-    color: 'bg-blue-500',
-    description: '1-on-1 personal training & coaching',
-    memberships: [
-      { type: 'PERSONAL_TRAINING', popular: true }
-    ]
-  },
   aura_womens: {
     name: "Aura Women's Gym",
     icon: Heart,
@@ -44,15 +35,6 @@ const businessConfigs = {
     description: 'Dedicated women-only fitness space',
     memberships: [
       { type: 'WOMENS_CLASSES', popular: true }
-    ]
-  },
-  aura_wellness: {
-    name: 'Aura Wellness Center',
-    icon: Sparkles,
-    color: 'bg-green-500',
-    description: 'Recovery, wellness & mental health',
-    memberships: [
-      { type: 'WELLNESS_PACKAGE', popular: true }
     ]
   }
 } as const

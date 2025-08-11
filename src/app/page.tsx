@@ -5,9 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { 
   Dumbbell, 
-  GraduationCap, 
   Heart, 
-  Sparkles,
   ArrowRight,
   Users,
   Star,
@@ -28,18 +26,6 @@ const businesses = [
     ]
   },
   {
-    id: 'aura_tuition',
-    name: 'Aura Tuition Company',
-    description: '1-on-1 personal training & coaching',
-    icon: GraduationCap,
-    color: 'bg-blue-500',
-    offerings: ['Personal Training', 'Nutrition Coaching', 'Technique Workshops', 'Competition Prep'],
-    membershipTypes: [
-      { name: 'Monthly Sessions', price: 120, popular: false },
-      { name: 'Unlimited Coaching', price: 200, popular: true }
-    ]
-  },
-  {
     id: 'aura_womens',
     name: "Aura Women's Gym",
     description: 'Dedicated women-only fitness space',
@@ -49,18 +35,6 @@ const businesses = [
     membershipTypes: [
       { name: 'Basic Access', price: 49, popular: false },
       { name: 'Full Women\'s Program', price: 79, popular: true }
-    ]
-  },
-  {
-    id: 'aura_wellness',
-    name: 'Aura Wellness Center',
-    description: 'Recovery, wellness & mental health',
-    icon: Sparkles,
-    color: 'bg-green-500',
-    offerings: ['Massage Therapy', 'Mental Health Support', 'Recovery Sessions', 'Wellness Programs'],
-    membershipTypes: [
-      { name: 'Wellness Package', price: 99, popular: false },
-      { name: 'Complete Wellness', price: 149, popular: true }
     ]
   }
 ];
@@ -118,7 +92,7 @@ export default function Home() {
         {/* Quick Stats */}
         <div className="grid gap-8 md:grid-cols-3 max-w-2xl mx-auto pt-8">
           <div className="text-center space-y-2">
-            <div className="text-3xl font-bold">4</div>
+            <div className="text-3xl font-bold">2</div>
             <p className="text-sm text-muted-foreground">Specialized Businesses</p>
           </div>
           <div className="text-center space-y-2">
