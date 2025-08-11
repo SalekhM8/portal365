@@ -60,15 +60,6 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Login Info */}
-      <div className="container mx-auto px-6 pt-4">
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground">
-            Both buttons lead to the same login page - you'll be automatically directed to the correct dashboard based on your account type
-          </p>
-        </div>
-      </div>
-
       {/* Hero Section */}
       <section className="container mx-auto px-6 py-16 text-center space-y-8">
         <Badge className="mx-auto">
@@ -78,10 +69,7 @@ export default function Home() {
         
         <div className="space-y-4 max-w-4xl mx-auto">
           <h1 className="text-5xl md:text-6xl font-bold tracking-tight">
-            Welcome to{" "}
-            <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              Portal365
-            </span>
+            Welcome to Aura MMA
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Choose from our premium fitness and wellness businesses. 
