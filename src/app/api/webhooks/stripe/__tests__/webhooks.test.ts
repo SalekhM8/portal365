@@ -7,7 +7,7 @@ vi.mock('@/lib/stripe', () => ({
   }
 }))
 
-import { handlePaymentSucceeded, handlePaymentFailed, handleSubscriptionUpdated, handleSubscriptionCancelled } from '@/app/api/webhooks/stripe/route'
+import { handlePaymentSucceeded, handlePaymentFailed, handleSubscriptionUpdated, handleSubscriptionCancelled } from '@/app/api/webhooks/stripe/handlers'
 import { prisma } from '@/lib/prisma'
 
 vi.mock('@/lib/prisma', () => {
