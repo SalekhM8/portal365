@@ -109,65 +109,64 @@ export default function Home() {
           {businesses.map((business) => {
             const IconComponent = business.icon;
             return (
-              <Card 
-                key={business.id} 
-                className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-primary/50"
-              >
-                <CardHeader className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-lg ${business.color} text-white`}>
-                      <IconComponent className="h-6 w-6" />
+              <Link key={business.id} href={`/register?business=${business.id}`}>
+                <Card 
+                  className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-primary/50"
+                >
+                  <CardHeader className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-lg ${business.color} text-white`}>
+                        <IconComponent className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl">{business.name}</CardTitle>
+                        <CardDescription className="text-base">
+                          {business.description}
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-xl">{business.name}</CardTitle>
-                      <CardDescription className="text-base">
-                        {business.description}
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
+                  </CardHeader>
                 
-                <CardContent className="space-y-6">
-                  {/* Offerings */}
-                  <div className="space-y-3">
-                    <h4 className="font-semibold text-sm">What's Included:</h4>
-                    <div className="grid gap-2">
-                      {business.offerings.map((offering, index) => (
-                        <div key={index} className="flex items-center gap-2 text-sm">
-                          <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                          <span>{offering}</span>
-                        </div>
-                      ))}
+                  <CardContent className="space-y-6">
+                    {/* Offerings */}
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm">What's Included:</h4>
+                      <div className="grid gap-2">
+                        {business.offerings.map((offering, index) => (
+                          <div key={index} className="flex items-center gap-2 text-sm">
+                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                            <span>{offering}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Membership Options */}
-                  <div className="space-y-3">
-                    <h4 className="font-semibold text-sm">Membership Options:</h4>
-                    <div className="space-y-2">
-                      {business.membershipTypes.map((membership, index) => (
-                        <div key={index} className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-2">
-                            {membership.name}
-                            {membership.popular && (
-                              <Badge variant="secondary" className="text-xs">Popular</Badge>
-                            )}
-                          </span>
-                          <span className="font-semibold">£{membership.price}/mo</span>
-                        </div>
-                      ))}
+                    {/* Membership Options */}
+                    <div className="space-y-3">
+                      <h4 className="font-semibold text-sm">Membership Options:</h4>
+                      <div className="space-y-2">
+                        {business.membershipTypes.map((membership, index) => (
+                          <div key={index} className="flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-2">
+                              {membership.name}
+                              {membership.popular && (
+                                <Badge variant="secondary" className="text-xs">Popular</Badge>
+                              )}
+                            </span>
+                            <span className="font-semibold">£{membership.price}/mo</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* CTA Button */}
-                  <Link href={`/register?business=${business.id}`}>
+                    {/* CTA Button */}
                     <Button className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                       Join {business.name}
                       <ArrowRight className="h-4 w-4 ml-2" />
                     </Button>
-                  </Link>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })}
         </div>

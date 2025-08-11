@@ -329,9 +329,44 @@ function DashboardContent() {
         <TabsContent value="access" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Access Permissions</CardTitle>
+              <CardTitle>Your Accessible Classes</CardTitle>
               <CardDescription>
-                What your membership includes
+                Classes you can attend with your current membership
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {upcomingClasses.filter(classItem => classItem.canAccess).length > 0 ? (
+                  <div className="grid gap-3">
+                    {upcomingClasses.filter(classItem => classItem.canAccess).map((classItem) => (
+                      <div
+                        key={classItem.id}
+                        className="flex items-center justify-between p-3 border rounded-lg bg-green-50 border-green-200"
+                      >
+                        <div>
+                          <h4 className="font-medium">{classItem.name}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {classItem.time} • {classItem.location} • {classItem.instructor}
+                          </p>
+                        </div>
+                        <Badge variant="default" className="bg-green-600">
+                          Included
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No accessible classes found.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Membership Benefits</CardTitle>
+              <CardDescription>
+                Additional services included with your plan
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -350,6 +385,18 @@ function DashboardContent() {
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="flex items-center justify-between">
+                      <span>Equipment Access</span>
+                      <Badge variant="default">
+                        Included
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Changing Facilities</span>
+                      <Badge variant="default">
+                        Included
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
                       <span>Personal Training</span>
                       <Badge variant={membershipData.accessPermissions.personalTraining ? 'default' : 'secondary'}>
                         {membershipData.accessPermissions.personalTraining ? 'Included' : 'Not Included'}
@@ -359,12 +406,6 @@ function DashboardContent() {
                       <span>Women's Classes</span>
                       <Badge variant={membershipData.accessPermissions.womensClasses ? 'default' : 'secondary'}>
                         {membershipData.accessPermissions.womensClasses ? 'Included' : 'Not Included'}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Wellness Services</span>
-                      <Badge variant={membershipData.accessPermissions.wellness ? 'default' : 'secondary'}>
-                        {membershipData.accessPermissions.wellness ? 'Included' : 'Not Included'}
                       </Badge>
                     </div>
                   </div>

@@ -165,7 +165,9 @@ export default function MembershipPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {Object.entries(MEMBERSHIP_PLANS).map(([key, plan]) => (
+            {Object.entries(MEMBERSHIP_PLANS)
+              .filter(([key]) => !['PERSONAL_TRAINING', 'WELLNESS_PACKAGE'].includes(key))
+              .map(([key, plan]) => (
               <Card 
                 key={key}
                 className={`cursor-pointer transition-all hover:shadow-md ${
