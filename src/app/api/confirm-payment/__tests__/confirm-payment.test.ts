@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { handleSetupIntentConfirmation } from '@/app/api/confirm-payment/route'
+import { handleSetupIntentConfirmation } from '@/app/api/confirm-payment/handlers'
 import { prisma } from '@/lib/prisma'
 
 vi.mock('@/lib/stripe', () => {
@@ -60,7 +60,6 @@ describe('confirm-payment idempotency', () => {
     const res1 = await handleSetupIntentConfirmation({ setupIntentId: 'seti_1', subscriptionId: 'db_sub' })
     expect(res1.status).toBe(200)
 
-    // second call should short-circuit if already set ACTIVE
     mockPrisma.subscription.findUnique.mockResolvedValue({
       id: 'db_sub', userId: 'user_1', stripeCustomerId: 'cus_1',
       membershipType: 'FULL_ADULT', routedEntityId: 'entity_a', nextBillingDate: new Date('2099-01-01'), status: 'ACTIVE',
