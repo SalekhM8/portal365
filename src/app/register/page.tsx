@@ -170,29 +170,27 @@ function RegisterContent() {
           {Object.entries(businessConfigs).map(([key, business]) => {
             const IconComponent = business.icon
             return (
-              <Card 
-                key={key}
-                className="cursor-pointer hover:shadow-lg transition-all border-2 hover:border-primary/50"
-                onClick={() => setSelectedBusiness(key)}
-              >
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className={`p-3 rounded-lg ${business.color} text-white`}>
-                      <IconComponent className="h-6 w-6" />
+              <Link key={key} href={`/register?business=${key}`} className="block">
+                <Card className="cursor-pointer hover:shadow-lg transition-all border-2 hover:border-primary/50">
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-3 rounded-lg ${business.color} text-white`}>
+                        <IconComponent className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <CardTitle>{business.name}</CardTitle>
+                        <CardDescription>{business.description}</CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle>{business.name}</CardTitle>
-                      <CardDescription>{business.description}</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Button className="w-full">
-                    Join {business.name}
-                    <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
-                  </Button>
-                </CardContent>
-              </Card>
+                  </CardHeader>
+                  <CardContent>
+                    <Button className="w-full">
+                      Join {business.name}
+                      <ArrowLeft className="h-4 w-4 ml-2 rotate-180" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              </Link>
             )
           })}
         </div>
@@ -250,38 +248,34 @@ function RegisterContent() {
           {currentBusiness?.memberships.map((membership: any, index: number) => {
             const plan = MEMBERSHIP_PLANS[membership.type as keyof typeof MEMBERSHIP_PLANS]
             return (
-              <Card 
-                key={index}
-                className={`cursor-pointer transition-all hover:shadow-lg ${
-                  selectedMembership === membership.type 
-                    ? 'ring-2 ring-primary border-primary' 
-                    : ''
-                } ${membership.popular ? 'border-primary' : ''}`}
-                onClick={() => setSelectedMembership(membership.type)}
-              >
-                <CardHeader className="text-center space-y-2">
-                  {membership.popular && (
-                    <Badge className="mx-auto w-fit">
-                      <Crown className="h-3 w-3 mr-1" />
-                      Most Popular
-                    </Badge>
-                  )}
-                  <CardTitle className="text-xl">{plan.displayName}</CardTitle>
-                  <CardDescription>{plan.description}</CardDescription>
-                  <div className="text-3xl font-bold">
-                    £{plan.monthlyPrice}
-                    <span className="text-sm font-normal text-muted-foreground">/month</span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {plan.features.map((feature: string, featureIndex: number) => (
-                    <div key={featureIndex} className="flex items-center gap-2 text-sm">
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span>{feature}</span>
+              <Link key={index} href={`/register?business=${selectedBusiness}&plan=${membership.type}`} className="block">
+                <Card 
+                  className={`cursor-pointer transition-all hover:shadow-lg ${membership.popular ? 'border-primary' : ''}`}
+                >
+                  <CardHeader className="text-center space-y-2">
+                    {membership.popular && (
+                      <Badge className="mx-auto w-fit">
+                        <Crown className="h-3 w-3 mr-1" />
+                        Most Popular
+                      </Badge>
+                    )}
+                    <CardTitle className="text-xl">{plan.displayName}</CardTitle>
+                    <CardDescription>{plan.description}</CardDescription>
+                    <div className="text-3xl font-bold">
+                      £{plan.monthlyPrice}
+                      <span className="text-sm font-normal text-muted-foreground">/month</span>
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {plan.features.map((feature: string, featureIndex: number) => (
+                      <div key={featureIndex} className="flex items-center gap-2 text-sm">
+                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        <span>{feature}</span>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </Link>
             )
           })}
         </div>
@@ -408,17 +402,11 @@ function RegisterContent() {
 
               {/* Submit Button */}
               <div className="space-y-3">
-                <div className="text-sm text-muted-foreground">
-                  By joining, you confirm you have read and agree to our Terms & Conditions and Liability Waiver.
-                </div>
-                <div className="rounded-md border p-3 text-xs text-muted-foreground space-y-2 bg-muted/30">
-                  <p className="font-semibold text-foreground">Liability Waiver (Summary)</p>
-                  <p>
-                    I acknowledge that participation in martial arts, fitness, and related activities involves inherent risk of injury. I agree to assume full responsibility for any risks, injuries, or damages which may occur as a result of participation. I waive, release, and discharge the business and its instructors from any and all claims or causes of action arising out of my participation, except in cases of gross negligence or willful misconduct.
-                  </p>
-                  <p>
-                    Full Terms & Conditions and Waiver are available on request and at the facility reception.
-                  </p>
+                <div className="flex items-start gap-2">
+                  <input id="waiver" type="checkbox" className="mt-1" onChange={(e) => setLoading(false)} />
+                  <label htmlFor="waiver" className="text-sm text-muted-foreground">
+                    I confirm I have read and agree to the Terms & Conditions and Liability Waiver.
+                  </label>
                 </div>
               </div>
 
