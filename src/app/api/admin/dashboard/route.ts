@@ -103,7 +103,7 @@ export async function GET() {
 
     const membershipStats = membershipAnalytics.reduce((acc: any, customer) => {
       const membershipType = customer.memberships[0]?.membershipType || 'NO_MEMBERSHIP'
-      const totalPaid = customer.payments.reduce((sum, payment) => sum + payment.amount, 0)
+      const totalPaid = customer.payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
       const monthsActive = customer.memberships[0] 
         ? Math.max(1, Math.ceil((Date.now() - customer.memberships[0].startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)))
         : 0
@@ -348,7 +348,7 @@ export async function GET() {
       status: customer.memberships[0]?.status || 'INACTIVE',
       joinDate: customer.createdAt.toISOString().split('T')[0],
       lastPayment: customer.payments[0]?.createdAt.toISOString().split('T')[0] || 'N/A',
-      totalPaid: customer.payments.reduce((sum: number, payment: any) => sum + payment.amount, 0),
+      totalPaid: customer.payments.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0),
       routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
       nextBilling: customer.memberships[0]?.nextBillingDate?.toISOString().split('T')[0] || 'N/A',
       emergencyContact: customer.emergencyContact ? JSON.parse(customer.emergencyContact) : { name: '', phone: '', relationship: '' },
@@ -363,7 +363,7 @@ export async function GET() {
       id: payment.id,
       customerName: `${payment.user.firstName} ${payment.user.lastName}`,
       customerId: payment.userId,
-      amount: payment.amount,
+      amount: Number(payment.amount),
       routedToEntity: payment.routedEntity?.displayName || 'Not Routed',
       routingReason: payment.routing?.routingReason || 'Standard routing',
       timestamp: payment.createdAt.toISOString(),
@@ -378,7 +378,7 @@ export async function GET() {
     return NextResponse.json({
       totalCustomers,
       activeSubscriptions,
-      monthlyRevenue: monthlyRevenue._sum.amount || 0,
+      monthlyRevenue: Number(monthlyRevenue._sum.amount) || 0,
       churnRate: Math.round(churnRate * 100) / 100,
       acquisitionRate: Math.round(acquisitionRate * 100) / 100,
       routingEfficiency: Math.round(actualRoutingEfficiency * 100) / 100,
@@ -387,11 +387,11 @@ export async function GET() {
       customers: formattedCustomers,
       payments: formattedPayments,
       metrics: {
-        totalRevenue: totalRevenue._sum.amount || 0,
-        monthlyRecurring: monthlyRevenue._sum.amount || 0,
+        totalRevenue: Number(totalRevenue._sum.amount) || 0,
+        monthlyRecurring: Number(monthlyRevenue._sum.amount) || 0,
         churnRate: Math.round(churnRate * 100) / 100,
         acquisitionRate: Math.round(acquisitionRate * 100) / 100,
-        avgLifetimeValue: totalCustomers > 0 ? Math.round((totalRevenue._sum.amount || 0) / totalCustomers) : 0,
+        avgLifetimeValue: totalCustomers > 0 ? Math.round((Number(totalRevenue._sum.amount) || 0) / totalCustomers) : 0,
         paymentSuccessRate: Math.round(paymentSuccessRate * 100) / 100,
         routingEfficiency: Math.round(actualRoutingEfficiency * 100) / 100
       },

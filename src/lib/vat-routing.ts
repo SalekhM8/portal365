@@ -68,7 +68,8 @@ export class VATCalculationEngine {
               gte: this.getCurrentVATYearStart(),
               lte: this.getCurrentVATYearEnd()
             }
-          }
+          },
+          select: { amount: true, createdAt: true }
         }
       }
     })
@@ -76,11 +77,10 @@ export class VATCalculationEngine {
     const positions: VATPosition[] = []
 
     for (const entity of entities) {
-      // Calculate total revenue for the VAT year
-      const totalRevenue = entity.payments.reduce((sum: number, payment: PaymentData) => sum + Number(payment.amount), 0)
+      const totalRevenue = entity.payments.reduce((sum: number, p: { amount: any; createdAt: Date }) => sum + Number(p.amount), 0)
       
       const headroom = Number(entity.vatThreshold) - totalRevenue
-      const monthlyAverage = this.calculateMonthlyAverage(entity.payments)
+      const monthlyAverage = this.calculateMonthlyAverage(entity.payments.map(p => ({ amount: Number(p.amount), status: 'CONFIRMED', createdAt: p.createdAt } as PaymentData)))
       const projectedYearEnd = this.projectYearEndRevenue(
         totalRevenue, 
         monthlyAverage
@@ -98,7 +98,6 @@ export class VATCalculationEngine {
       })
     }
 
-    // Update entity revenue cache
     await this.updateEntityRevenueCache(positions)
 
     console.log(`VAT calculation completed in ${Date.now() - startTime}ms`)

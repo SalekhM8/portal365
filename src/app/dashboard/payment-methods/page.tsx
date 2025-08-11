@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +12,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
-export default function PaymentMethodsPage() {
+function PaymentMethodsInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -166,6 +166,14 @@ export default function PaymentMethodsPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function PaymentMethodsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <PaymentMethodsInner />
+    </Suspense>
   )
 }
 
