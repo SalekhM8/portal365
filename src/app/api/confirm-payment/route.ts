@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleSetupIntentConfirmation(body: { setupIntentId: string, subscriptionId: string }) {
+export async function handleSetupIntentConfirmation(body: { setupIntentId: string, subscriptionId: string }) {
   const { setupIntentId, subscriptionId } = body
 
   // 1. Verify the SetupIntent with Stripe
@@ -186,7 +186,7 @@ async function handleSetupIntentConfirmation(body: { setupIntentId: string, subs
   })
 }
 
-async function handlePaymentIntentConfirmation(body: { paymentIntentId: string, subscriptionId: string }) {
+export async function handlePaymentIntentConfirmation(body: { paymentIntentId: string, subscriptionId: string }) {
   // Legacy flow - keep existing logic
   const { subscriptionId, paymentIntentId } = body
 

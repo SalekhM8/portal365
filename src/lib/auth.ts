@@ -23,29 +23,31 @@ export const authOptions: any = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
+          console.warn('authorize: missing credentials')
           return null
         }
 
+        const email = credentials.email.trim().toLowerCase()
+        console.log('authorize: lookup email', email)
+
         const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email,
-          },
+          where: { email },
         })
 
         if (!user || !user.password) {
+          console.warn('authorize: user not found or has no password')
           return null
         }
 
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        )
+        const isPasswordValid = await bcrypt.compare(credentials.password, user.password)
+        console.log('authorize: bcrypt match', isPasswordValid)
 
         if (!isPasswordValid) {
           return null
         }
 
         if (user.status === 'SUSPENDED') {
+          console.warn('authorize: user suspended')
           return null
         }
 
@@ -86,9 +88,10 @@ export const authOptions: any = {
 
 // Helper functions for role-based access
 export const requireAuth = (requiredRole?: UserRole) => {
-  return async (req: any) => {
-    // This would be used in API routes
-    // Implementation depends on how you handle auth in API routes
+  return async (session: any) => {
+    if (!session || !session.user) return false
+    if (requiredRole && session.user.role !== requiredRole) return false
+    return true
   }
 }
 

@@ -56,10 +56,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Handle successful payment (monthly recurring or initial)
- */
-async function handlePaymentSucceeded(invoice: any) {
+export async function handlePaymentSucceeded(invoice: any) {
   try {
     console.log('✅ Payment succeeded for invoice:', invoice.id)
 
@@ -140,10 +137,7 @@ async function handlePaymentSucceeded(invoice: any) {
   }
 }
 
-/**
- * Handle failed payment
- */
-async function handlePaymentFailed(invoice: any) {
+export async function handlePaymentFailed(invoice: any) {
   try {
     console.log('❌ Payment failed for invoice:', invoice.id)
 
@@ -194,10 +188,7 @@ async function handlePaymentFailed(invoice: any) {
   }
 }
 
-/**
- * Handle subscription updates
- */
-async function handleSubscriptionUpdated(stripeSubscription: any) {
+export async function handleSubscriptionUpdated(stripeSubscription: any) {
   try {
     console.log('🔄 Subscription updated:', stripeSubscription.id)
 
@@ -220,10 +211,7 @@ async function handleSubscriptionUpdated(stripeSubscription: any) {
   }
 }
 
-/**
- * Handle subscription cancellation
- */
-async function handleSubscriptionCancelled(stripeSubscription: any) {
+export async function handleSubscriptionCancelled(stripeSubscription: any) {
   try {
     console.log('❌ Subscription cancelled:', stripeSubscription.id)
 
