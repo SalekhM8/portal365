@@ -17,10 +17,10 @@ const businessConfigs = {
     color: 'bg-red-500',
     description: 'Premier martial arts training facility',
     memberships: [
-      { type: 'WEEKEND_ADULT', popular: false },
       { type: 'FULL_ADULT', popular: true },
-      { type: 'WEEKEND_UNDER18', popular: false },
+      { type: 'WEEKEND_ADULT', popular: false },
       { type: 'FULL_UNDER18', popular: false },
+      { type: 'WEEKEND_UNDER18', popular: false },
       { type: 'MASTERS', popular: false }
     ]
   },
