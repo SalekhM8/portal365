@@ -79,20 +79,11 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Quick Stats */}
-        <div className="grid gap-8 md:grid-cols-3 max-w-2xl mx-auto pt-8">
-          <div className="text-center space-y-2">
-            <div className="text-3xl font-bold">2</div>
-            <p className="text-sm text-muted-foreground">Specialized Businesses</p>
-          </div>
-          <div className="text-center space-y-2">
-            <div className="text-3xl font-bold">500+</div>
-            <p className="text-sm text-muted-foreground">Active Members</p>
-          </div>
-          <div className="text-center space-y-2">
-            <div className="text-3xl font-bold">99%</div>
-            <p className="text-sm text-muted-foreground">Satisfaction Rate</p>
-          </div>
+        {/* Tagline */}
+        <div className="pt-8">
+          <p className="text-lg font-medium text-center">
+            One of the UK's top martial arts facilities
+          </p>
         </div>
       </section>
 
