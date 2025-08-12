@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, Shield } from 'lucide-react'
+import { Loader2, Shield, ArrowLeft, Lock, Mail } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SignInPage() {
@@ -62,92 +62,111 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20 p-6">
-      <div className="w-full max-w-md space-y-8">
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <Link href="/" className="inline-flex items-center gap-2 text-2xl font-bold">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">P</span>
-            </div>
-            Portal365
-          </Link>
-          <p className="text-muted-foreground">Sign in to your account</p>
-        </div>
+    <div className="min-h-screen bg-black text-white">
+      {/* Background Elements */}
+      <div className="absolute inset-0">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-red-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-pink-500/10 rounded-full blur-3xl"></div>
+      </div>
 
-        {/* Sign In Form */}
-        <Card>
-          <CardHeader className="space-y-1 text-center">
-            <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Shield className="h-6 w-6 text-primary" />
-            </div>
-            <CardTitle className="text-2xl">Welcome Back</CardTitle>
-            <CardDescription>
-              Enter your credentials to access your account
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="admin@portal365.com"
-                  required
-                  disabled={loading}
-                />
+      <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-md space-y-8">
+          {/* Header */}
+          <div className="text-center space-y-4">
+            <Link href="/" className="inline-flex items-center gap-3 text-2xl font-bold hover:opacity-80 transition-opacity">
+              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                <span className="text-black font-bold text-sm">P</span>
               </div>
+              <span className="text-white">Portal365</span>
+            </Link>
+            <p className="text-white/70 text-lg">Sign in to your account</p>
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                  placeholder="Enter your password"
-                  required
-                  disabled={loading}
-                />
+          {/* Sign In Form */}
+          <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+            <CardHeader className="space-y-4 text-center p-6 sm:p-8">
+              <div className="mx-auto w-16 h-16 bg-white/10 rounded-full flex items-center justify-center">
+                <Shield className="h-8 w-8 text-white" />
               </div>
-
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={loading}
-                size="lg"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  'Sign In'
+              <div className="space-y-2">
+                <CardTitle className="text-2xl sm:text-3xl text-white font-bold">Welcome Back</CardTitle>
+                <CardDescription className="text-white/70 text-base">
+                  Enter your credentials to access your account
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 sm:p-8 pt-0">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {error && (
+                  <Alert className="bg-red-500/10 border-red-500/20 text-red-300">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
                 )}
-              </Button>
-            </form>
 
-            <div className="mt-6 text-center">
-              <Link 
-                href="/" 
-                className="text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                ← Back to Portal365
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-        {/* No demo credentials in production */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="text-white/90 flex items-center gap-2 text-sm font-medium">
+                      <Mail className="h-4 w-4" />
+                      Email Address
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                      className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 h-12"
+                      placeholder="admin@portal365.com"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-white/90 flex items-center gap-2 text-sm font-medium">
+                      <Lock className="h-4 w-4" />
+                      Password
+                    </Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                      className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 h-12"
+                      placeholder="Enter your password"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full bg-white text-black hover:bg-white/90 font-semibold text-base py-6 rounded-xl transition-all duration-300" 
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                      Signing in...
+                    </>
+                  ) : (
+                    'Sign In to Portal365'
+                  )}
+                </Button>
+              </form>
+
+              <div className="mt-8 text-center">
+                <Link 
+                  href="/" 
+                  className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to Portal365
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )

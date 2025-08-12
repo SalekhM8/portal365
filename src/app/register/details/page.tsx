@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, ArrowLeft, Dumbbell, Heart, Crown } from 'lucide-react'
+import { Loader2, ArrowLeft, Dumbbell, Heart, Crown, ShieldCheck, User, Mail, Phone, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
@@ -18,13 +18,13 @@ const businessConfigs = {
   aura_mma: {
     name: 'Aura MMA',
     icon: Dumbbell,
-    color: 'bg-red-500',
+    color: 'bg-gradient-to-br from-red-500 to-red-600',
     description: 'Premier martial arts training facility'
   },
   aura_womens: {
     name: "Aura Women's Gym",
     icon: Heart,
-    color: 'bg-pink-500',
+    color: 'bg-gradient-to-br from-pink-500 to-pink-600',
     description: 'Dedicated women-only fitness space'
   }
 } as const
@@ -143,238 +143,299 @@ function RegisterDetailsContent() {
         setError(result.error || 'Registration failed')
       }
     } catch (error) {
-      setError('Network error. Please try again.')
+      setError('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  if (!selectedBusiness || !selectedPlan) {
+  if (!currentBusiness || !currentPlan) {
     return (
-      <div className="container mx-auto p-6 max-w-2xl text-center">
-        <h1 className="text-2xl font-bold mb-4">Invalid Registration Link</h1>
-        <p className="text-muted-foreground mb-6">Please select a business and plan to continue.</p>
-        <Link href="/register">
-          <Button>Back to Plan Selection</Button>
-        </Link>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+          <p className="text-white/70">Loading registration details...</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-4xl space-y-8">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href={`/register?business=${selectedBusiness}`} className="text-muted-foreground hover:text-primary">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="flex items-center gap-3">
-          {currentBusiness && (
-            <>
-              <div className={`p-2 rounded-lg ${currentBusiness.color} text-white`}>
-                <currentBusiness.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold">Complete Your Registration</h1>
-                <p className="text-muted-foreground">{currentBusiness.name} - {currentPlan?.displayName}</p>
-              </div>
-            </>
-          )}
-        </div>
+    <div className="min-h-screen bg-black text-white">
+      {/* Background Elements */}
+      <div className="absolute inset-0">
+        <div className="absolute top-20 left-10 w-72 h-72 bg-red-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-pink-500/10 rounded-full blur-3xl"></div>
       </div>
 
-      {/* Selected Plan Summary */}
-      <Card className="border-primary">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Crown className="h-5 w-5 text-yellow-600" />
-                {currentPlan?.displayName}
-              </CardTitle>
-              <CardDescription>{currentPlan?.description}</CardDescription>
+      <div className="relative container mx-auto px-4 sm:px-6 py-8 max-w-4xl">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-8">
+          <Link href={`/register?business=${selectedBusiness}`} className="text-white/60 hover:text-white transition-colors">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className={`p-3 rounded-xl ${currentBusiness.color} text-white shadow-lg`}>
+              <currentBusiness.icon className="h-6 w-6" />
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold">£{currentPlan?.monthlyPrice}/month</div>
-              <Badge>Selected</Badge>
+            <div>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold leading-tight">
+                Join <span className="bg-gradient-to-r from-red-400 to-pink-400 bg-clip-text text-transparent">{currentBusiness.name}</span>
+              </h1>
+              <p className="text-white/70 mt-1">{currentPlan.displayName} Membership</p>
             </div>
           </div>
-        </CardHeader>
-      </Card>
+        </div>
 
-      {/* Registration Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Details</CardTitle>
-          <CardDescription>
-            Fill in your information to activate your membership
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+        <div className="grid gap-8 lg:grid-cols-3">
+          {/* Registration Form */}
+          <div className="lg:col-span-2">
+            <Card className="bg-white/5 border-white/10 backdrop-blur-sm">
+              <CardHeader className="p-6 sm:p-8">
+                <CardTitle className="text-2xl text-white">Complete Your Registration</CardTitle>
+                <CardDescription className="text-white/70">
+                  Fill in your details to start your martial arts journey
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 sm:p-8 pt-0">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {error && (
+                    <Alert className="bg-red-500/10 border-red-500/20 text-red-300">
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
 
-            {/* Personal Information */}
-            <div className="space-y-4">
-              <h3 className="font-semibold">Personal Information</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name *</Label>
-                  <Input
-                    id="firstName"
-                    value={formData.firstName}
-                    onChange={(e) => handleInputChange('firstName', e.target.value)}
-                    required
-                  />
+                  {/* Personal Details */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <User className="h-5 w-5" />
+                      Personal Details
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="firstName" className="text-white/90">First Name</Label>
+                        <Input
+                          id="firstName"
+                          value={formData.firstName}
+                          onChange={(e) => handleInputChange('firstName', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="Enter first name"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="lastName" className="text-white/90">Last Name</Label>
+                        <Input
+                          id="lastName"
+                          value={formData.lastName}
+                          onChange={(e) => handleInputChange('lastName', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="Enter last name"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contact Information */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <Mail className="h-5 w-5" />
+                      Contact Information
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="email" className="text-white/90">Email Address</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => handleInputChange('email', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="Enter email address"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone" className="text-white/90">Phone Number</Label>
+                        <Input
+                          id="phone"
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) => handleInputChange('phone', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="Enter phone number"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Account Security */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5" />
+                      Account Security
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="password" className="text-white/90">Password</Label>
+                        <Input
+                          id="password"
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) => handleInputChange('password', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="Create password"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dateOfBirth" className="text-white/90">Date of Birth</Label>
+                        <Input
+                          id="dateOfBirth"
+                          type="date"
+                          value={formData.dateOfBirth}
+                          onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Emergency Contact */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                      <Phone className="h-5 w-5" />
+                      Emergency Contact
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="emergencyName" className="text-white/90">Contact Name</Label>
+                        <Input
+                          id="emergencyName"
+                          value={formData.emergencyContact.name}
+                          onChange={(e) => handleInputChange('emergencyContact.name', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="Emergency contact name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="emergencyPhone" className="text-white/90">Contact Phone</Label>
+                        <Input
+                          id="emergencyPhone"
+                          type="tel"
+                          value={formData.emergencyContact.phone}
+                          onChange={(e) => handleInputChange('emergencyContact.phone', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="Emergency contact phone"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="emergencyRelationship" className="text-white/90">Relationship</Label>
+                      <Input
+                        id="emergencyRelationship"
+                        value={formData.emergencyContact.relationship}
+                        onChange={(e) => handleInputChange('emergencyContact.relationship', e.target.value)}
+                        className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                        placeholder="Relationship to you"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Terms and Conditions */}
+                  <div className="space-y-4 pt-4 border-t border-white/10">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="waiver"
+                        checked={acceptedWaiver}
+                        onCheckedChange={(checked) => setAcceptedWaiver(checked as boolean)}
+                        className="border-white/30 data-[state=checked]:bg-white data-[state=checked]:text-black"
+                      />
+                      <Label htmlFor="waiver" className="text-sm text-white/80 leading-relaxed">
+                        I accept the{' '}
+                        <Link href="/terms" className="text-white hover:underline font-medium">
+                          Terms & Conditions
+                        </Link>{' '}
+                        and{' '}
+                        <Link href="/waiver" className="text-white hover:underline font-medium">
+                          Liability Waiver
+                        </Link>
+                        . I understand the risks involved in martial arts training.
+                      </Label>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={loading || !acceptedWaiver}
+                    className="w-full bg-white text-black hover:bg-white/90 font-semibold text-base py-6 rounded-xl transition-all duration-300 disabled:opacity-50"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                        Creating Account...
+                      </>
+                    ) : (
+                      'Complete Registration'
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Plan Summary */}
+          <div className="lg:col-span-1">
+            <Card className="bg-white/5 border-white/10 backdrop-blur-sm sticky top-8">
+              <CardHeader className="p-6">
+                <CardTitle className="text-xl text-white">Plan Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 pt-0 space-y-6">
+                <div className="text-center space-y-2">
+                  <Badge className="bg-gradient-to-r from-red-500 to-pink-500 text-white border-0">
+                    <Crown className="h-3 w-3 mr-1" />
+                    {currentPlan.displayName}
+                  </Badge>
+                  <div className="text-3xl font-bold text-white">
+                    £{currentPlan.monthlyPrice}
+                    <span className="text-sm text-white/60 font-normal">/month</span>
+                  </div>
+                  <p className="text-white/70 text-sm">{currentPlan.description}</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name *</Label>
-                  <Input
-                    id="lastName"
-                    value={formData.lastName}
-                    onChange={(e) => handleInputChange('lastName', e.target.value)}
-                    required
-                  />
+
+                <div className="space-y-3">
+                  <h4 className="font-medium text-white/90">Included Features:</h4>
+                  {currentPlan.features.map((feature, index) => (
+                    <div key={index} className="flex items-start gap-2 text-sm text-white/80">
+                      <div className="w-1.5 h-1.5 bg-green-400 rounded-full flex-shrink-0 mt-2"></div>
+                      <span>{feature}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password *</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  required
-                  minLength={8}
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                  />
+                <div className="pt-4 border-t border-white/10 text-xs text-white/60">
+                  <p>
+                    Your membership will be prorated for the remainder of this month, 
+                    then billed monthly on the 1st.
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                  <Input
-                    id="dateOfBirth"
-                    type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Emergency Contact */}
-            <div className="space-y-4">
-              <h3 className="font-semibold">Emergency Contact</h3>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="emergencyName">Contact Name</Label>
-                  <Input
-                    id="emergencyName"
-                    value={formData.emergencyContact.name}
-                    onChange={(e) => handleInputChange('emergencyContact.name', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="emergencyPhone">Contact Phone</Label>
-                  <Input
-                    id="emergencyPhone"
-                    type="tel"
-                    value={formData.emergencyContact.phone}
-                    onChange={(e) => handleInputChange('emergencyContact.phone', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="emergencyRelationship">Relationship</Label>
-                  <Input
-                    id="emergencyRelationship"
-                    value={formData.emergencyContact.relationship}
-                    onChange={(e) => handleInputChange('emergencyContact.relationship', e.target.value)}
-                    placeholder="e.g., Parent, Spouse"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Waiver Agreement */}
-            <div className="space-y-4">
-              <h3 className="font-semibold">Terms & Liability Waiver</h3>
-              <div className="rounded-md border p-4 text-sm text-muted-foreground space-y-3 bg-muted/30">
-                <p className="font-semibold text-foreground">Liability Waiver Summary:</p>
-                <p>
-                  I acknowledge that participation in martial arts, fitness, and related activities involves inherent risk of injury. I agree to assume full responsibility for any risks, injuries, or damages which may occur as a result of participation. I waive, release, and discharge the business and its instructors from any and all claims or causes of action arising out of my participation, except in cases of gross negligence or willful misconduct.
-                </p>
-                <p>
-                  Full Terms & Conditions and Waiver are available on request and at the facility reception.
-                </p>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Checkbox 
-                  id="waiver" 
-                  checked={acceptedWaiver}
-                  onCheckedChange={(checked) => setAcceptedWaiver(!!checked)}
-                />
-                <Label htmlFor="waiver" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  I accept the Terms & Conditions and Liability Waiver *
-                </Label>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <Button 
-              type="submit" 
-              size="lg" 
-              className="w-full" 
-              disabled={loading || !acceptedWaiver}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Processing Registration...
-                </>
-              ) : (
-                `Join ${currentBusiness?.name} - £${currentPlan?.monthlyPrice}/month`
-              )}
-            </Button>
-
-            <div className="text-center text-sm text-muted-foreground">
-              Your payment will be processed securely after registration.
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
 
 export default function RegisterDetailsPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+      </div>
+    }>
       <RegisterDetailsContent />
     </Suspense>
   )

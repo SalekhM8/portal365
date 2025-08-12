@@ -5,27 +5,27 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-all duration-300 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/50",
   {
     variants: {
       variant: {
         default:
-          "bg-blue-600 text-white shadow-md hover:bg-blue-700 hover:shadow-lg active:bg-blue-800 border border-blue-600",
+          "bg-white text-black shadow-lg hover:bg-gray-100 hover:shadow-xl active:bg-gray-200 border border-white/20",
         destructive:
-          "bg-red-600 text-white shadow-md hover:bg-red-700 hover:shadow-lg active:bg-red-800 border border-red-600",
+          "bg-red-600 text-white shadow-lg hover:bg-red-700 hover:shadow-xl active:bg-red-800 border border-red-600",
         outline:
-          "border-2 border-gray-300 bg-white text-gray-900 shadow-sm hover:bg-gray-50 hover:border-gray-400 hover:shadow-md active:bg-gray-100",
+          "border-2 border-white/20 bg-transparent text-white shadow-sm hover:bg-white hover:text-black hover:border-white hover:shadow-lg active:bg-gray-100",
         secondary:
-          "bg-gray-100 text-gray-900 shadow-sm hover:bg-gray-200 hover:shadow-md active:bg-gray-300 border border-gray-200",
+          "bg-white/10 text-white shadow-sm hover:bg-white/20 hover:shadow-md active:bg-white/30 border border-white/10",
         ghost:
-          "hover:bg-gray-100 hover:text-gray-900 active:bg-gray-200",
-        link: "text-blue-600 underline-offset-4 hover:underline font-medium",
+          "hover:bg-white/10 hover:text-white active:bg-white/20 text-white/80",
+        link: "text-white underline-offset-4 hover:underline font-medium hover:text-white/80",
       },
       size: {
-        default: "h-10 px-6 py-2.5",
-        sm: "h-8 rounded-md px-4 py-1.5 text-xs",
-        lg: "h-12 rounded-lg px-8 py-3 text-base font-semibold",
-        icon: "h-10 w-10",
+        default: "h-11 px-6 py-2.5",
+        sm: "h-9 rounded-lg px-4 py-2 text-sm",
+        lg: "h-14 rounded-xl px-8 py-4 text-base font-semibold",
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: {

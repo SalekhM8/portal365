@@ -4,43 +4,129 @@
 
 @import "tw-animate-css";
 
-/* Optional design tokens (kept as plain CSS variables for future use) */
+/* Premium Black/White Theme Design Tokens */
 :root {
-  --radius: 0.625rem;
-  --background: #ffffff;
-  --foreground: #111827;
+  --radius: 0.75rem;
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: rgba(255, 255, 255, 0.05);
+  --card-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: rgba(255, 255, 255, 0.1);
+  --secondary-foreground: #ffffff;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: rgba(255, 255, 255, 0.7);
+  --accent: rgba(255, 255, 255, 0.1);
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.05);
+  --ring: rgba(255, 255, 255, 0.3);
 }
 
 .dark {
-  --background: #111827;
-  --foreground: #f9fafb;
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: rgba(255, 255, 255, 0.05);
+  --card-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: rgba(255, 255, 255, 0.1);
+  --secondary-foreground: #ffffff;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: rgba(255, 255, 255, 0.7);
+  --accent: rgba(255, 255, 255, 0.1);
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.05);
+  --ring: rgba(255, 255, 255, 0.3);
 }
 
-/* Tailwind v3-safe base styles */
+/* Base styles for premium black theme */
 @layer base {
   * {
-    /* border-border, outline-ring/50 are v4 tokens; use plain CSS fallbacks */
-    border-color: #e5e7eb; /* gray-200 */
-    outline-color: rgba(99, 102, 241, 0.5); /* indigo-500/50 */
+    border-color: var(--border);
+    outline-color: var(--ring);
   }
+  
   body {
-    /* bg-background, text-foreground replaced with plain CSS */
     background-color: var(--background);
     color: var(--foreground);
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Premium card styling */
+  [data-slot="card"] {
+    background-color: var(--card);
+    color: var(--card-foreground);
+    border-color: var(--border);
   }
 }
 
-/* Enhanced button styling for better visibility */
+/* Premium component enhancements */
 @layer components {
-  .btn-primary {
-    @apply bg-blue-600 text-white font-semibold px-6 py-3 rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition-all duration-200 border border-blue-600;
+  /* Enhanced glass morphism effect */
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl;
   }
   
-  .btn-secondary {
-    @apply bg-gray-100 text-gray-900 font-semibold px-6 py-3 rounded-lg shadow-sm hover:bg-gray-200 hover:shadow-md transition-all duration-200 border border-gray-200;
+  /* Premium gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-red-400 to-pink-400 bg-clip-text text-transparent;
   }
   
-  .btn-outline {
-    @apply border-2 border-gray-300 bg-white text-gray-900 font-semibold px-6 py-3 rounded-lg shadow-sm hover:bg-gray-50 hover:border-gray-400 hover:shadow-md transition-all duration-200;
+  /* Enhanced button hover states */
+  .btn-premium {
+    @apply relative overflow-hidden transition-all duration-300 hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .btn-premium::before {
+    @apply absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] transition-transform duration-700;
+    content: '';
+  }
+  
+  .btn-premium:hover::before {
+    @apply translate-x-[100%];
+  }
+  
+  /* Premium focus styles */
+  .focus-premium {
+    @apply focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-black;
+  }
+  
+  /* Mobile optimizations */
+  @media (max-width: 640px) {
+    .container {
+      @apply px-4;
+    }
+    
+    /* Ensure proper spacing on mobile */
+    .mobile-spacing {
+      @apply px-4 py-6;
+    }
+  }
+  
+  /* Animations */
+  .animate-fade-in {
+    @apply animate-in fade-in duration-500;
+  }
+  
+  .animate-slide-up {
+    @apply animate-in slide-in-from-bottom-4 duration-500;
+  }
+  
+  .animate-scale-in {
+    @apply animate-in zoom-in-95 duration-300;
   }
 }
