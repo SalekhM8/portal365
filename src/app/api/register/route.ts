@@ -17,7 +17,7 @@ const registerSchema = z.object({
     phone: z.string(),
     relationship: z.string()
   }).optional(),
-  membershipType: z.enum(['WEEKEND_ADULT', 'WEEKEND_UNDER18', 'FULL_ADULT', 'FULL_UNDER18', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
+  membershipType: z.enum(['WEEKEND_ADULT', 'WEEKEND_UNDER18', 'FULL_ADULT', 'FULL_UNDER18', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
   businessId: z.string()
 })
 
@@ -239,6 +239,21 @@ function getMembershipDetails(membershipType: string) {
         weekdays: true,
         weekends: true,
         timeSlots: ['afternoon', 'evening']
+      }
+    },
+    'MASTERS': {
+      monthlyPrice: 45,
+      setupFee: 0,
+      accessPermissions: {
+        martialArts: ['bjj', 'boxing', 'muay_thai'],
+        personalTraining: false,
+        womensClasses: false,
+        wellness: false
+      },
+      scheduleAccess: {
+        weekdays: true,
+        weekends: false,
+        timeSlots: ['evening'] // 9:30pm Tuesday & Thursday
       }
     },
     'WOMENS_CLASSES': {
