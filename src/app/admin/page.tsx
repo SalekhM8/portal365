@@ -544,8 +544,8 @@ export default function AdminDashboard() {
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Status" />
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
@@ -555,8 +555,8 @@ export default function AdminDashboard() {
                 </SelectContent>
               </Select>
               <Select value={entityFilter} onValueChange={setEntityFilter}>
-                <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Business Entity" />
+                <SelectTrigger className="w-52">
+                  <SelectValue placeholder="Filter by entity" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Entities</SelectItem>
@@ -670,8 +670,8 @@ export default function AdminDashboard() {
                 />
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Status" />
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Filter by status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>

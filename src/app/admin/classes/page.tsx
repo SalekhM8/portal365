@@ -466,11 +466,11 @@ function ClassForm({
           <div>
             <Label htmlFor="location">Location *</Label>
             <Select
-              value={formData.location || 'Main Gym'}
+              value={formData.location}
               onValueChange={(value) => setFormData({ ...formData, location: value })}
             >
-              <SelectTrigger>
-                <SelectValue />
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent>
                 {LOCATIONS.map(location => (
@@ -491,8 +491,8 @@ function ClassForm({
               value={formData.dayOfWeek?.toString() || '1'}
               onValueChange={(value) => setFormData({ ...formData, dayOfWeek: parseInt(value) })}
             >
-              <SelectTrigger>
-                <SelectValue />
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select day" />
               </SelectTrigger>
               <SelectContent>
                 {DAYS_OF_WEEK.map(day => (
