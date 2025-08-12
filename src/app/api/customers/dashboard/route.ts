@@ -115,15 +115,7 @@ function getDayName(dayOfWeek: number): string {
 function canUserAccessClass(cls: any, membership: any): boolean {
   try {
     const requiredMemberships = JSON.parse(cls.requiredMemberships) as string[]
-    if (requiredMemberships.includes(membership.membershipType)) {
-      return true
-    }
-    // Weekend plans: allow Fri(5), Sat(6), Sun(0) regardless of legacy requiredMemberships
-    const isFriSatSun = cls.dayOfWeek === 5 || cls.dayOfWeek === 6 || cls.dayOfWeek === 0
-    if (isFriSatSun && (membership.membershipType === 'WEEKEND_ADULT' || membership.membershipType === 'WEEKEND_UNDER18')) {
-      return true
-    }
-    return false
+    return requiredMemberships.includes(membership.membershipType)
   } catch {
     return false
   }

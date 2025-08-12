@@ -117,15 +117,30 @@ function assignCoach(e: TimetableEntry): string {
 
 // Membership access rules
 const membershipRule: MembershipRule = (e) => {
-  const isKids = e.name.toLowerCase().startsWith('kids')
-  const isWeekend = (e.day === 6 || e.day === 0)
-  if (isKids) {
-    return ['WEEKEND_UNDER18', 'FULL_UNDER18']
+  const nameLower = e.name.toLowerCase()
+  const isKidsClass = nameLower.startsWith('kids') || nameLower === 'kids no gi bjj'
+  const isMastersClass = nameLower.includes('masters')
+  const isWomenOnlyClass = nameLower.includes("women") || nameLower.includes("womens") || nameLower.includes("women's")
+  const isWeekendDay = (e.day === 5 || e.day === 6 || e.day === 0) // Fri, Sat, Sun
+
+  // Masters classes are strictly for MASTERS members only
+  if (isMastersClass) {
+    return ['MASTERS']
   }
-  if (isWeekend) {
-    return ['FULL_ADULT', 'WEEKEND_ADULT']
+
+  // Women-only classes restricted to women's membership
+  if (isWomenOnlyClass) {
+    return ['WOMENS_CLASSES']
   }
-  return ['FULL_ADULT']
+
+  // For all other classes (non-women, non-masters):
+  // - Adults: FULL_ADULT always, WEEKEND_ADULT on Fri/Sat/Sun
+  // - Youth: FULL_UNDER18 always, WEEKEND_UNDER18 on Fri/Sat/Sun
+  const allowed: string[] = ['FULL_ADULT', 'FULL_UNDER18']
+  if (isWeekendDay) {
+    allowed.push('WEEKEND_ADULT', 'WEEKEND_UNDER18')
+  }
+  return allowed
 }
 
 async function getOrCreateService() {
