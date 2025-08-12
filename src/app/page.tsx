@@ -20,22 +20,24 @@ const businesses = [
     description: 'Premier martial arts training facility',
     icon: Dumbbell,
     color: 'bg-red-500',
-    offerings: ['Brazilian Jiu-Jitsu', 'MMA Training', 'Boxing', 'Muay Thai'],
+    offerings: ['World class grappling', 'Elite level striking coaching', 'Professional MMA fighters and coaches', 'National Champions Wrestling coach', 'World class Strength and Conditioning Facility'],
     membershipTypes: [
-      { name: 'Weekend Warrior', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false },
       { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true },
+      { name: 'Weekend Warrior', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false },
+      { name: 'Full Youth', price: MEMBERSHIP_PLANS.FULL_UNDER18.monthlyPrice, popular: false },
+      { name: 'Weekend Youth', price: MEMBERSHIP_PLANS.WEEKEND_UNDER18.monthlyPrice, popular: false },
       { name: 'Masters Program (30+)', price: MEMBERSHIP_PLANS.MASTERS.monthlyPrice, popular: false }
     ]
   },
   {
     id: 'aura_womens',
     name: "Aura Women's Gym",
-    description: 'Dedicated women-only fitness space',
+    description: 'Top calibre womens muay thai training',
     icon: Heart,
     color: 'bg-pink-500',
-    offerings: ['Women-Only Classes', 'Self-Defense', 'Yoga & Pilates', 'Strength Training'],
+    offerings: ['Muay Thai Only', 'Women-Only Classes', 'Elite Female Coaching', 'Technique-Focused Training'],
     membershipTypes: [
-      { name: "Women's Program", price: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice, popular: true }
+      { name: "Women's Muay Thai", price: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice, popular: true }
     ]
   }
 ];
@@ -73,8 +75,7 @@ export default function Home() {
             Welcome to Aura MMA
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Choose from our premium fitness and wellness businesses. 
-            One platform, multiple specialized services tailored to your goals.
+            A collaboration by friends to spread the martial arts lifestyle in the community
           </p>
         </div>
 
@@ -102,7 +103,7 @@ export default function Home() {
             Choose Your Fitness Journey
           </h2>
           <p className="text-xl text-muted-foreground">
-            Each business specializes in different aspects of fitness and wellness
+            Each membership plan is designed to bring you closer to your combat sport goals
           </p>
         </div>
 
