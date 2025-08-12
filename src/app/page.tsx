@@ -23,7 +23,8 @@ const businesses = [
     offerings: ['Brazilian Jiu-Jitsu', 'MMA Training', 'Boxing', 'Muay Thai'],
     membershipTypes: [
       { name: 'Weekend Warrior', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false },
-      { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true }
+      { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true },
+      { name: 'Masters Program (30+)', price: MEMBERSHIP_PLANS.MASTERS.monthlyPrice, popular: false }
     ]
   },
   {

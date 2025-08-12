@@ -59,6 +59,7 @@ const MEMBERSHIP_TYPES = [
   { value: 'FULL_ADULT', label: 'Full Adult' },
   { value: 'WEEKEND_UNDER18', label: 'Weekend Under 18' },
   { value: 'FULL_UNDER18', label: 'Full Under 18' },
+  { value: 'MASTERS', label: 'Masters Program (30+)' },
   { value: 'PERSONAL_TRAINING', label: 'Personal Training' },
   { value: 'WOMENS_CLASSES', label: 'Women\'s Classes' },
   { value: 'WELLNESS_PACKAGE', label: 'Wellness Package' }

@@ -20,7 +20,8 @@ const businessConfigs = {
       { type: 'WEEKEND_ADULT', popular: false },
       { type: 'FULL_ADULT', popular: true },
       { type: 'WEEKEND_UNDER18', popular: false },
-      { type: 'FULL_UNDER18', popular: false }
+      { type: 'FULL_UNDER18', popular: false },
+      { type: 'MASTERS', popular: false }
     ]
   },
   aura_womens: {

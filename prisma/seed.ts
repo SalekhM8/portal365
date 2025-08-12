@@ -157,6 +157,32 @@ async function main() {
         maxParticipants: 18,
         requiredMemberships: JSON.stringify(['FULL_ADULT', 'WEEKEND_ADULT', 'FULL_UNDER18', 'WEEKEND_UNDER18']),
         location: 'Training Area 2'
+      },
+      {
+        serviceId: martialArtsService.id,
+        name: 'Masters Program - Technique Focus',
+        description: 'Specialized training for practitioners over 30 with focus on technique and controlled intensity',
+        instructorName: 'Jules',
+        dayOfWeek: 2, // Tuesday
+        startTime: '21:30',
+        endTime: '22:30',
+        duration: 60,
+        maxParticipants: 12,
+        requiredMemberships: JSON.stringify(['MASTERS']),
+        location: 'Mat Area 1'
+      },
+      {
+        serviceId: martialArtsService.id,
+        name: 'Masters Program - Sparring & Flow',
+        description: 'Controlled sparring and flow training for Masters members',
+        instructorName: 'Jules',
+        dayOfWeek: 4, // Thursday
+        startTime: '21:30',
+        endTime: '22:30',
+        duration: 60,
+        maxParticipants: 12,
+        requiredMemberships: JSON.stringify(['MASTERS']),
+        location: 'Mat Area 2'
       }
     ]
 

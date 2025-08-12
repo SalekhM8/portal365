@@ -3,6 +3,7 @@ export type MembershipKey =
   | 'WEEKEND_UNDER18'
   | 'FULL_ADULT'
   | 'FULL_UNDER18'
+  | 'MASTERS'
   | 'PERSONAL_TRAINING'
   | 'WOMENS_CLASSES'
   | 'WELLNESS_PACKAGE'
@@ -53,6 +54,15 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     monthlyPrice: 55,
     description: 'Complete youth program',
     features: ['7 days/week access', 'Youth martial arts classes', 'Equipment access', 'Mentorship program'],
+    preferredEntities: ['aura_mma']
+  },
+  MASTERS: {
+    key: 'MASTERS',
+    name: 'Masters Program',
+    displayName: 'Masters Program',
+    monthlyPrice: 45,
+    description: 'Specialized program for over 30s',
+    features: ['Tuesday & Thursday classes at 9:30pm', 'Taught by Jules', 'Age-appropriate training', 'Focus on technique over intensity'],
     preferredEntities: ['aura_mma']
   },
   PERSONAL_TRAINING: {

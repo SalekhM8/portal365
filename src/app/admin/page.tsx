@@ -1090,6 +1090,7 @@ export default function AdminDashboard() {
                       <SelectItem value="WEEKEND_ADULT">Weekend Adult Membership</SelectItem>
                       <SelectItem value="FULL_UNDER18">Full Youth Membership</SelectItem>
                       <SelectItem value="WEEKEND_UNDER18">Weekend Youth Membership</SelectItem>
+                      <SelectItem value="MASTERS">Masters Program (30+)</SelectItem>
                       <SelectItem value="WOMENS_CLASSES">Women's Classes</SelectItem>
                     </SelectContent>
                   </Select>

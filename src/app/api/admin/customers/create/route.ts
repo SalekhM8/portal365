@@ -18,7 +18,7 @@ const adminCreateCustomerSchema = z.object({
     phone: z.string(),
     relationship: z.string()
   }).optional(),
-  membershipType: z.enum(['WEEKEND_ADULT', 'WEEKEND_UNDER18', 'FULL_ADULT', 'FULL_UNDER18', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
+  membershipType: z.enum(['WEEKEND_ADULT', 'WEEKEND_UNDER18', 'FULL_ADULT', 'FULL_UNDER18', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
   customPrice: z.number().min(1, 'Price must be greater than 0'),
   startDate: z.string().regex(/^\d{4}-\d{2}-01$/, 'Start date must be first of month (YYYY-MM-01)'),
   routedEntity: z.string().optional()
@@ -137,6 +137,19 @@ export async function POST(request: NextRequest) {
             weekdays: true,
             weekends: true,
             timeSlots: ['morning', 'afternoon', 'evening']
+          }
+        },
+        'MASTERS': {
+          accessPermissions: {
+            martialArts: ['bjj', 'boxing', 'muay_thai'],
+            personalTraining: false,
+            womensClasses: false,
+            wellness: false
+          },
+          scheduleAccess: {
+            weekdays: true,
+            weekends: false,
+            timeSlots: ['evening'] // 9:30pm Tuesday & Thursday
           }
         }
       }
