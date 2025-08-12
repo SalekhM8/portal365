@@ -122,21 +122,21 @@ function PaymentMethodsInner() {
         </CardHeader>
         <CardContent>
           {currentPaymentMethod ? (
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">
+                  <p className="font-medium text-white">
                     •••• •••• •••• {currentPaymentMethod.last4}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-white/70">
                     {currentPaymentMethod.brand?.toUpperCase()} • Expires {currentPaymentMethod.exp_month}/{currentPaymentMethod.exp_year}
                   </p>
                 </div>
-                <CheckCircle className="h-5 w-5 text-green-600" />
+                <CheckCircle className="h-5 w-5 text-green-400" />
               </div>
             </div>
           ) : (
-            <p className="text-muted-foreground">No payment method on file</p>
+            <p className="text-white/70">No payment method on file</p>
           )}
         </CardContent>
       </Card>

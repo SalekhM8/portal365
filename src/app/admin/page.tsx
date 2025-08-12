@@ -583,66 +583,66 @@ export default function AdminDashboard() {
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-muted/50">
+                  <thead className="bg-white/5 border-b border-white/10">
                     <tr>
-                      <th className="text-left p-4 font-medium">Customer</th>
-                      <th className="text-left p-4 font-medium">Membership</th>
-                      <th className="text-left p-4 font-medium">Status</th>
-                      <th className="text-left p-4 font-medium">Routed Entity</th>
-                      <th className="text-left p-4 font-medium">Total Paid</th>
-                      <th className="text-left p-4 font-medium">Next Billing</th>
-                      <th className="text-left p-4 font-medium">Activity</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Customer</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Membership</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Status</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Routed Entity</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Total Paid</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Next Billing</th>
+                      <th className="text-left p-4 font-medium text-white">Activity</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredCustomers.map((customer) => (
-                      <tr key={customer.id} className="border-b hover:bg-muted/25 cursor-pointer" onClick={() => setSelectedCustomer(customer)}>
-                        <td className="p-4">
+                      <tr key={customer.id} className="border-b border-white/10 hover:bg-white/5 cursor-pointer" onClick={() => setSelectedCustomer(customer)}>
+                        <td className="p-4 border-r border-white/5">
                           <div>
-                            <p className="font-medium">{customer.name}</p>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <p className="font-medium text-white">{customer.name}</p>
+                            <div className="flex items-center gap-2 text-sm text-white/60">
                               <Mail className="h-3 w-3" />
                               <span>{customer.email}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-2 text-sm text-white/60">
                               <Phone className="h-3 w-3" />
                               <span>{customer.phone}</span>
                             </div>
                           </div>
                         </td>
-                        <td className="p-4">
-                          <Badge variant="outline">{customer.membershipType}</Badge>
-                          <p className="text-sm text-muted-foreground mt-1">
+                        <td className="p-4 border-r border-white/5">
+                          <Badge variant="outline" className="border-white/20 text-white">{customer.membershipType}</Badge>
+                          <p className="text-sm text-white/60 mt-1">
                             Joined {new Date(customer.joinDate).toLocaleDateString()}
                           </p>
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 border-r border-white/5">
                           <Badge variant={getStatusBadgeVariant(customer.status)}>
                             {customer.status}
                           </Badge>
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 border-r border-white/5">
                           <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">{customer.routedEntity}</span>
+                            <Building2 className="h-4 w-4 text-white/60" />
+                            <span className="text-sm text-white">{customer.routedEntity}</span>
                           </div>
                         </td>
-                        <td className="p-4">
-                          <p className="font-semibold">£{customer.totalPaid}</p>
-                          <p className="text-sm text-muted-foreground">
+                        <td className="p-4 border-r border-white/5">
+                          <p className="font-semibold text-white">£{customer.totalPaid}</p>
+                          <p className="text-sm text-white/60">
                             Last: {new Date(customer.lastPayment).toLocaleDateString()}
                           </p>
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 border-r border-white/5">
                           <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">{new Date(customer.nextBilling).toLocaleDateString()}</span>
+                            <Calendar className="h-4 w-4 text-white/60" />
+                            <span className="text-sm text-white">{new Date(customer.nextBilling).toLocaleDateString()}</span>
                           </div>
                         </td>
                         <td className="p-4">
                           <div className="text-sm">
-                            <p>{typeof customer.accessHistory.totalVisits === 'string' ? customer.accessHistory.totalVisits : `${customer.accessHistory.totalVisits} visits`}</p>
-                            <p className="text-muted-foreground">
+                            <p className="text-white">{typeof customer.accessHistory.totalVisits === 'string' ? customer.accessHistory.totalVisits : `${customer.accessHistory.totalVisits} visits`}</p>
+                            <p className="text-white/60">
                               {typeof customer.accessHistory.avgWeeklyVisits === 'string' ? customer.accessHistory.avgWeeklyVisits : `${customer.accessHistory.avgWeeklyVisits}/week avg`}
                             </p>
                           </div>
@@ -697,77 +697,77 @@ export default function AdminDashboard() {
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-muted/50">
+                  <thead className="bg-white/5 border-b border-white/10">
                     <tr>
-                      <th className="text-left p-4 font-medium">Customer & Payment</th>
-                      <th className="text-left p-4 font-medium">Amount & Type</th>
-                      <th className="text-left p-4 font-medium">Routed To</th>
-                      <th className="text-left p-4 font-medium">Status & Processing</th>
-                      <th className="text-left p-4 font-medium">Routing Details</th>
-                      <th className="text-left p-4 font-medium">GoCardless</th>
-                      <th className="text-left p-4 font-medium">Actions</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Customer & Payment</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Amount & Type</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Routed To</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Status & Processing</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Routing Details</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">GoCardless</th>
+                      <th className="text-left p-4 font-medium text-white">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredPayments.map((payment) => (
-                      <tr key={payment.id} className="border-b hover:bg-muted/25">
-                        <td className="p-4">
+                      <tr key={payment.id} className="border-b border-white/10 hover:bg-white/5">
+                        <td className="p-4 border-r border-white/5">
                           <div>
-                            <p className="font-medium">{payment.customerName}</p>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="font-medium text-white">{payment.customerName}</p>
+                            <p className="text-sm text-white/60">
                               {new Date(payment.timestamp).toLocaleString()}
                             </p>
                           </div>
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 border-r border-white/5">
                           <div>
-                            <p className="font-semibold">£{payment.amount}</p>
-                            <Badge variant="outline" className="text-xs">
+                            <p className="font-semibold text-white">£{payment.amount}</p>
+                            <Badge variant="outline" className="text-xs border-white/20 text-white">
                               {payment.membershipType}
                             </Badge>
                           </div>
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 border-r border-white/5">
                           <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">{payment.routedToEntity}</span>
+                            <Building2 className="h-4 w-4 text-white/60" />
+                            <span className="text-sm text-white">{payment.routedToEntity}</span>
                           </div>
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 border-r border-white/5">
                           <div className="space-y-1">
                             <Badge variant={getStatusBadgeVariant(payment.status)}>
                               {payment.status}
                             </Badge>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-xs text-white/60">
                               <p>Processed in {payment.processingTime}s</p>
                               {payment.retryCount > 0 && (
-                                <p className="text-red-600">Retries: {payment.retryCount}</p>
+                                <p className="text-red-400">Retries: {payment.retryCount}</p>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="p-4">
+                        <td className="p-4 border-r border-white/5">
                           <div className="text-sm space-y-1">
                             <Badge variant={payment.confidence === 'HIGH' ? 'default' : 'secondary'} className="text-xs">
                               {payment.confidence} confidence
                             </Badge>
-                            <p className="text-muted-foreground text-xs">
+                            <p className="text-white/60 text-xs">
                               {payment.routingReason}
                             </p>
                           </div>
                         </td>
-                        <td className="p-4">
-                          <div className="text-xs text-muted-foreground">
+                        <td className="p-4 border-r border-white/5">
+                          <div className="text-xs text-white/60">
                             <p className="font-mono">{payment.goCardlessId}</p>
                           </div>
                         </td>
                         <td className="p-4">
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
                               <Eye className="h-4 w-4" />
                             </Button>
                             {payment.status === 'FAILED' && (
-                              <Button variant="ghost" size="sm" className="text-blue-600">
+                              <Button variant="ghost" size="sm" className="text-blue-400 hover:bg-white/10">
                                 Retry
                               </Button>
                             )}
@@ -997,27 +997,37 @@ export default function AdminDashboard() {
 
       {/* Customer Details Modal */}
       {selectedCustomer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">Customer Details</h3>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold mb-4 text-white">Customer Details</h3>
             <div className="grid gap-4">
-              <div>
-                <p><strong>Name:</strong> {selectedCustomer.name}</p>
-                <p><strong>Email:</strong> {selectedCustomer.email}</p>
-                <p><strong>Phone:</strong> {selectedCustomer.phone}</p>
-                <p><strong>Membership Type:</strong> {selectedCustomer.membershipType}</p>
-                <p><strong>Status:</strong> {selectedCustomer.status}</p>
-                <p><strong>Join Date:</strong> {new Date(selectedCustomer.joinDate).toLocaleDateString()}</p>
-                <p><strong>Last Payment:</strong> {new Date(selectedCustomer.lastPayment).toLocaleDateString()}</p>
-                <p><strong>Total Paid:</strong> £{selectedCustomer.totalPaid}</p>
-                <p><strong>Routed Entity:</strong> {selectedCustomer.routedEntity}</p>
-                <p><strong>Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
-                <p><strong>Emergency Contact:</strong> {selectedCustomer.emergencyContact?.name} ({selectedCustomer.emergencyContact?.relationship})</p>
-                <p><strong>Access History:</strong> {selectedCustomer.accessHistory?.totalVisits} visits, {selectedCustomer.accessHistory?.avgWeeklyVisits}/week avg</p>
+              <div className="space-y-3">
+                <div className="border-b border-white/10 pb-2">
+                  <p className="text-white"><strong className="text-white/90">Name:</strong> {selectedCustomer.name}</p>
+                  <p className="text-white"><strong className="text-white/90">Email:</strong> {selectedCustomer.email}</p>
+                  <p className="text-white"><strong className="text-white/90">Phone:</strong> {selectedCustomer.phone}</p>
+                </div>
+                <div className="border-b border-white/10 pb-2">
+                  <p className="text-white"><strong className="text-white/90">Membership Type:</strong> {selectedCustomer.membershipType}</p>
+                  <p className="text-white"><strong className="text-white/90">Status:</strong> {selectedCustomer.status}</p>
+                  <p className="text-white"><strong className="text-white/90">Join Date:</strong> {new Date(selectedCustomer.joinDate).toLocaleDateString()}</p>
+                </div>
+                <div className="border-b border-white/10 pb-2">
+                  <p className="text-white"><strong className="text-white/90">Last Payment:</strong> {new Date(selectedCustomer.lastPayment).toLocaleDateString()}</p>
+                  <p className="text-white"><strong className="text-white/90">Total Paid:</strong> £{selectedCustomer.totalPaid}</p>
+                  <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
+                </div>
+                <div className="border-b border-white/10 pb-2">
+                  <p className="text-white"><strong className="text-white/90">Routed Entity:</strong> {selectedCustomer.routedEntity}</p>
+                </div>
+                <div>
+                  <p className="text-white"><strong className="text-white/90">Emergency Contact:</strong> {selectedCustomer.emergencyContact?.name} ({selectedCustomer.emergencyContact?.relationship})</p>
+                  <p className="text-white"><strong className="text-white/90">Access History:</strong> {selectedCustomer.accessHistory?.totalVisits} visits, {selectedCustomer.accessHistory?.avgWeeklyVisits}/week avg</p>
+                </div>
               </div>
             </div>
             <div className="flex justify-end mt-6">
-              <Button variant="outline" onClick={() => setSelectedCustomer(null)}>Close</Button>
+              <Button variant="outline" onClick={() => setSelectedCustomer(null)} className="bg-white text-black hover:bg-white/90">Close</Button>
             </div>
           </div>
         </div>
@@ -1025,40 +1035,42 @@ export default function AdminDashboard() {
 
       {/* Add Customer Modal */}
       {showAddCustomer && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-bold mb-4">Add New Customer</h3>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4 text-white">Add New Customer</h3>
             {addCustomerError && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{addCustomerError}</AlertDescription>
+              <Alert variant="destructive" className="mb-4 border-red-500/20 bg-red-500/10">
+                <AlertDescription className="text-red-300">{addCustomerError}</AlertDescription>
               </Alert>
             )}
             <form onSubmit={handleAddCustomer} className="grid gap-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <Label htmlFor="add-firstName">First Name *</Label>
+                  <Label htmlFor="add-firstName" className="text-white">First Name *</Label>
                   <Input 
                     id="add-firstName" 
                     placeholder="Enter first name" 
                     value={addCustomerData.firstName} 
                     onChange={(e) => setAddCustomerData({ ...addCustomerData, firstName: e.target.value })}
                     required
+                    className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="add-lastName">Last Name *</Label>
+                  <Label htmlFor="add-lastName" className="text-white">Last Name *</Label>
                   <Input 
                     id="add-lastName" 
                     placeholder="Enter last name" 
                     value={addCustomerData.lastName} 
                     onChange={(e) => setAddCustomerData({ ...addCustomerData, lastName: e.target.value })}
                     required
+                    className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
                   />
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <Label htmlFor="add-email">Email *</Label>
+                  <Label htmlFor="add-email" className="text-white">Email *</Label>
                   <Input 
                     id="add-email" 
                     type="email" 
@@ -1066,37 +1078,39 @@ export default function AdminDashboard() {
                     value={addCustomerData.email} 
                     onChange={(e) => setAddCustomerData({ ...addCustomerData, email: e.target.value })}
                     required
+                    className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="add-phone">Phone</Label>
+                  <Label htmlFor="add-phone" className="text-white">Phone</Label>
                   <Input 
                     id="add-phone" 
                     placeholder="Enter customer phone" 
                     value={addCustomerData.phone} 
                     onChange={(e) => setAddCustomerData({ ...addCustomerData, phone: e.target.value })}
+                    className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
                   />
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <Label htmlFor="add-membership">Membership Type *</Label>
+                  <Label htmlFor="add-membership" className="text-white">Membership Type *</Label>
                   <Select value={addCustomerData.membershipType} onValueChange={(value) => setAddCustomerData({ ...addCustomerData, membershipType: value })}>
-                    <SelectTrigger id="add-membership">
-                      <SelectValue placeholder="Select membership type" />
+                    <SelectTrigger id="add-membership" className="bg-white/5 border-white/20 text-white">
+                      <SelectValue placeholder="Select membership type" className="text-white/50" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FULL_ADULT">Full Adult Membership</SelectItem>
-                      <SelectItem value="WEEKEND_ADULT">Weekend Adult Membership</SelectItem>
-                      <SelectItem value="FULL_UNDER18">Full Youth Membership</SelectItem>
-                      <SelectItem value="WEEKEND_UNDER18">Weekend Youth Membership</SelectItem>
-                      <SelectItem value="MASTERS">Masters Program (30+)</SelectItem>
-                      <SelectItem value="WOMENS_CLASSES">Women's Classes</SelectItem>
+                    <SelectContent className="bg-black border-white/20">
+                      <SelectItem value="FULL_ADULT" className="text-white hover:bg-white/10">Full Adult Membership</SelectItem>
+                      <SelectItem value="WEEKEND_ADULT" className="text-white hover:bg-white/10">Weekend Adult Membership</SelectItem>
+                      <SelectItem value="FULL_UNDER18" className="text-white hover:bg-white/10">Full Youth Membership</SelectItem>
+                      <SelectItem value="WEEKEND_UNDER18" className="text-white hover:bg-white/10">Weekend Youth Membership</SelectItem>
+                      <SelectItem value="MASTERS" className="text-white hover:bg-white/10">Masters Program (30+)</SelectItem>
+                      <SelectItem value="WOMENS_CLASSES" className="text-white hover:bg-white/10">Women's Classes</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="add-customPrice">Custom Monthly Price (£) *</Label>
+                  <Label htmlFor="add-customPrice" className="text-white">Custom Monthly Price (£) *</Label>
                   <Input 
                     id="add-customPrice" 
                     type="number" 
@@ -1105,20 +1119,21 @@ export default function AdminDashboard() {
                     value={addCustomerData.customPrice} 
                     onChange={(e) => setAddCustomerData({ ...addCustomerData, customPrice: e.target.value })}
                     required
+                    className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
                   />
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <Label htmlFor="add-startDate">Start Month *</Label>
+                  <Label htmlFor="add-startDate" className="text-white">Start Month *</Label>
                   <Select 
                     value={addCustomerData.startDate ? addCustomerData.startDate.substring(0, 7) : ''} 
                     onValueChange={(value) => setAddCustomerData({ ...addCustomerData, startDate: value + '-01' })}
                   >
-                    <SelectTrigger id="add-startDate">
-                      <SelectValue placeholder="Select start month" />
+                    <SelectTrigger id="add-startDate" className="bg-white/5 border-white/20 text-white">
+                      <SelectValue placeholder="Select start month" className="text-white/50" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-black border-white/20">
                       {(() => {
                         const months = []
                         const currentDate = new Date()
@@ -1130,7 +1145,7 @@ export default function AdminDashboard() {
                             month: 'long' 
                           })
                           months.push(
-                            <SelectItem key={yearMonth} value={yearMonth}>
+                            <SelectItem key={yearMonth} value={yearMonth} className="text-white hover:bg-white/10">
                               {displayText}
                             </SelectItem>
                           )
@@ -1139,53 +1154,60 @@ export default function AdminDashboard() {
                       })()}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-xs text-white/60 mt-1">
                     Customer will be charged starting from the 1st of the selected month
                   </p>
                 </div>
                 <div>
-                  <Label htmlFor="add-dateOfBirth">Date of Birth</Label>
+                  <Label htmlFor="add-dateOfBirth" className="text-white">Date of Birth</Label>
                   <Input 
                     id="add-dateOfBirth" 
                     type="date"
                     value={addCustomerData.dateOfBirth} 
                     onChange={(e) => setAddCustomerData({ ...addCustomerData, dateOfBirth: e.target.value })}
+                    className="bg-white/5 border-white/20 text-white"
                   />
                 </div>
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <Label htmlFor="add-emergency-name">Emergency Contact Name</Label>
-                  <Input 
-                    id="add-emergency-name" 
-                    placeholder="Contact name" 
-                    value={addCustomerData.emergencyContact.name} 
-                    onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, name: e.target.value } })} 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="add-emergency-phone">Emergency Contact Phone</Label>
-                  <Input 
-                    id="add-emergency-phone" 
-                    placeholder="Contact phone" 
-                    value={addCustomerData.emergencyContact.phone} 
-                    onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, phone: e.target.value } })} 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="add-emergency-relationship">Relationship</Label>
-                  <Input 
-                    id="add-emergency-relationship" 
-                    placeholder="e.g. Parent" 
-                    value={addCustomerData.emergencyContact.relationship} 
-                    onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, relationship: e.target.value } })} 
-                  />
+              <div className="border-t border-white/10 pt-4">
+                <h4 className="text-white font-semibold mb-4">Emergency Contact (Optional)</h4>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <Label htmlFor="add-emergency-name" className="text-white">Contact Name</Label>
+                    <Input 
+                      id="add-emergency-name" 
+                      placeholder="Contact name" 
+                      value={addCustomerData.emergencyContact.name} 
+                      onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, name: e.target.value } })}
+                      className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="add-emergency-phone" className="text-white">Contact Phone</Label>
+                    <Input 
+                      id="add-emergency-phone" 
+                      placeholder="Contact phone" 
+                      value={addCustomerData.emergencyContact.phone} 
+                      onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, phone: e.target.value } })}
+                      className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="add-emergency-relationship" className="text-white">Relationship</Label>
+                    <Input 
+                      id="add-emergency-relationship" 
+                      placeholder="e.g. Parent" 
+                      value={addCustomerData.emergencyContact.relationship} 
+                      onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, relationship: e.target.value } })}
+                      className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
+                    />
+                  </div>
                 </div>
               </div>
             </form>
-            <div className="flex justify-end mt-6 gap-2">
-              <Button variant="outline" onClick={() => setShowAddCustomer(false)}>Cancel</Button>
-              <Button onClick={handleAddCustomer} disabled={addCustomerLoading}>
+            <div className="flex justify-end mt-6 gap-2 border-t border-white/10 pt-4">
+              <Button variant="outline" onClick={() => setShowAddCustomer(false)} className="border-white/20 text-white hover:bg-white/10">Cancel</Button>
+              <Button onClick={handleAddCustomer} disabled={addCustomerLoading} className="bg-white text-black hover:bg-white/90">
                 {addCustomerLoading ? 'Creating...' : 'Create & Setup Payment'}
               </Button>
             </div>
@@ -1195,56 +1217,56 @@ export default function AdminDashboard() {
 
       {/* Payment Modal */}
       {showPaymentModal && paymentClientSecret && createdSubscriptionId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">Setup Payment Method</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold mb-4 text-white">Setup Payment Method</h3>
+            <p className="text-sm text-white/70 mb-4">
               Please have the customer enter their payment details to activate their membership.
             </p>
             
             <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg mb-4">
               <div className="text-center">
-                <p className="text-lg font-semibold">£{addCustomerData.customPrice}/month</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-lg font-semibold text-white">£{addCustomerData.customPrice}/month</p>
+                <p className="text-sm text-white/70">
                   {addCustomerData.membershipType.replace('_', ' ')}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-white/60 mt-1">
                   First charge: {addCustomerData.startDate}
                 </p>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm font-medium mb-2">Payment Method Setup</p>
-                <p className="text-xs text-muted-foreground">
+              <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
+                <p className="text-sm font-medium mb-2 text-white">Payment Method Setup</p>
+                <p className="text-xs text-white/60">
                   This would normally integrate with Stripe Elements for secure card collection.
                   For demo purposes, we'll simulate payment method setup.
                 </p>
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="demo-card">Card Number (Demo)</Label>
+                <Label htmlFor="demo-card" className="text-white">Card Number (Demo)</Label>
                 <Input 
                   id="demo-card" 
                   placeholder="4242 4242 4242 4242"
-                  className="font-mono"
+                  className="font-mono bg-white/5 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
               
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label htmlFor="demo-expiry">Expiry</Label>
-                  <Input id="demo-expiry" placeholder="MM/YY" />
+                  <Label htmlFor="demo-expiry" className="text-white">Expiry</Label>
+                  <Input id="demo-expiry" placeholder="MM/YY" className="bg-white/5 border-white/20 text-white placeholder:text-white/50" />
                 </div>
                 <div>
-                  <Label htmlFor="demo-cvc">CVC</Label>
-                  <Input id="demo-cvc" placeholder="123" />
+                  <Label htmlFor="demo-cvc" className="text-white">CVC</Label>
+                  <Input id="demo-cvc" placeholder="123" className="bg-white/5 border-white/20 text-white placeholder:text-white/50" />
                 </div>
               </div>
             </div>
 
-            <div className="mt-6 space-y-2">
+            <div className="mt-6 space-y-2 border-t border-white/10 pt-4">
               <Button
                 onClick={async () => {
                   try {
@@ -1269,7 +1291,7 @@ export default function AdminDashboard() {
                     handlePaymentError('Network error during payment setup')
                   }
                 }}
-                className="w-full"
+                className="w-full bg-white text-black hover:bg-white/90"
               >
                 Complete Payment Setup
               </Button>
@@ -1277,13 +1299,13 @@ export default function AdminDashboard() {
               <Button
                 variant="outline"
                 onClick={() => setShowPaymentModal(false)}
-                className="w-full"
+                className="w-full border-white/20 text-white hover:bg-white/10"
               >
                 Cancel
               </Button>
             </div>
             
-            <div className="mt-4 text-center text-xs text-muted-foreground">
+            <div className="mt-4 text-center text-xs text-white/60 border-t border-white/10 pt-4">
               Customer membership will be activated after payment method is set up.
               No charge until {addCustomerData.startDate}.
             </div>
