@@ -137,6 +137,28 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [entityFilter, setEntityFilter] = useState('all')
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null)
+  const [showAddCustomer, setShowAddCustomer] = useState(false)
+  const [addCustomerData, setAddCustomerData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    dateOfBirth: '',
+    membershipType: '',
+    customPrice: '',
+    startDate: '',
+    emergencyContact: {
+      name: '',
+      phone: '',
+      relationship: ''
+    }
+  })
+  const [addCustomerLoading, setAddCustomerLoading] = useState(false)
+  const [addCustomerError, setAddCustomerError] = useState('')
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentClientSecret, setPaymentClientSecret] = useState('')
+  const [createdSubscriptionId, setCreatedSubscriptionId] = useState('')
 
   useEffect(() => {
     // ✅ ADD authentication check
@@ -193,6 +215,80 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAddCustomerLoading(true)
+    setAddCustomerError('')
+
+    try {
+      const response = await fetch('/api/admin/customers/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          firstName: addCustomerData.firstName,
+          lastName: addCustomerData.lastName,
+          email: addCustomerData.email,
+          phone: addCustomerData.phone,
+          dateOfBirth: addCustomerData.dateOfBirth,
+          membershipType: addCustomerData.membershipType,
+          customPrice: parseFloat(addCustomerData.customPrice),
+          startDate: addCustomerData.startDate,
+          emergencyContact: addCustomerData.emergencyContact.name ? addCustomerData.emergencyContact : undefined
+        })
+      })
+
+      const result = await response.json()
+
+      if (result.success && result.subscription?.clientSecret) {
+        // Customer created successfully, now collect payment
+        setPaymentClientSecret(result.subscription.clientSecret)
+        setCreatedSubscriptionId(result.subscription.id)
+        setShowAddCustomer(false)
+        setShowPaymentModal(true)
+        
+        console.log('✅ Admin customer created, opening payment modal')
+      } else {
+        setAddCustomerError(result.error || 'Failed to create customer')
+      }
+    } catch (error) {
+      setAddCustomerError('Network error. Please try again.')
+      console.error('❌ Admin customer creation error:', error)
+    } finally {
+      setAddCustomerLoading(false)
+    }
+  }
+
+  const handlePaymentSuccess = () => {
+    setShowPaymentModal(false)
+    setPaymentClientSecret('')
+    setCreatedSubscriptionId('')
+    
+    // Reset form
+    setAddCustomerData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      dateOfBirth: '',
+      membershipType: '',
+      customPrice: '',
+      startDate: '',
+      emergencyContact: { name: '', phone: '', relationship: '' }
+    })
+    
+    // Refresh customer list
+    fetchAdminData()
+    
+    alert('Customer created successfully!')
+  }
+
+  const handlePaymentError = (error: string) => {
+    console.error('❌ Payment setup error:', error)
+    alert('Payment setup failed: ' + error)
   }
 
   // Filter functions
@@ -476,7 +572,7 @@ export default function AdminDashboard() {
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
-              <Button>
+              <Button onClick={() => setShowAddCustomer(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add Customer
               </Button>
@@ -496,12 +592,11 @@ export default function AdminDashboard() {
                       <th className="text-left p-4 font-medium">Total Paid</th>
                       <th className="text-left p-4 font-medium">Next Billing</th>
                       <th className="text-left p-4 font-medium">Activity</th>
-                      <th className="text-left p-4 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredCustomers.map((customer) => (
-                      <tr key={customer.id} className="border-b hover:bg-muted/25">
+                      <tr key={customer.id} className="border-b hover:bg-muted/25 cursor-pointer" onClick={() => setSelectedCustomer(customer)}>
                         <td className="p-4">
                           <div>
                             <p className="font-medium">{customer.name}</p>
@@ -550,16 +645,6 @@ export default function AdminDashboard() {
                             <p className="text-muted-foreground">
                               {typeof customer.accessHistory.avgWeeklyVisits === 'string' ? customer.accessHistory.avgWeeklyVisits : `${customer.accessHistory.avgWeeklyVisits}/week avg`}
                             </p>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm">
-                              <Settings className="h-4 w-4" />
-                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -909,6 +994,274 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Customer Details Modal */}
+      {selectedCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 className="text-xl font-bold mb-4">Customer Details</h3>
+            <div className="grid gap-4">
+              <div>
+                <p><strong>Name:</strong> {selectedCustomer.name}</p>
+                <p><strong>Email:</strong> {selectedCustomer.email}</p>
+                <p><strong>Phone:</strong> {selectedCustomer.phone}</p>
+                <p><strong>Membership Type:</strong> {selectedCustomer.membershipType}</p>
+                <p><strong>Status:</strong> {selectedCustomer.status}</p>
+                <p><strong>Join Date:</strong> {new Date(selectedCustomer.joinDate).toLocaleDateString()}</p>
+                <p><strong>Last Payment:</strong> {new Date(selectedCustomer.lastPayment).toLocaleDateString()}</p>
+                <p><strong>Total Paid:</strong> £{selectedCustomer.totalPaid}</p>
+                <p><strong>Routed Entity:</strong> {selectedCustomer.routedEntity}</p>
+                <p><strong>Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
+                <p><strong>Emergency Contact:</strong> {selectedCustomer.emergencyContact?.name} ({selectedCustomer.emergencyContact?.relationship})</p>
+                <p><strong>Access History:</strong> {selectedCustomer.accessHistory?.totalVisits} visits, {selectedCustomer.accessHistory?.avgWeeklyVisits}/week avg</p>
+              </div>
+            </div>
+            <div className="flex justify-end mt-6">
+              <Button variant="outline" onClick={() => setSelectedCustomer(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Customer Modal */}
+      {showAddCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 className="text-xl font-bold mb-4">Add New Customer</h3>
+            {addCustomerError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{addCustomerError}</AlertDescription>
+              </Alert>
+            )}
+            <form onSubmit={handleAddCustomer} className="grid gap-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="add-firstName">First Name *</Label>
+                  <Input 
+                    id="add-firstName" 
+                    placeholder="Enter first name" 
+                    value={addCustomerData.firstName} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, firstName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="add-lastName">Last Name *</Label>
+                  <Input 
+                    id="add-lastName" 
+                    placeholder="Enter last name" 
+                    value={addCustomerData.lastName} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, lastName: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="add-email">Email *</Label>
+                <Input 
+                  id="add-email" 
+                  type="email" 
+                  placeholder="Enter customer email" 
+                  value={addCustomerData.email} 
+                  onChange={(e) => setAddCustomerData({ ...addCustomerData, email: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="add-phone">Phone</Label>
+                <Input 
+                  id="add-phone" 
+                  placeholder="Enter customer phone" 
+                  value={addCustomerData.phone} 
+                  onChange={(e) => setAddCustomerData({ ...addCustomerData, phone: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="add-membership">Membership Type *</Label>
+                <Select onValueChange={(value) => setAddCustomerData({ ...addCustomerData, membershipType: value })}>
+                  <SelectTrigger id="add-membership">
+                    <SelectValue placeholder="Select membership type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FULL_ADULT">Full Adult Membership</SelectItem>
+                    <SelectItem value="WEEKEND_ADULT">Weekend Adult Membership</SelectItem>
+                    <SelectItem value="FULL_UNDER18">Full Youth Membership</SelectItem>
+                    <SelectItem value="WEEKEND_UNDER18">Weekend Youth Membership</SelectItem>
+                    <SelectItem value="WOMENS_CLASSES">Women's Classes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="add-customPrice">Custom Monthly Price (£) *</Label>
+                <Input 
+                  id="add-customPrice" 
+                  type="number" 
+                  step="0.01"
+                  placeholder="e.g. 45.00" 
+                  value={addCustomerData.customPrice} 
+                  onChange={(e) => setAddCustomerData({ ...addCustomerData, customPrice: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="add-startDate">Start Date (1st of month) *</Label>
+                <Input 
+                  id="add-startDate" 
+                  type="month"
+                  value={addCustomerData.startDate ? addCustomerData.startDate.substring(0, 7) : ''}
+                  onChange={(e) => setAddCustomerData({ ...addCustomerData, startDate: e.target.value + '-01' })}
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Customer will be charged starting from the 1st of the selected month
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="add-dateOfBirth">Date of Birth</Label>
+                <Input 
+                  id="add-dateOfBirth" 
+                  type="date"
+                  value={addCustomerData.dateOfBirth} 
+                  onChange={(e) => setAddCustomerData({ ...addCustomerData, dateOfBirth: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label htmlFor="add-emergency-name">Emergency Contact Name</Label>
+                  <Input 
+                    id="add-emergency-name" 
+                    placeholder="Contact name" 
+                    value={addCustomerData.emergencyContact.name} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, name: e.target.value } })} 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="add-emergency-phone">Emergency Contact Phone</Label>
+                  <Input 
+                    id="add-emergency-phone" 
+                    placeholder="Contact phone" 
+                    value={addCustomerData.emergencyContact.phone} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, phone: e.target.value } })} 
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="add-emergency-relationship">Relationship</Label>
+                  <Input 
+                    id="add-emergency-relationship" 
+                    placeholder="e.g. Parent" 
+                    value={addCustomerData.emergencyContact.relationship} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, emergencyContact: { ...addCustomerData.emergencyContact, relationship: e.target.value } })} 
+                  />
+                </div>
+              </div>
+            </form>
+            <div className="flex justify-end mt-6 gap-2">
+              <Button variant="outline" onClick={() => setShowAddCustomer(false)}>Cancel</Button>
+              <Button onClick={handleAddCustomer} disabled={addCustomerLoading}>
+                {addCustomerLoading ? 'Creating...' : 'Create & Setup Payment'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && paymentClientSecret && createdSubscriptionId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 className="text-xl font-bold mb-4">Setup Payment Method</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Please have the customer enter their payment details to activate their membership.
+            </p>
+            
+            <div className="bg-blue-50 p-4 rounded-lg mb-4">
+              <div className="text-center">
+                <p className="text-lg font-semibold">£{addCustomerData.customPrice}/month</p>
+                <p className="text-sm text-muted-foreground">
+                  {addCustomerData.membershipType.replace('_', ' ')}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  First charge: {addCustomerData.startDate}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm font-medium mb-2">Payment Method Setup</p>
+                <p className="text-xs text-muted-foreground">
+                  This would normally integrate with Stripe Elements for secure card collection.
+                  For demo purposes, we'll simulate payment method setup.
+                </p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="demo-card">Card Number (Demo)</Label>
+                <Input 
+                  id="demo-card" 
+                  placeholder="4242 4242 4242 4242"
+                  className="font-mono"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor="demo-expiry">Expiry</Label>
+                  <Input id="demo-expiry" placeholder="MM/YY" />
+                </div>
+                <div>
+                  <Label htmlFor="demo-cvc">CVC</Label>
+                  <Input id="demo-cvc" placeholder="123" />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-2">
+              <Button
+                onClick={async () => {
+                  try {
+                    // Simulate payment method setup
+                    const response = await fetch('/api/confirm-payment', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        setupIntentId: paymentClientSecret.replace('seti_', '').split('_secret')[0],
+                        subscriptionId: createdSubscriptionId
+                      })
+                    })
+                    
+                    const result = await response.json()
+                    
+                    if (result.success) {
+                      handlePaymentSuccess()
+                    } else {
+                      handlePaymentError(result.error || 'Payment setup failed')
+                    }
+                  } catch (error) {
+                    handlePaymentError('Network error during payment setup')
+                  }
+                }}
+                className="w-full"
+              >
+                Complete Payment Setup
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={() => setShowPaymentModal(false)}
+                className="w-full"
+              >
+                Cancel
+              </Button>
+            </div>
+            
+            <div className="mt-4 text-center text-xs text-muted-foreground">
+              Customer membership will be activated after payment method is set up.
+              No charge until {addCustomerData.startDate}.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 } 

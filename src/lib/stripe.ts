@@ -23,6 +23,11 @@ export interface SubscriptionRequest {
   businessId: string
   customerEmail: string
   customerName: string
+  
+  // Optional admin overrides (existing flow ignores these)
+  customPrice?: number     // If provided, overrides getPlan() price
+  customStartDate?: string // If provided, overrides "next month" logic
+  isAdminCreated?: boolean // Flag to skip prorated billing
 }
 
 export interface SubscriptionResult {
@@ -44,6 +49,12 @@ export class SubscriptionProcessor {
       
       // 1. Get membership pricing details
       const membershipDetails = getPlan(request.membershipType)
+      
+      // Admin price override (doesn't affect existing flow)
+      if (request.customPrice) {
+        membershipDetails.monthlyPrice = request.customPrice
+        console.log(`✅ Admin price override: £${request.customPrice}`)
+      }
       
       // 2. Determine optimal routing using existing VAT engine
       const routingOptions: RoutingOptions = {
@@ -67,21 +78,27 @@ export class SubscriptionProcessor {
       // 4. Get or create Stripe price for this membership type
       const priceId = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name })
 
-      // 5. Calculate prorated billing details
+      // 5. Calculate billing details (with admin date override)
       const now = new Date()
-      const firstOfNextMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1))
-      const trialEndTimestamp = Math.floor(firstOfNextMonth.getTime() / 1000)
+      const startDate = request.customStartDate 
+        ? new Date(request.customStartDate)
+        : new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1))
       
-      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-      const daysRemaining = daysInMonth - now.getDate() + 1 // Include today
-      const fullAmountPence = membershipDetails.monthlyPrice * 100
-      const proratedAmountPence = Math.round(fullAmountPence * (daysRemaining / daysInMonth))
+      const trialEndTimestamp = Math.floor(startDate.getTime() / 1000)
+      
+      // Calculate prorated amount (skip for admin-created)
+      let proratedAmountPence = 0
+      if (!request.isAdminCreated) {
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+        const daysRemaining = daysInMonth - now.getDate() + 1 // Include today
+        const fullAmountPence = membershipDetails.monthlyPrice * 100
+        proratedAmountPence = Math.round(fullAmountPence * (daysRemaining / daysInMonth))
+      }
       
       console.log('📊 Billing calculation:', {
         today: now.toISOString().split('T')[0],
-        nextBilling: firstOfNextMonth.toISOString().split('T')[0],
-        daysInMonth,
-        daysRemaining,
+        nextBilling: startDate.toISOString().split('T')[0],
+        isAdminCreated: request.isAdminCreated || false,
         fullAmount: membershipDetails.monthlyPrice,
         proratedAmount: proratedAmountPence / 100
       })
@@ -96,7 +113,7 @@ export class SubscriptionProcessor {
           membershipType: request.membershipType,
           routedEntityId: routing.selectedEntityId,
           proratedAmount: (proratedAmountPence / 100).toString(),
-          nextBillingDate: firstOfNextMonth.toISOString().split('T')[0]
+          nextBillingDate: startDate.toISOString().split('T')[0]
         }
       })
 
@@ -113,8 +130,8 @@ export class SubscriptionProcessor {
           monthlyPrice: membershipDetails.monthlyPrice,
           status: 'PENDING_PAYMENT', // Will be updated after payment method setup
           currentPeriodStart: now,
-          currentPeriodEnd: firstOfNextMonth,
-          nextBillingDate: firstOfNextMonth
+          currentPeriodEnd: startDate,
+          nextBillingDate: startDate
         }
       })
 
@@ -140,7 +157,7 @@ export class SubscriptionProcessor {
         clientSecret: setupIntent.client_secret!, // SetupIntent client secret for frontend
         routing,
         proratedAmount: proratedAmountPence / 100,
-        nextBillingDate: firstOfNextMonth.toISOString().split('T')[0]
+        nextBillingDate: startDate.toISOString().split('T')[0]
       }
 
     } catch (error) {
