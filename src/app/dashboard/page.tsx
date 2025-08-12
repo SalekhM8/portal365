@@ -341,22 +341,22 @@ function DashboardContent() {
                     {upcomingClasses.filter(classItem => classItem.canAccess).map((classItem) => (
                       <div
                         key={classItem.id}
-                        className="flex items-center justify-between p-3 border rounded-lg bg-green-50 border-green-200"
+                        className="flex items-center justify-between p-3 border rounded-lg bg-green-500/10 border-green-500/20"
                       >
                         <div>
-                          <h4 className="font-medium">{classItem.name}</h4>
-                          <p className="text-sm text-muted-foreground">
+                          <h4 className="font-medium text-white">{classItem.name}</h4>
+                          <p className="text-sm text-white/70">
                             {classItem.time} • {classItem.location} • {classItem.instructor}
                           </p>
                         </div>
-                        <Badge variant="default" className="bg-green-600">
+                        <Badge variant="default" className="bg-green-500 text-white">
                           Included
                         </Badge>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No accessible classes found.</p>
+                  <p className="text-white/70">No accessible classes found.</p>
                 )}
               </div>
             </CardContent>

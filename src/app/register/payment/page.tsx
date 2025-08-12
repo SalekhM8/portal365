@@ -45,13 +45,14 @@ function PaymentPageContent() {
         </CardHeader>
         <CardContent>
           {/* Payment Explanation */}
-          <div className="bg-blue-50 p-4 rounded-lg mb-6">
-            <h4 className="font-semibold text-blue-800 mb-2">💳 Payment Schedule</h4>
-            <div className="text-sm text-blue-700 space-y-1">
-              <p><strong>Today:</strong> Prorated payment for the rest of this month</p>
-              <p><strong>1st of next month:</strong> Full monthly subscription begins</p>
-              <p><strong>Future:</strong> Automatic monthly billing on the 1st</p>
+          <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <CreditCard className="h-4 w-4 text-blue-400" />
+              <h3 className="font-semibold text-blue-300">Secure Payment</h3>
             </div>
+            <p className="text-sm text-white/80">
+              Your payment information is encrypted and secure. We use industry-standard security measures.
+            </p>
           </div>
           
           <Elements

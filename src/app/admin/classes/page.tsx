@@ -258,8 +258,8 @@ export default function AdminClassesPage() {
       )}
 
       {success && (
-        <Alert className="border-green-200 bg-green-50">
-          <AlertDescription className="text-green-800">{success}</AlertDescription>
+        <Alert className="border-green-500/20 bg-green-500/10">
+          <AlertDescription className="text-green-300">{success}</AlertDescription>
         </Alert>
       )}
 

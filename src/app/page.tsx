@@ -1,3 +1,5 @@
+'use client'
+
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,7 @@ import {
   X
 } from "lucide-react";
 import { MEMBERSHIP_PLANS } from "@/config/memberships";
+import { useState } from "react";
 
 const businesses = [
   {
@@ -45,6 +48,8 @@ const businesses = [
 ];
 
 export default function Home() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Navigation - Mobile Optimized */}
@@ -75,25 +80,36 @@ export default function Home() {
 
             {/* Mobile Menu Button */}
             <div className="sm:hidden">
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-                <Menu className="h-5 w-5" />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="text-white hover:bg-white/10"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
               </Button>
             </div>
           </div>
           
-          {/* Mobile Navigation Menu */}
-          <div className="sm:hidden pb-4 space-y-2">
-            <Link href="/auth/signin" className="block">
-              <Button variant="outline" size="sm" className="w-full border-white/20 bg-transparent text-white hover:bg-white hover:text-black transition-all duration-300">
-                Customer Login
-              </Button>
-            </Link>
-            <Link href="/auth/signin" className="block">
-              <Button variant="outline" size="sm" className="w-full border-white/20 bg-transparent text-white hover:bg-white hover:text-black transition-all duration-300">
-                Admin Login
-              </Button>
-            </Link>
-          </div>
+          {/* Mobile Navigation Menu - Collapsible */}
+          {mobileMenuOpen && (
+            <div className="sm:hidden pb-4 space-y-2 animate-in slide-in-from-top-2 duration-200">
+              <Link href="/auth/signin" className="block" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant="outline" size="sm" className="w-full border-white/20 bg-transparent text-white hover:bg-white hover:text-black transition-all duration-300">
+                  Customer Login
+                </Button>
+              </Link>
+              <Link href="/auth/signin" className="block" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant="outline" size="sm" className="w-full border-white/20 bg-transparent text-white hover:bg-white hover:text-black transition-all duration-300">
+                  Admin Login
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
       </nav>
 

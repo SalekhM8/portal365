@@ -107,9 +107,9 @@ export default function MembershipPage() {
       )}
 
       {success && (
-        <Alert className="border-green-200 bg-green-50">
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">{success}</AlertDescription>
+        <Alert className="border-green-500/20 bg-green-500/10">
+          <CheckCircle2 className="h-4 w-4 text-green-400" />
+          <AlertDescription className="text-green-300">{success}</AlertDescription>
         </Alert>
       )}
 
@@ -126,27 +126,16 @@ export default function MembershipPage() {
         </CardHeader>
         <CardContent>
           {currentMembership && (
-            <div className="bg-blue-50 p-6 rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold">
-                    {MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.name || currentMembership.type}
-                  </h3>
-                  <p className="text-muted-foreground">
-                    {MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.description}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold">£{currentMembership.price}/month</p>
-                  <Badge variant="secondary">Active</Badge>
-                </div>
+            <div className="bg-blue-500/10 border border-blue-500/20 p-6 rounded-lg">
+              <div className="flex items-center gap-3 mb-4">
+                <CheckCircle2 className="h-4 w-4 text-blue-400" />
+                <h3 className="font-semibold text-blue-300">Current Plan Benefits</h3>
               </div>
               <div className="space-y-2">
-                <h4 className="font-medium">Included Features:</h4>
-                {MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.features.map((feature) => (
-                  <div key={feature} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    <span className="text-sm">{feature}</span>
+                {currentMembership.features.map((feature: string, index: number) => (
+                  <div key={index} className="flex items-center gap-2 text-sm text-white/80">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
+                    <span>{feature}</span>
                   </div>
                 ))}
               </div>
@@ -170,9 +159,10 @@ export default function MembershipPage() {
               .map(([key, plan]) => (
               <Card 
                 key={key}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  currentMembership?.type === key ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                className={`cursor-pointer transition-all hover:shadow-lg border-2 ${
+                  currentMembership?.type === key ? 'ring-2 ring-blue-400 bg-blue-500/10 border-blue-500/20' : 'hover:border-white/30'
                 }`}
+                onClick={() => handlePlanChange(key)}
               >
                 <CardHeader className="text-center">
                   <CardTitle className="text-lg">{plan.name}</CardTitle>

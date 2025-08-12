@@ -1202,7 +1202,7 @@ export default function AdminDashboard() {
               Please have the customer enter their payment details to activate their membership.
             </p>
             
-            <div className="bg-blue-50 p-4 rounded-lg mb-4">
+            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg mb-4">
               <div className="text-center">
                 <p className="text-lg font-semibold">£{addCustomerData.customPrice}/month</p>
                 <p className="text-sm text-muted-foreground">

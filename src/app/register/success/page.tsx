@@ -179,22 +179,23 @@ function SuccessContent() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="text-center space-y-4">
-            <div className="bg-green-50 p-4 rounded-lg">
-              <CreditCard className="h-8 w-8 text-green-600 mx-auto mb-2" />
-              <h3 className="font-semibold text-green-800">Subscription Active</h3>
-              <p className="text-sm text-green-700">
-                Your payment has been processed and your gym membership is now active.
+            <div className="bg-green-500/10 border border-green-500/20 p-4 rounded-lg">
+              <CreditCard className="h-8 w-8 text-green-400 mx-auto mb-2" />
+              <h3 className="font-semibold text-green-300">Subscription Active</h3>
+              <p className="text-sm text-green-200">
+                Your membership is now active and ready to use.
               </p>
             </div>
 
             {/* Payment Information */}
-            <div className="bg-blue-50 p-4 rounded-lg text-left">
-              <h4 className="font-semibold text-blue-800 mb-2">📅 Your Billing Schedule</h4>
-              <div className="text-sm text-blue-700 space-y-1">
-                <p><strong>Today's Payment:</strong> Prorated for the rest of this month</p>
-                <p><strong>Next Payment:</strong> 1st September - Full monthly amount</p>
-                <p><strong>Future Payments:</strong> Automatically on the 1st of every month</p>
-              </div>
+            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg text-left">
+              <h4 className="font-semibold text-white mb-2">Next Steps:</h4>
+              <ul className="space-y-1 text-sm text-white/80">
+                <li>• Download our mobile app for easy access</li>
+                <li>• View class timetables and facility information</li>
+                <li>• Update your profile and emergency contacts</li>
+                <li>• Join our community on social media</li>
+              </ul>
             </div>
 
             {isProcessing ? (
