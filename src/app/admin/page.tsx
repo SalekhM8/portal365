@@ -1026,7 +1026,7 @@ export default function AdminDashboard() {
       {/* Add Customer Modal */}
       {showAddCustomer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">Add New Customer</h3>
             {addCustomerError && (
               <Alert variant="destructive" className="mb-4">
@@ -1056,74 +1056,101 @@ export default function AdminDashboard() {
                   />
                 </div>
               </div>
-              <div>
-                <Label htmlFor="add-email">Email *</Label>
-                <Input 
-                  id="add-email" 
-                  type="email" 
-                  placeholder="Enter customer email" 
-                  value={addCustomerData.email} 
-                  onChange={(e) => setAddCustomerData({ ...addCustomerData, email: e.target.value })}
-                  required
-                />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="add-email">Email *</Label>
+                  <Input 
+                    id="add-email" 
+                    type="email" 
+                    placeholder="Enter customer email" 
+                    value={addCustomerData.email} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="add-phone">Phone</Label>
+                  <Input 
+                    id="add-phone" 
+                    placeholder="Enter customer phone" 
+                    value={addCustomerData.phone} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, phone: e.target.value })}
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="add-phone">Phone</Label>
-                <Input 
-                  id="add-phone" 
-                  placeholder="Enter customer phone" 
-                  value={addCustomerData.phone} 
-                  onChange={(e) => setAddCustomerData({ ...addCustomerData, phone: e.target.value })}
-                />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="add-membership">Membership Type *</Label>
+                  <Select value={addCustomerData.membershipType} onValueChange={(value) => setAddCustomerData({ ...addCustomerData, membershipType: value })}>
+                    <SelectTrigger id="add-membership">
+                      <SelectValue placeholder="Select membership type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FULL_ADULT">Full Adult Membership</SelectItem>
+                      <SelectItem value="WEEKEND_ADULT">Weekend Adult Membership</SelectItem>
+                      <SelectItem value="FULL_UNDER18">Full Youth Membership</SelectItem>
+                      <SelectItem value="WEEKEND_UNDER18">Weekend Youth Membership</SelectItem>
+                      <SelectItem value="WOMENS_CLASSES">Women's Classes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="add-customPrice">Custom Monthly Price (£) *</Label>
+                  <Input 
+                    id="add-customPrice" 
+                    type="number" 
+                    step="0.01"
+                    placeholder="e.g. 45.00" 
+                    value={addCustomerData.customPrice} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, customPrice: e.target.value })}
+                    required
+                  />
+                </div>
               </div>
-              <div>
-                <Label htmlFor="add-membership">Membership Type *</Label>
-                <Select onValueChange={(value) => setAddCustomerData({ ...addCustomerData, membershipType: value })}>
-                  <SelectTrigger id="add-membership">
-                    <SelectValue placeholder="Select membership type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FULL_ADULT">Full Adult Membership</SelectItem>
-                    <SelectItem value="WEEKEND_ADULT">Weekend Adult Membership</SelectItem>
-                    <SelectItem value="FULL_UNDER18">Full Youth Membership</SelectItem>
-                    <SelectItem value="WEEKEND_UNDER18">Weekend Youth Membership</SelectItem>
-                    <SelectItem value="WOMENS_CLASSES">Women's Classes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="add-customPrice">Custom Monthly Price (£) *</Label>
-                <Input 
-                  id="add-customPrice" 
-                  type="number" 
-                  step="0.01"
-                  placeholder="e.g. 45.00" 
-                  value={addCustomerData.customPrice} 
-                  onChange={(e) => setAddCustomerData({ ...addCustomerData, customPrice: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="add-startDate">Start Date (1st of month) *</Label>
-                <Input 
-                  id="add-startDate" 
-                  type="month"
-                  value={addCustomerData.startDate ? addCustomerData.startDate.substring(0, 7) : ''}
-                  onChange={(e) => setAddCustomerData({ ...addCustomerData, startDate: e.target.value + '-01' })}
-                  required
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Customer will be charged starting from the 1st of the selected month
-                </p>
-              </div>
-              <div>
-                <Label htmlFor="add-dateOfBirth">Date of Birth</Label>
-                <Input 
-                  id="add-dateOfBirth" 
-                  type="date"
-                  value={addCustomerData.dateOfBirth} 
-                  onChange={(e) => setAddCustomerData({ ...addCustomerData, dateOfBirth: e.target.value })}
-                />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="add-startDate">Start Month *</Label>
+                  <Select 
+                    value={addCustomerData.startDate ? addCustomerData.startDate.substring(0, 7) : ''} 
+                    onValueChange={(value) => setAddCustomerData({ ...addCustomerData, startDate: value + '-01' })}
+                  >
+                    <SelectTrigger id="add-startDate">
+                      <SelectValue placeholder="Select start month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(() => {
+                        const months = []
+                        const currentDate = new Date()
+                        for (let i = 0; i < 12; i++) {
+                          const futureDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i + 1, 1)
+                          const yearMonth = futureDate.toISOString().substring(0, 7)
+                          const displayText = futureDate.toLocaleDateString('en-GB', { 
+                            year: 'numeric', 
+                            month: 'long' 
+                          })
+                          months.push(
+                            <SelectItem key={yearMonth} value={yearMonth}>
+                              {displayText}
+                            </SelectItem>
+                          )
+                        }
+                        return months
+                      })()}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Customer will be charged starting from the 1st of the selected month
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="add-dateOfBirth">Date of Birth</Label>
+                  <Input 
+                    id="add-dateOfBirth" 
+                    type="date"
+                    value={addCustomerData.dateOfBirth} 
+                    onChange={(e) => setAddCustomerData({ ...addCustomerData, dateOfBirth: e.target.value })}
+                  />
+                </div>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
