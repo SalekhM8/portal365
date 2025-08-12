@@ -132,12 +132,14 @@ export default function MembershipPage() {
                 <h3 className="font-semibold text-blue-300">Current Plan Benefits</h3>
               </div>
               <div className="space-y-2">
-                {currentMembership.features.map((feature: string, index: number) => (
+                {currentMembership.type && MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.features?.map((feature: string, index: number) => (
                   <div key={index} className="flex items-center gap-2 text-sm text-white/80">
                     <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
                     <span>{feature}</span>
                   </div>
-                ))}
+                )) || (
+                  <p className="text-white/60 text-sm">No features available for this membership type.</p>
+                )}
               </div>
             </div>
           )}
