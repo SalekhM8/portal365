@@ -181,7 +181,7 @@ function RegisterDetailsContent() {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold leading-tight">
-                Join <span className="bg-gradient-to-r from-red-400 to-pink-400 bg-clip-text text-transparent">{currentBusiness.name}</span>
+                Join <span className="bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent">{currentBusiness.name}</span>
               </h1>
               <p className="text-white/70 mt-1">{currentPlan.displayName} Membership</p>
             </div>
@@ -406,7 +406,7 @@ function RegisterDetailsContent() {
               </CardHeader>
               <CardContent className="p-6 pt-0 space-y-6">
                 <div className="text-center space-y-2">
-                  <Badge className="bg-gradient-to-r from-red-500 to-pink-500 text-white border-0">
+                  <Badge className="bg-gradient-to-r from-red-500 to-red-700 text-white border-0">
                     <Crown className="h-3 w-3 mr-1" />
                     {currentPlan.displayName}
                   </Badge>
