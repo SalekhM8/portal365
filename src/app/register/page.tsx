@@ -65,8 +65,8 @@ function RegisterContent() {
               <ArrowLeft className="h-4 w-4" />
               Back to Portal365
             </Link>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-tight">
-              Choose a <span className="bg-gradient-to-r from-red-400 to-pink-400 bg-clip-text text-transparent">Business</span> to Join
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-tight text-center">
+              Choose a <span className="bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent">Business</span> to Join
             </h1>
             <p className="text-lg text-white/70 max-w-2xl mx-auto">
               Select which business you'd like to become a member of
@@ -129,8 +129,8 @@ function RegisterContent() {
                   <currentBusiness.icon className="h-6 w-6" />
                 </div>
                 <div>
-                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-tight">
-                    Join <span className="bg-gradient-to-r from-red-400 to-pink-400 bg-clip-text text-transparent">{currentBusiness.name}</span>
+                  <h1 className="text-2xl sm:text-3xl font-bold leading-tight">
+                    Join <span className="bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent">{currentBusiness.name}</span>
                   </h1>
                   <p className="text-lg text-white/70 mt-2">{currentBusiness.description}</p>
                 </div>
@@ -153,12 +153,12 @@ function RegisterContent() {
                 <Link key={index} href={`/register/details?business=${selectedBusiness}&plan=${membership.type}`}>
                   <Card 
                     className={`group bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-500 cursor-pointer backdrop-blur-sm h-full ${
-                      membership.popular ? 'ring-2 ring-gradient-to-r ring-red-400/50 relative' : ''
+                      membership.popular ? 'ring-2 ring-red-500/50 relative' : ''
                     }`}
                   >
                     {membership.popular && (
                       <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                        <Badge className="bg-gradient-to-r from-red-500 to-pink-500 text-white border-0 px-4 py-1">
+                        <Badge className="bg-gradient-to-r from-red-500 to-red-700 text-white border-0 px-4 py-1">
                           <Crown className="h-3 w-3 mr-1" />
                           Most Popular
                         </Badge>
