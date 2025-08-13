@@ -139,14 +139,20 @@ export default function Home() {
           {/* Aura Logo */}
           <div className="pt-8 pb-4">
             <div className="flex justify-center">
-              <Image
-                src="/images/auralogo.png"
-                alt="Aura MMA Logo"
-                width={200}
-                height={200}
-                className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 object-contain"
-                priority
-              />
+              <div className="relative p-8 rounded-2xl bg-gradient-to-br from-white/15 via-white/10 to-white/5 backdrop-blur-sm border border-white/10 shadow-2xl">
+                {/* Subtle inner glow effect */}
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent"></div>
+                <div className="relative">
+                  <Image
+                    src="/images/auralogo.png"
+                    alt="Aura MMA Logo"
+                    width={200}
+                    height={200}
+                    className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 object-contain drop-shadow-xl"
+                    priority
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
