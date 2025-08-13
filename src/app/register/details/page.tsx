@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, ArrowLeft, Dumbbell, Heart, Crown, ShieldCheck, User, Mail, Phone, Calendar } from 'lucide-react'
+import { Loader2, ArrowLeft, Dumbbell, Heart, Crown, ShieldCheck, User, Mail, Phone, Calendar, ArrowRight, X } from 'lucide-react'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
@@ -37,6 +37,7 @@ function RegisterDetailsContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [acceptedWaiver, setAcceptedWaiver] = useState(false)
+  const [showWaiverModal, setShowWaiverModal] = useState(false)
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -345,41 +346,53 @@ function RegisterDetailsContent() {
 
                   {/* Terms and Conditions */}
                   <div className="space-y-4 pt-4 border-t border-white/10">
-                    <div className="flex items-start gap-3">
+                    {/* Terms & Conditions and Liability Waiver */}
+                    <div className="flex items-start space-x-3 p-4 bg-white/5 border border-white/10 rounded-lg">
                       <Checkbox
                         id="waiver"
                         checked={acceptedWaiver}
                         onCheckedChange={(checked) => setAcceptedWaiver(checked as boolean)}
-                        className="border-white/30 data-[state=checked]:bg-white data-[state=checked]:text-black"
+                        className="mt-1"
                       />
                       <Label htmlFor="waiver" className="text-sm text-white/80 leading-relaxed">
-                        I accept the{' '}
-                        <Link href="/terms" className="text-white hover:underline font-medium">
+                        I acknowledge that I have read and agree to the{' '}
+                        <button
+                          type="button"
+                          onClick={() => setShowWaiverModal(true)}
+                          className="text-white hover:underline font-medium underline"
+                        >
                           Terms & Conditions
-                        </Link>{' '}
-                        and{' '}
-                        <Link href="/waiver" className="text-white hover:underline font-medium">
+                        </button>
+                        {' '}and{' '}
+                        <button
+                          type="button"
+                          onClick={() => setShowWaiverModal(true)}
+                          className="text-white hover:underline font-medium underline"
+                        >
                           Liability Waiver
-                        </Link>
-                        . I understand the risks involved in martial arts training.
+                        </button>
+                        . I understand the risks involved in martial arts training and agree to participate at my own risk.
                       </Label>
                     </div>
-                  </div>
 
-                  <Button
-                    type="submit"
-                    disabled={loading || !acceptedWaiver}
-                    className="w-full bg-white text-black hover:bg-white/90 font-semibold text-base py-6 rounded-xl transition-all duration-300 disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                        Creating Account...
-                      </>
-                    ) : (
-                      'Complete Registration'
-                    )}
-                  </Button>
+                    <Button
+                      type="submit"
+                      className="w-full bg-white text-black hover:bg-white/90 font-semibold py-6 text-base"
+                      disabled={loading || !acceptedWaiver}
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Creating Account...
+                        </>
+                      ) : (
+                        <>
+                          Complete Registration
+                          <ArrowRight className="h-5 w-5 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -425,6 +438,112 @@ function RegisterDetailsContent() {
           </div>
         </div>
       </div>
+
+      {/* Waiver & Terms Modal */}
+      {showWaiverModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-black border border-white/20 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <h2 className="text-xl font-bold text-white">Terms & Conditions and Liability Waiver</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowWaiverModal(false)}
+                className="text-white hover:bg-white/10"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="overflow-y-auto max-h-[calc(90vh-180px)] p-6 space-y-6 text-white/80">
+              {/* Terms & Conditions Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Terms & Conditions</h3>
+                
+                <div className="space-y-3 text-sm leading-relaxed">
+                  <p><strong className="text-white">1. Membership Agreement:</strong> By joining Aura MMA, you agree to abide by all gym rules, policies, and procedures. Your membership is non-transferable and subject to the terms outlined in this agreement.</p>
+                  
+                  <p><strong className="text-white">2. Payment Terms:</strong> Monthly membership fees are due on the 1st of each month. Failed payments may result in suspension of membership privileges. All fees are non-refundable unless otherwise specified.</p>
+                  
+                  <p><strong className="text-white">3. Facility Usage:</strong> Members must follow all posted rules and instructions from staff. Aura MMA reserves the right to revoke membership privileges for violation of rules or inappropriate behavior.</p>
+                  
+                  <p><strong className="text-white">4. Equipment and Property:</strong> Members are responsible for any damage to equipment or property caused by their actions. Personal belongings are left at your own risk.</p>
+                  
+                  <p><strong className="text-white">5. Code of Conduct:</strong> All members must maintain respectful behavior towards staff and other members. Harassment, discrimination, or aggressive behavior will not be tolerated.</p>
+                </div>
+              </div>
+
+              {/* Liability Waiver Section */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Liability Waiver & Risk Acknowledgment</h3>
+                
+                <div className="space-y-3 text-sm leading-relaxed">
+                  <p><strong className="text-white">ASSUMPTION OF RISK:</strong> I understand that martial arts training involves inherent risks including but not limited to:</p>
+                  
+                  <ul className="list-disc list-inside ml-4 space-y-2">
+                    <li>Physical injury including cuts, bruises, sprains, fractures, and concussions</li>
+                    <li>Muscle strains, joint injuries, and overexertion</li>
+                    <li>Contact injuries from sparring, grappling, and training exercises</li>
+                    <li>Equipment-related injuries from training apparatus</li>
+                    <li>Injuries resulting from falls or unexpected contact</li>
+                  </ul>
+                  
+                  <p><strong className="text-white">RELEASE OF LIABILITY:</strong> I voluntarily assume all risks associated with martial arts training and release Aura MMA, its owners, instructors, staff, and affiliates from any and all liability for injuries or damages that may occur during my participation.</p>
+                  
+                  <p><strong className="text-white">MEDICAL CLEARANCE:</strong> I confirm that I am physically capable of participating in martial arts activities. I will inform instructors of any medical conditions, injuries, or limitations that may affect my training.</p>
+                  
+                  <p><strong className="text-white">INDEMNIFICATION:</strong> I agree to indemnify and hold harmless Aura MMA from any claims, demands, or lawsuits arising from my participation in training activities.</p>
+                  
+                  <p><strong className="text-white">EMERGENCY MEDICAL TREATMENT:</strong> I authorize Aura MMA staff to seek emergency medical treatment on my behalf if I am unable to do so myself during training.</p>
+                  
+                  <p><strong className="text-white">PHOTOGRAPHY/VIDEO CONSENT:</strong> I consent to the use of photographs or videos taken during training for promotional purposes by Aura MMA.</p>
+                </div>
+              </div>
+
+              {/* Safety Guidelines */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Safety Guidelines</h3>
+                
+                <div className="space-y-3 text-sm leading-relaxed">
+                  <p><strong className="text-white">General Safety:</strong></p>
+                  <ul className="list-disc list-inside ml-4 space-y-1">
+                    <li>Always warm up properly before training</li>
+                    <li>Follow instructor guidance and training protocols</li>
+                    <li>Report injuries immediately to staff</li>
+                    <li>Maintain proper hygiene and cleanliness</li>
+                    <li>Respect personal boundaries of training partners</li>
+                    <li>No training under the influence of alcohol or drugs</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between p-6 border-t border-white/10 bg-white/5">
+              <p className="text-sm text-white/60">
+                Please read all terms carefully before accepting.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowWaiverModal(false)}
+                  className="border-white/20 text-white hover:bg-white/10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    setAcceptedWaiver(true)
+                    setShowWaiverModal(false)
+                  }}
+                  className="bg-white text-black hover:bg-white/90"
+                >
+                  Accept Terms & Waiver
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -129,15 +129,29 @@ export default function Home() {
           
           <div className="space-y-6 max-w-4xl mx-auto">
             <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-tight">
-              Welcome to <span className="bg-gradient-to-r from-red-400 to-pink-400 bg-clip-text text-transparent">Aura MMA</span>
+              Welcome to <span className="bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent">Aura MMA</span>
             </h1>
             <p className="text-lg sm:text-xl text-white/70 max-w-2xl mx-auto leading-relaxed">
               A collaboration by friends to spread the martial arts lifestyle in the community
             </p>
           </div>
 
+          {/* Aura Logo */}
+          <div className="pt-8 pb-4">
+            <div className="flex justify-center">
+              <Image
+                src="/images/auralogo.png"
+                alt="Aura MMA Logo"
+                width={200}
+                height={200}
+                className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 object-contain"
+                priority
+              />
+            </div>
+          </div>
+
           {/* Tagline */}
-          <div className="pt-8">
+          <div className="pt-4">
             <p className="text-base sm:text-lg font-medium text-white/90">
               One of the UK's top martial arts facilities
             </p>
@@ -150,7 +164,7 @@ export default function Home() {
         <div className="container mx-auto px-4 sm:px-6 space-y-12">
           <div className="text-center space-y-6">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-tight">
-              Choose Your <span className="bg-gradient-to-r from-red-400 to-pink-400 bg-clip-text text-transparent">Fitness Journey</span>
+              Choose Your <span className="bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent">Fitness Journey</span>
             </h2>
             <p className="text-lg sm:text-xl text-white/70 max-w-3xl mx-auto leading-relaxed">
               Each membership plan is designed to bring you closer to your combat sport goals
