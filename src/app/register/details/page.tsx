@@ -18,7 +18,7 @@ const businessConfigs = {
   aura_mma: {
     name: 'Aura MMA',
     icon: Dumbbell,
-    color: 'bg-gradient-to-br from-red-500 to-red-600',
+    color: 'bg-gradient-to-br from-red-500 to-red-700',
     description: 'Premier martial arts training facility'
   },
   aura_womens: {
@@ -166,7 +166,7 @@ function RegisterDetailsContent() {
       {/* Background Elements */}
       <div className="absolute inset-0">
         <div className="absolute top-20 left-10 w-72 h-72 bg-red-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-pink-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-red-700/10 rounded-full blur-3xl"></div>
       </div>
 
       <div className="relative container mx-auto px-4 sm:px-6 py-8 max-w-4xl">
