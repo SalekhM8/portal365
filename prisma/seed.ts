@@ -162,7 +162,7 @@ async function main() {
         serviceId: martialArtsService.id,
         name: 'Masters Program - Technique Focus',
         description: 'Specialized training for practitioners over 30 with focus on technique and controlled intensity',
-        instructorName: 'Jules',
+        instructorName: 'Top Black Belt',
         dayOfWeek: 2, // Tuesday
         startTime: '21:30',
         endTime: '22:30',
@@ -175,7 +175,7 @@ async function main() {
         serviceId: martialArtsService.id,
         name: 'Masters Program - Sparring & Flow',
         description: 'Controlled sparring and flow training for Masters members',
-        instructorName: 'Jules',
+        instructorName: 'Top Black Belt',
         dayOfWeek: 4, // Thursday
         startTime: '21:30',
         endTime: '22:30',

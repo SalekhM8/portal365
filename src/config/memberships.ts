@@ -23,19 +23,19 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
   WEEKEND_ADULT: {
     key: 'WEEKEND_ADULT',
     name: 'Weekend Adult',
-    displayName: 'Weekend Warrior',
+    displayName: 'Weekend Only Membership',
     monthlyPrice: 55,
     description: 'Perfect for busy schedules',
-    features: ['Weekend access (Fri, Sat & Sun)', 'BJJ, MMA, Boxing, Muay Thai', 'Equipment access', 'No contract'],
+    features: ['Weekend access (Fri, Sat & Sun)', 'BJJ, MMA, Striking', 'Equipment access'],
     preferredEntities: ['aura_mma']
   },
   WEEKEND_UNDER18: {
     key: 'WEEKEND_UNDER18',
-    name: 'Weekend Youth',
-    displayName: 'Weekend Youth',
+    name: 'Kids Weekend',
+    displayName: 'Kids Weekend (Under 14s)',
     monthlyPrice: 40,
-    description: 'For young warriors under 18',
-    features: ['Weekend access (Fri, Sat & Sun)', 'Youth martial arts classes', 'Equipment access', 'Parental updates'],
+    description: 'For young warriors under 14',
+    features: ['Weekend access (Sat & Sun only)', 'Kids martial arts classes', 'Parental updates'],
     preferredEntities: ['aura_mma']
   },
   FULL_ADULT: {
@@ -44,16 +44,16 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     displayName: 'Full Access',
     monthlyPrice: 75,
     description: 'Complete training freedom',
-    features: ['7 days/week access', 'All martial arts classes', 'Equipment access', 'Priority access'],
+    features: ['7 days/week access', 'BJJ, MMA, Striking', 'Equipment access', 'Priority access'],
     preferredEntities: ['aura_mma']
   },
   FULL_UNDER18: {
     key: 'FULL_UNDER18',
-    name: 'Full Youth Access',
-    displayName: 'Full Youth Access',
+    name: 'Kids Unlimited',
+    displayName: 'Kids Unlimited (Under 14s)',
     monthlyPrice: 55,
-    description: 'Complete youth program',
-    features: ['7 days/week access', 'Youth martial arts classes', 'Equipment access', 'Mentorship program'],
+    description: 'Complete kids program',
+    features: ['7 days/week access', 'Kids martial arts classes', 'Mentorship program'],
     preferredEntities: ['aura_mma']
   },
   MASTERS: {
@@ -62,7 +62,7 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     displayName: 'Masters Program',
     monthlyPrice: 45,
     description: 'Specialized program for over 30s',
-    features: ['Tuesday & Thursday classes at 9:30pm', 'Taught by Jules', 'Age-appropriate training', 'Focus on technique over intensity'],
+    features: ['Exclusively Tuesday & Thursday classes at 9:30pm', 'Taught by top black belt', 'Age-appropriate training', 'Focus on technique over intensity'],
     preferredEntities: ['aura_mma']
   },
   PERSONAL_TRAINING: {
@@ -80,7 +80,7 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     displayName: "Women's Program",
     monthlyPrice: 25,
     description: 'Women-only fitness space',
-    features: ['Women-only classes', 'Self-defense training', 'Supportive community', 'Specialized programs'],
+    features: ['Women-only classes', 'Qualified female instructor', 'Self-defense training', 'Supportive community', 'Specialized programs'],
     preferredEntities: ['aura_womens']
   },
   WELLNESS_PACKAGE: {

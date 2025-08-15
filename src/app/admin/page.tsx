@@ -1100,12 +1100,12 @@ export default function AdminDashboard() {
                       <SelectValue placeholder="Select membership type" className="text-white/50" />
                     </SelectTrigger>
                     <SelectContent className="bg-black border-white/20">
-                      <SelectItem value="FULL_ADULT" className="text-white hover:bg-white/10">Full Adult Membership</SelectItem>
-                      <SelectItem value="WEEKEND_ADULT" className="text-white hover:bg-white/10">Weekend Adult Membership</SelectItem>
-                      <SelectItem value="FULL_UNDER18" className="text-white hover:bg-white/10">Full Youth Membership</SelectItem>
-                      <SelectItem value="WEEKEND_UNDER18" className="text-white hover:bg-white/10">Weekend Youth Membership</SelectItem>
-                      <SelectItem value="MASTERS" className="text-white hover:bg-white/10">Masters Program (30+)</SelectItem>
-                      <SelectItem value="WOMENS_CLASSES" className="text-white hover:bg-white/10">Women's Classes</SelectItem>
+                                        <SelectItem value="FULL_ADULT" className="text-white hover:bg-white/10">Full Adult Membership</SelectItem>
+                  <SelectItem value="WEEKEND_ADULT" className="text-white hover:bg-white/10">Weekend Only Membership</SelectItem>
+                  <SelectItem value="FULL_UNDER18" className="text-white hover:bg-white/10">Kids Unlimited (Under 14s)</SelectItem>
+                  <SelectItem value="WEEKEND_UNDER18" className="text-white hover:bg-white/10">Kids Weekend (Under 14s)</SelectItem>
+                  <SelectItem value="MASTERS" className="text-white hover:bg-white/10">Masters Program (30+)</SelectItem>
+                  <SelectItem value="WOMENS_CLASSES" className="text-white hover:bg-white/10">Women's Classes</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

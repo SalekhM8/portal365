@@ -28,9 +28,9 @@ const businesses = [
     offerings: ['World class grappling', 'Elite level striking coaching', 'Professional MMA fighters and coaches', 'National Champions Wrestling coach', 'World class Strength and Conditioning Facility'],
     membershipTypes: [
       { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true },
-      { name: 'Weekend Warrior', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false },
-      { name: 'Full Youth', price: MEMBERSHIP_PLANS.FULL_UNDER18.monthlyPrice, popular: false },
-      { name: 'Weekend Youth', price: MEMBERSHIP_PLANS.WEEKEND_UNDER18.monthlyPrice, popular: false },
+      { name: 'Weekend Only', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false },
+      { name: 'Kids Unlimited (Under 14s)', price: MEMBERSHIP_PLANS.FULL_UNDER18.monthlyPrice, popular: false },
+      { name: 'Kids Weekend (Under 14s)', price: MEMBERSHIP_PLANS.WEEKEND_UNDER18.monthlyPrice, popular: false },
       { name: 'Masters Program (30+)', price: MEMBERSHIP_PLANS.MASTERS.monthlyPrice, popular: false }
     ]
   },
@@ -40,9 +40,9 @@ const businesses = [
     description: 'Top calibre womens muay thai training',
     icon: Heart,
     color: 'bg-gradient-to-br from-pink-500 to-pink-600',
-    offerings: ['Muay Thai Only', 'Women-Only Classes', 'Elite Female Coaching', 'Technique-Focused Training'],
+    offerings: ['Muay Thai Only', 'Women-Only Classes', 'Qualified Female Instructor', 'Technique-Focused Training'],
     membershipTypes: [
-      { name: "Women's Muay Thai", price: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice, popular: true }
+      { name: "Women's Program", price: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice, popular: true }
     ]
   }
 ];
@@ -170,7 +170,7 @@ export default function Home() {
         <div className="container mx-auto px-4 sm:px-6 space-y-12">
           <div className="text-center space-y-6">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold leading-tight">
-              Choose Your <span className="bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent">Fitness Journey</span>
+              Choose Your <span className="bg-gradient-to-r from-red-500 to-red-700 bg-clip-text text-transparent">Combat Journey</span>
             </h2>
             <p className="text-lg sm:text-xl text-white/70 max-w-3xl mx-auto leading-relaxed">
               Each membership plan is designed to bring you closer to your combat sport goals

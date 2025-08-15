@@ -9,7 +9,27 @@ import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, ArrowLeft, Dumbbell, Heart, Crown, ShieldCheck, User, Mail, Phone, Calendar, ArrowRight, X } from 'lucide-react'
+import { 
+  Loader2, 
+  ArrowLeft, 
+  Dumbbell, 
+  Heart, 
+  Crown, 
+  ShieldCheck, 
+  User, 
+  Mail, 
+  Phone, 
+  Calendar, 
+  ArrowRight, 
+  X,
+  CheckCircle,
+  ArrowDown,
+  Clock,
+  Scale,
+  Users,
+  AlertTriangle,
+  Shield
+} from 'lucide-react'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
@@ -38,6 +58,8 @@ function RegisterDetailsContent() {
   const [error, setError] = useState('')
   const [acceptedWaiver, setAcceptedWaiver] = useState(false)
   const [showWaiverModal, setShowWaiverModal] = useState(false)
+  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false)
+  const [acceptButtonEnabled, setAcceptButtonEnabled] = useState(false)
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -439,106 +461,322 @@ function RegisterDetailsContent() {
         </div>
       </div>
 
-      {/* Waiver & Terms Modal */}
+      {/* Enhanced Terms & Conditions Modal */}
       {showWaiverModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-black border border-white/20 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">Terms & Conditions and Liability Waiver</h2>
+          <div className="bg-gradient-to-br from-gray-900 to-black border border-white/20 rounded-xl shadow-2xl max-w-5xl w-full max-h-[95vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/10 bg-gradient-to-r from-red-600/10 to-pink-600/10">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Terms & Conditions</h2>
+                <p className="text-sm text-white/70 mt-1">Please read all sections carefully before proceeding</p>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setShowWaiverModal(false)}
-                className="text-white hover:bg-white/10"
+                onClick={() => {
+                  setShowWaiverModal(false)
+                  setHasScrolledToBottom(false)
+                  setAcceptButtonEnabled(false)
+                }}
+                className="text-white hover:bg-white/10 rounded-full"
               >
                 <X className="h-5 w-5" />
               </Button>
             </div>
             
-            <div className="overflow-y-auto max-h-[calc(90vh-180px)] p-6 space-y-6 text-white/80">
-              {/* Terms & Conditions Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Terms & Conditions</h3>
-                
-                <div className="space-y-3 text-sm leading-relaxed">
-                  <p><strong className="text-white">1. Membership Agreement:</strong> By joining Aura MMA, you agree to abide by all gym rules, policies, and procedures. Your membership is non-transferable and subject to the terms outlined in this agreement.</p>
-                  
-                  <p><strong className="text-white">2. Payment Terms:</strong> Monthly membership fees are due on the 1st of each month. Failed payments may result in suspension of membership privileges. All fees are non-refundable unless otherwise specified.</p>
-                  
-                  <p><strong className="text-white">3. Facility Usage:</strong> Members must follow all posted rules and instructions from staff. Aura MMA reserves the right to revoke membership privileges for violation of rules or inappropriate behavior.</p>
-                  
-                  <p><strong className="text-white">4. Equipment and Property:</strong> Members are responsible for any damage to equipment or property caused by their actions. Personal belongings are left at your own risk.</p>
-                  
-                  <p><strong className="text-white">5. Code of Conduct:</strong> All members must maintain respectful behavior towards staff and other members. Harassment, discrimination, or aggressive behavior will not be tolerated.</p>
+            {/* Scrollable Content */}
+            <div 
+              className="overflow-y-auto max-h-[calc(95vh-200px)] p-8 space-y-8 text-white/90 custom-scrollbar"
+              onScroll={(e) => {
+                const element = e.target as HTMLDivElement
+                const isAtBottom = element.scrollHeight - element.scrollTop === element.clientHeight
+                if (isAtBottom && !hasScrolledToBottom) {
+                  setHasScrolledToBottom(true)
+                  setTimeout(() => setAcceptButtonEnabled(true), 500) // Small delay for UX
+                }
+              }}
+              style={{
+                scrollbarWidth: 'thin',
+                scrollbarColor: '#ef4444 transparent'
+              }}
+            >
+              {/* Progress Indicator */}
+              <div className="sticky top-0 bg-gradient-to-r from-gray-900 to-black p-3 rounded-lg border border-white/10 mb-6">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-white/70">Reading Progress</span>
+                  <span className="text-white/70">Scroll to bottom to enable acceptance</span>
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-1 mt-2">
+                  <div 
+                    className={`h-1 rounded-full transition-all duration-300 ${
+                      hasScrolledToBottom ? 'bg-green-500 w-full' : 'bg-red-500 w-1/3'
+                    }`}
+                  />
                 </div>
               </div>
 
-              {/* Liability Waiver Section */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Liability Waiver & Risk Acknowledgment</h3>
-                
-                <div className="space-y-3 text-sm leading-relaxed">
-                  <p><strong className="text-white">ASSUMPTION OF RISK:</strong> I understand that martial arts training involves inherent risks including but not limited to:</p>
-                  
-                  <ul className="list-disc list-inside ml-4 space-y-2">
-                    <li>Physical injury including cuts, bruises, sprains, fractures, and concussions</li>
-                    <li>Muscle strains, joint injuries, and overexertion</li>
-                    <li>Contact injuries from sparring, grappling, and training exercises</li>
-                    <li>Equipment-related injuries from training apparatus</li>
-                    <li>Injuries resulting from falls or unexpected contact</li>
-                  </ul>
-                  
-                  <p><strong className="text-white">RELEASE OF LIABILITY:</strong> I voluntarily assume all risks associated with martial arts training and release Aura MMA, its owners, instructors, staff, and affiliates from any and all liability for injuries or damages that may occur during my participation.</p>
-                  
-                  <p><strong className="text-white">MEDICAL CLEARANCE:</strong> I confirm that I am physically capable of participating in martial arts activities. I will inform instructors of any medical conditions, injuries, or limitations that may affect my training.</p>
-                  
-                  <p><strong className="text-white">INDEMNIFICATION:</strong> I agree to indemnify and hold harmless Aura MMA from any claims, demands, or lawsuits arising from my participation in training activities.</p>
-                  
-                  <p><strong className="text-white">EMERGENCY MEDICAL TREATMENT:</strong> I authorize Aura MMA staff to seek emergency medical treatment on my behalf if I am unable to do so myself during training.</p>
-                  
-                  <p><strong className="text-white">PHOTOGRAPHY/VIDEO CONSENT:</strong> I consent to the use of photographs or videos taken during training for promotional purposes by Aura MMA.</p>
+              {/* 1. Terms & Conditions */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-3 pb-3 border-b border-red-500/30">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">1</div>
+                  <h3 className="text-xl font-bold text-white">Membership Terms & Conditions</h3>
                 </div>
-              </div>
-
-              {/* Safety Guidelines */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-white border-b border-white/10 pb-2">Safety Guidelines</h3>
                 
-                <div className="space-y-3 text-sm leading-relaxed">
-                  <p><strong className="text-white">General Safety:</strong></p>
-                  <ul className="list-disc list-inside ml-4 space-y-1">
-                    <li>Always warm up properly before training</li>
-                    <li>Follow instructor guidance and training protocols</li>
-                    <li>Report injuries immediately to staff</li>
-                    <li>Maintain proper hygiene and cleanliness</li>
-                    <li>Respect personal boundaries of training partners</li>
-                    <li>No training under the influence of alcohol or drugs</li>
-                  </ul>
+                <div className="space-y-5">
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-red-500">
+                    <h4 className="font-semibold text-white mb-2">1.1 Membership Agreement</h4>
+                    <p className="text-sm leading-relaxed">By joining Aura MMA, you enter into a legally binding agreement to abide by all gym rules, policies, and procedures. Your membership is personal, non-transferable, and subject to all terms outlined in this agreement.</p>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-orange-500">
+                    <h4 className="font-semibold text-white mb-2">1.2 Payment Terms & Admin Fees</h4>
+                    <ul className="text-sm leading-relaxed space-y-2">
+                      <li>• Monthly membership fees are due on the 1st of each month via automatic payment</li>
+                      <li>• Failed or declined payments may result in immediate suspension of membership privileges</li>
+                      <li>• <strong className="text-orange-300">Repeated payment failures (3+ consecutive failures) will incur a £50 administrative fee</strong></li>
+                      <li>• All membership fees are non-refundable unless otherwise specified in writing</li>
+                      <li>• Price changes require 30 days written notice</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-yellow-500">
+                    <h4 className="font-semibold text-white mb-2">1.3 Facility Usage & Conduct</h4>
+                    <ul className="text-sm leading-relaxed space-y-2">
+                      <li>• Members must follow all posted rules and instructions from qualified staff</li>
+                      <li>• Aura MMA reserves the right to revoke membership for rule violations or inappropriate behavior</li>
+                      <li>• Respectful behavior towards staff and members is mandatory at all times</li>
+                      <li>• Harassment, discrimination, or aggressive behavior will result in immediate termination</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-blue-500">
+                    <h4 className="font-semibold text-white mb-2">1.4 Equipment & Property Responsibility</h4>
+                    <ul className="text-sm leading-relaxed space-y-2">
+                      <li>• Members are financially responsible for any equipment damage caused by negligence</li>
+                      <li>• Personal belongings are stored at your own risk - Aura MMA accepts no liability</li>
+                      <li>• Lockers must be emptied daily; contents may be removed after 24 hours</li>
+                    </ul>
+                  </div>
+                </div>
+              </section>
+
+              {/* 2. Liability Waiver */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-3 pb-3 border-b border-red-500/30">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">2</div>
+                  <h3 className="text-xl font-bold text-white">Liability Waiver & Risk Acknowledgment</h3>
+                </div>
+
+                <div className="bg-red-500/10 border border-red-500/30 p-6 rounded-lg">
+                  <h4 className="font-semibold text-red-300 mb-3 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    IMPORTANT: Assumption of Risk
+                  </h4>
+                  <p className="text-sm leading-relaxed mb-4">
+                    I understand and acknowledge that martial arts training involves inherent and significant risks including but not limited to:
+                  </p>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <ul className="text-sm space-y-2">
+                      <li className="flex items-start gap-2">
+                        <div className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 flex-shrink-0"></div>
+                        Physical injuries including cuts, bruises, sprains, and fractures
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <div className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 flex-shrink-0"></div>
+                        Serious injuries including concussions and joint damage
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <div className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 flex-shrink-0"></div>
+                        Contact injuries from sparring and grappling
+                      </li>
+                    </ul>
+                    <ul className="text-sm space-y-2">
+                      <li className="flex items-start gap-2">
+                        <div className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 flex-shrink-0"></div>
+                        Equipment-related injuries and accidents
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <div className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 flex-shrink-0"></div>
+                        Muscle strains, overexertion, and cardiovascular stress
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <div className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 flex-shrink-0"></div>
+                        Falls, collisions, and unexpected contact
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-purple-500">
+                    <h4 className="font-semibold text-white mb-2">2.1 Complete Release of Liability</h4>
+                    <p className="text-sm leading-relaxed">I voluntarily assume ALL risks associated with martial arts training and completely release Aura MMA, its owners, instructors, staff, affiliates, and premises from any and all liability for injuries, damages, or losses that may occur during my participation, regardless of cause.</p>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-green-500">
+                    <h4 className="font-semibold text-white mb-2">2.2 Medical Clearance & Health Responsibility</h4>
+                    <ul className="text-sm leading-relaxed space-y-2">
+                      <li>• I confirm I am physically capable of participating in strenuous martial arts activities</li>
+                      <li>• I will immediately inform instructors of any medical conditions, injuries, or limitations</li>
+                      <li>• I am responsible for my own medical insurance and any resulting medical costs</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-pink-500">
+                    <h4 className="font-semibold text-white mb-2">2.3 Indemnification Agreement</h4>
+                    <p className="text-sm leading-relaxed">I agree to indemnify and hold harmless Aura MMA from any claims, demands, lawsuits, or legal actions arising from my participation in training activities, including attorney fees and court costs.</p>
+                  </div>
+                </div>
+              </section>
+
+              {/* 3. Safety & Operational Guidelines */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-3 pb-3 border-b border-red-500/30">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">3</div>
+                  <h3 className="text-xl font-bold text-white">Safety Guidelines & Policies</h3>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-emerald-500">
+                    <h4 className="font-semibold text-white mb-3">Training Safety Requirements</h4>
+                    <ul className="text-sm space-y-2">
+                      <li className="flex items-start gap-2">
+                        <Shield className="h-4 w-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                        Mandatory warm-up before all training sessions
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Shield className="h-4 w-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                        Follow all instructor guidance and protocols
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Shield className="h-4 w-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                        Report injuries immediately to staff
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Shield className="h-4 w-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                        Respect training partner boundaries
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-lg border-l-4 border-cyan-500">
+                    <h4 className="font-semibold text-white mb-3">Facility Policies</h4>
+                    <ul className="text-sm space-y-2">
+                      <li className="flex items-start gap-2">
+                        <Users className="h-4 w-4 text-cyan-400 mt-0.5 flex-shrink-0" />
+                        Maintain proper hygiene and cleanliness
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Users className="h-4 w-4 text-cyan-400 mt-0.5 flex-shrink-0" />
+                        No training under influence of substances
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Users className="h-4 w-4 text-cyan-400 mt-0.5 flex-shrink-0" />
+                        Photography/video consent for promotions
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <Users className="h-4 w-4 text-cyan-400 mt-0.5 flex-shrink-0" />
+                        Emergency medical treatment authorization
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </section>
+
+              {/* 4. Legal Acknowledgment */}
+              <section className="space-y-6">
+                <div className="flex items-center gap-3 pb-3 border-b border-red-500/30">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center text-white font-bold text-sm">4</div>
+                  <h3 className="text-xl font-bold text-white">Legal Acknowledgment</h3>
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/30 p-6 rounded-lg">
+                  <h4 className="font-semibold text-amber-300 mb-3 flex items-center gap-2">
+                    <Scale className="h-5 w-5" />
+                    Binding Agreement
+                  </h4>
+                  <p className="text-sm leading-relaxed">
+                    By accepting these terms, I acknowledge that I have read, understood, and agree to be legally bound by all conditions outlined above. 
+                    I confirm that I am of legal age to enter this agreement or have obtained proper parental/guardian consent. 
+                    This agreement shall remain in effect for the duration of my membership and any subsequent renewals.
+                  </p>
+                </div>
+              </section>
+
+              {/* Scroll Completion Indicator */}
+              <div className="text-center py-8">
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-500 ${
+                  hasScrolledToBottom 
+                    ? 'bg-green-500/20 border border-green-500/50 text-green-300' 
+                    : 'bg-red-500/20 border border-red-500/50 text-red-300'
+                }`}>
+                  {hasScrolledToBottom ? (
+                    <>
+                      <CheckCircle className="h-5 w-5" />
+                      <span className="text-sm font-medium">Terms reviewed completely</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDown className="h-5 w-5 animate-bounce" />
+                      <span className="text-sm font-medium">Please scroll to bottom to continue</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
             
-            <div className="flex items-center justify-between p-6 border-t border-white/10 bg-white/5">
-              <p className="text-sm text-white/60">
-                Please read all terms carefully before accepting.
-              </p>
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowWaiverModal(false)}
-                  className="border-white/20 text-white hover:bg-white/10"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => {
-                    setAcceptedWaiver(true)
-                    setShowWaiverModal(false)
-                  }}
-                  className="bg-white text-black hover:bg-white/90"
-                >
-                  Accept Terms & Waiver
-                </Button>
+            {/* Enhanced Footer */}
+            <div className="border-t border-white/10 bg-gradient-to-r from-gray-900 to-black p-6">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-center sm:text-left">
+                  <p className="text-sm text-white/60">
+                    These terms are legally binding and protect both parties.
+                  </p>
+                  <p className="text-xs text-white/40 mt-1">
+                    Last updated: {new Date().toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowWaiverModal(false)
+                      setHasScrolledToBottom(false)
+                      setAcceptButtonEnabled(false)
+                    }}
+                    className="border-white/20 text-white hover:bg-white/10"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setAcceptedWaiver(true)
+                      setShowWaiverModal(false)
+                      setHasScrolledToBottom(false)
+                      setAcceptButtonEnabled(false)
+                    }}
+                    disabled={!acceptButtonEnabled}
+                    className={`transition-all duration-300 ${
+                      acceptButtonEnabled
+                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                        : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    {acceptButtonEnabled ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Accept Terms & Waiver
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="h-4 w-4 mr-2" />
+                        Read Terms First
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

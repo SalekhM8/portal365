@@ -185,7 +185,7 @@ function getMembershipDetails(membershipType: string) {
       monthlyPrice: 55,
       setupFee: 0,
       accessPermissions: {
-        martialArts: ['bjj', 'boxing', 'muay_thai'],
+        martialArts: ['bjj', 'striking'],
         personalTraining: false,
         womensClasses: false,
         wellness: false
@@ -200,14 +200,14 @@ function getMembershipDetails(membershipType: string) {
       monthlyPrice: 40,
       setupFee: 0,
       accessPermissions: {
-        martialArts: ['bjj', 'boxing'],
+        martialArts: ['kids_classes'],
         personalTraining: false,
         womensClasses: false,
         wellness: false
       },
       scheduleAccess: {
         weekdays: false,
-        weekends: true, // Fri-Sun
+        weekends: true, // Sat-Sun only for kids
         timeSlots: ['morning', 'afternoon']
       }
     },
@@ -215,7 +215,7 @@ function getMembershipDetails(membershipType: string) {
       monthlyPrice: 75,
       setupFee: 0,
       accessPermissions: {
-        martialArts: ['bjj', 'boxing', 'muay_thai', 'mma'],
+        martialArts: ['bjj', 'striking', 'mma'],
         personalTraining: false,
         womensClasses: false,
         wellness: false
@@ -230,7 +230,7 @@ function getMembershipDetails(membershipType: string) {
       monthlyPrice: 55,
       setupFee: 0,
       accessPermissions: {
-        martialArts: ['bjj', 'boxing'],
+        martialArts: ['kids_classes'],
         personalTraining: false,
         womensClasses: false,
         wellness: false
@@ -245,7 +245,7 @@ function getMembershipDetails(membershipType: string) {
       monthlyPrice: 45,
       setupFee: 0,
       accessPermissions: {
-        martialArts: ['bjj', 'boxing', 'muay_thai'],
+        martialArts: ['bjj', 'striking'],
         personalTraining: false,
         womensClasses: false,
         wellness: false
@@ -253,7 +253,7 @@ function getMembershipDetails(membershipType: string) {
       scheduleAccess: {
         weekdays: true,
         weekends: false,
-        timeSlots: ['evening'] // 9:30pm Tuesday & Thursday
+        timeSlots: ['evening'] // 9:30pm exclusively Tuesday & Thursday
       }
     },
     'WOMENS_CLASSES': {
