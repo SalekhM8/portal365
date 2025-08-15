@@ -59,8 +59,6 @@ function RegisterDetailsContent() {
   const [error, setError] = useState('')
   const [acceptedWaiver, setAcceptedWaiver] = useState(false)
   const [showWaiverModal, setShowWaiverModal] = useState(false)
-  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false)
-  const [acceptButtonEnabled, setAcceptButtonEnabled] = useState(false)
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -375,7 +373,6 @@ function RegisterDetailsContent() {
                           id="waiver"
                           checked={acceptedWaiver}
                           onCheckedChange={(checked) => setAcceptedWaiver(checked as boolean)}
-                          disabled={!hasScrolledToBottom}
                         />
                         <Label htmlFor="waiver" className="text-sm text-white">
                           I agree to the terms and conditions and liability waiver
@@ -476,11 +473,7 @@ function RegisterDetailsContent() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => {
-                  setShowWaiverModal(false)
-                  setHasScrolledToBottom(false)
-                  setAcceptButtonEnabled(false)
-                }}
+                onClick={() => setShowWaiverModal(false)}
                 className="text-white hover:bg-white/10 rounded-full"
               >
                 <X className="h-5 w-5" />
@@ -488,35 +481,7 @@ function RegisterDetailsContent() {
             </div>
             
             {/* Scrollable Content */}
-            <div 
-              className="overflow-y-auto max-h-[calc(95vh-200px)] p-8 space-y-8 text-white/90 custom-scrollbar"
-              onScroll={(e) => {
-                const element = e.target as HTMLDivElement
-                const isAtBottom = element.scrollHeight - element.scrollTop === element.clientHeight
-                if (isAtBottom && !hasScrolledToBottom) {
-                  setHasScrolledToBottom(true)
-                  setTimeout(() => setAcceptButtonEnabled(true), 500) // Small delay for UX
-                }
-              }}
-              style={{
-                scrollbarWidth: 'thin',
-                scrollbarColor: '#ef4444 transparent'
-              }}
-            >
-              {/* Progress Indicator */}
-              <div className="sticky top-0 bg-gradient-to-r from-gray-900 to-black p-3 rounded-lg border border-white/10 mb-6">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-white/70">Reading Progress</span>
-                  <span className="text-white/70">Scroll to bottom to enable acceptance</span>
-                </div>
-                <div className="w-full bg-white/10 rounded-full h-1 mt-2">
-                  <div 
-                    className={`h-1 rounded-full transition-all duration-300 ${
-                      hasScrolledToBottom ? 'bg-green-500 w-full' : 'bg-red-500 w-1/3'
-                    }`}
-                  />
-                </div>
-              </div>
+            <div className="overflow-y-auto max-h-[calc(95vh-140px)] p-8 space-y-8 text-white/90 custom-scrollbar">
 
               {/* 1. Terms & Conditions */}
               <section className="space-y-6">
@@ -706,81 +671,9 @@ function RegisterDetailsContent() {
                 </div>
               </section>
 
-              {/* Scroll Completion Indicator */}
-              <div className="text-center py-8">
-                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-500 ${
-                  hasScrolledToBottom 
-                    ? 'bg-green-500/20 border border-green-500/50 text-green-300' 
-                    : 'bg-red-500/20 border border-red-500/50 text-red-300'
-                }`}>
-                  {hasScrolledToBottom ? (
-                    <>
-                      <CheckCircle className="h-5 w-5" />
-                      <span className="text-sm font-medium">Terms reviewed completely</span>
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDown className="h-5 w-5 animate-bounce" />
-                      <span className="text-sm font-medium">Please scroll to bottom to continue</span>
-                    </>
-                  )}
-                </div>
-              </div>
+
             </div>
-            
-            {/* Enhanced Footer */}
-            <div className="border-t border-white/10 bg-gradient-to-r from-gray-900 to-black p-6">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-center sm:text-left">
-                  <p className="text-sm text-white/60">
-                    These terms are legally binding and protect both parties.
-                  </p>
-                  <p className="text-xs text-white/40 mt-1">
-                    Last updated: {new Date().toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowWaiverModal(false)
-                      setHasScrolledToBottom(false)
-                      setAcceptButtonEnabled(false)
-                    }}
-                    className="border-white/20 text-white hover:bg-white/10"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setAcceptedWaiver(true)
-                      setShowWaiverModal(false)
-                      setHasScrolledToBottom(false)
-                      setAcceptButtonEnabled(false)
-                    }}
-                    disabled={!acceptButtonEnabled}
-                    className={`transition-all duration-300 ${
-                      acceptButtonEnabled
-                        ? 'bg-green-600 hover:bg-green-700 text-white'
-                        : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                    }`}
-                  >
-                    {acceptButtonEnabled ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Accept Terms & Waiver
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="h-4 w-4 mr-2" />
-                        Read Terms First
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
+
           </div>
         </div>
       )}
