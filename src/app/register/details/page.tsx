@@ -28,7 +28,8 @@ import {
   Scale,
   Users,
   AlertTriangle,
-  Shield
+  Shield,
+  FileText
 } from 'lucide-react'
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
@@ -366,35 +367,56 @@ function RegisterDetailsContent() {
                     </div>
                   </div>
 
-                  {/* Terms and Conditions */}
-                  <div className="space-y-4 pt-4 border-t border-white/10">
-                    {/* Terms & Conditions and Liability Waiver */}
-                    <div className="flex items-start space-x-3 p-4 bg-white/5 border border-white/10 rounded-lg">
-                      <Checkbox
-                        id="waiver"
-                        checked={acceptedWaiver}
-                        onCheckedChange={(checked) => setAcceptedWaiver(checked as boolean)}
-                        className="mt-1"
-                      />
-                      <Label htmlFor="waiver" className="text-sm text-white/80 leading-relaxed">
-                        I acknowledge that I have read and agree to the{' '}
-                        <button
+                  {/* Enhanced Terms Agreement Section */}
+                  <div className="space-y-6 pt-6 border-t border-white/10">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-xl font-bold text-white">Legal Agreement</h3>
+                      <p className="text-white/70 text-sm max-w-md mx-auto">
+                        Before joining Aura MMA, please review our terms and conditions
+                      </p>
+                    </div>
+
+                    {/* Terms Agreement Card */}
+                    <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/20 rounded-xl p-6 space-y-4 backdrop-blur-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center">
+                            <Shield className="h-5 w-5 text-white" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-white">Terms & Liability Waiver</h4>
+                            <p className="text-xs text-white/60">Required for membership</p>
+                          </div>
+                        </div>
+                        <Button
                           type="button"
                           onClick={() => setShowWaiverModal(true)}
-                          className="text-white hover:underline font-medium underline"
+                          variant="outline"
+                          size="sm"
+                          className="border-white/30 text-white hover:bg-white/10 hover:border-white/50"
                         >
-                          Terms & Conditions
-                        </button>
-                        {' '}and{' '}
-                        <button
-                          type="button"
-                          onClick={() => setShowWaiverModal(true)}
-                          className="text-white hover:underline font-medium underline"
-                        >
-                          Liability Waiver
-                        </button>
-                        . I understand the risks involved in martial arts training and agree to participate at my own risk.
-                      </Label>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Review Terms
+                        </Button>
+                      </div>
+
+                      {acceptedWaiver ? (
+                        <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                          <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium text-green-300">Terms Accepted</p>
+                            <p className="text-xs text-green-400/80">You have reviewed and agreed to all terms</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                          <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium text-amber-300">Review Required</p>
+                            <p className="text-xs text-amber-400/80">Please review and accept the terms to continue</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <Button
