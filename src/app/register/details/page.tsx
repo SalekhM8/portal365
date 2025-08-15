@@ -64,6 +64,7 @@ function RegisterDetailsContent() {
     lastName: '',
     email: '',
     password: '',
+    confirmPassword: '',
     phone: '',
     dateOfBirth: '',
     emergencyContact: {
@@ -111,6 +112,16 @@ function RegisterDetailsContent() {
     
     if (!acceptedWaiver) {
       setError('Please accept the Terms & Conditions and Liability Waiver to continue')
+      return
+    }
+    
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match. Please check and try again.')
+      return
+    }
+    
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long.')
       return
     }
 
@@ -312,6 +323,25 @@ function RegisterDetailsContent() {
                         />
                       </div>
                       <div className="space-y-2">
+                        <Label htmlFor="confirmPassword" className="text-white/90">Confirm Password</Label>
+                        <Input
+                          id="confirmPassword"
+                          type="password"
+                          value={formData.confirmPassword}
+                          onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                          className={`bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 ${
+                            formData.confirmPassword && formData.password !== formData.confirmPassword 
+                              ? 'border-red-500/50 focus:border-red-500' 
+                              : ''
+                          }`}
+                          placeholder="Confirm password"
+                          required
+                        />
+                        {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                          <p className="text-red-400 text-xs">Passwords do not match</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="dateOfBirth" className="text-white/90">Date of Birth</Label>
                         <Input
                           id="dateOfBirth"
@@ -397,11 +427,11 @@ function RegisterDetailsContent() {
                     )}
                   </div>
 
-                  <Button
-                      type="submit"
-                      className="w-full bg-white text-black hover:bg-white/90 font-semibold py-6 text-base"
-                      disabled={loading || !acceptedWaiver}
-                    >
+                                    <Button
+                    type="submit"
+                    className="w-full bg-white text-black hover:bg-white/90 font-semibold py-6 text-base"
+                    disabled={loading || !acceptedWaiver || formData.password !== formData.confirmPassword || formData.password.length < 6}
+                  >
                       {loading ? (
                         <>
                           <Loader2 className="h-5 w-5 mr-2 animate-spin" />

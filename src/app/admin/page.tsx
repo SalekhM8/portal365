@@ -38,7 +38,8 @@ import {
   Mail,
   AlertCircle,
   LogOut,
-  X
+  X,
+  Key
 } from 'lucide-react'
 
 interface VATStatus {
@@ -159,6 +160,13 @@ export default function AdminDashboard() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentClientSecret, setPaymentClientSecret] = useState('')
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState('')
+  const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
+  const [showResetSuccess, setShowResetSuccess] = useState(false)
+  const [resetPasswordResult, setResetPasswordResult] = useState<{
+    tempPassword: string;
+    customerEmail: string;
+    customerName: string;
+  } | null>(null)
 
   useEffect(() => {
     // ✅ ADD authentication check
@@ -289,6 +297,43 @@ export default function AdminDashboard() {
   const handlePaymentError = (error: string) => {
     console.error('❌ Payment setup error:', error)
     alert('Payment setup failed: ' + error)
+  }
+
+  const handlePasswordReset = async (customerId: string) => {
+    if (!confirm('Are you sure you want to reset this customer\'s password? They will need to use the new temporary password to log in.')) {
+      return
+    }
+
+    setResetPasswordLoading(true)
+    
+    try {
+      const response = await fetch('/api/admin/customers/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ customerId })
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setResetPasswordResult({
+          tempPassword: result.tempPassword,
+          customerEmail: result.customerEmail,
+          customerName: result.customerName
+        })
+        setShowResetSuccess(true)
+        console.log('✅ Password reset successful')
+      } else {
+        alert('Password reset failed: ' + result.error)
+      }
+    } catch (error) {
+      console.error('❌ Password reset error:', error)
+      alert('Network error during password reset')
+    } finally {
+      setResetPasswordLoading(false)
+    }
   }
 
   // Filter functions
@@ -1026,8 +1071,91 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end mt-6">
+            <div className="flex justify-end gap-2 mt-6">
+              <Button 
+                variant="outline" 
+                onClick={() => handlePasswordReset(selectedCustomer.id)}
+                disabled={resetPasswordLoading}
+                className="border-red-500/20 text-red-400 hover:bg-red-500/10"
+              >
+                {resetPasswordLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-400 mr-2" />
+                    Resetting...
+                  </>
+                ) : (
+                  <>
+                    <Key className="h-4 w-4 mr-2" />
+                    Reset Password
+                  </>
+                )}
+              </Button>
               <Button variant="outline" onClick={() => setSelectedCustomer(null)} className="bg-white text-black hover:bg-white/90">Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Success Modal */}
+      {showResetSuccess && resetPasswordResult && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
+                <Key className="h-8 w-8 text-green-400" />
+              </div>
+              
+              <div>
+                <h3 className="text-xl font-bold text-white mb-2">Password Reset Successful</h3>
+                <p className="text-white/70 text-sm mb-4">
+                  A new temporary password has been generated for <strong>{resetPasswordResult.customerName}</strong>
+                </p>
+              </div>
+
+              <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-lg">
+                <p className="text-sm text-red-300 mb-2">
+                  <strong>Temporary Password:</strong>
+                </p>
+                <div className="bg-black/50 p-3 rounded border font-mono text-lg text-white text-center tracking-wider">
+                  {resetPasswordResult.tempPassword}
+                </div>
+                <p className="text-xs text-red-300/80 mt-2">
+                  ⚠️ This password will only be displayed once. Please provide it to the customer immediately.
+                </p>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 p-4 rounded-lg text-left">
+                <p className="text-sm text-white/80 mb-2">
+                  <strong>Instructions for customer:</strong>
+                </p>
+                <ul className="text-xs text-white/70 space-y-1 list-disc list-inside">
+                  <li>Use this temporary password to log in at portal365.com</li>
+                  <li>You will be prompted to set a new permanent password</li>
+                  <li>Choose a strong password you can remember</li>
+                  <li>Keep your new password secure</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    navigator.clipboard.writeText(resetPasswordResult.tempPassword)
+                    alert('Password copied to clipboard!')
+                  }}
+                  className="flex-1 bg-white/10 border border-white/20 text-white hover:bg-white/20"
+                >
+                  Copy Password
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowResetSuccess(false)
+                    setResetPasswordResult(null)
+                  }}
+                  className="flex-1 bg-white text-black hover:bg-white/90"
+                >
+                  Done
+                </Button>
+              </div>
             </div>
           </div>
         </div>
