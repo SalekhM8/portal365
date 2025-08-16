@@ -345,7 +345,11 @@ export async function GET() {
       email: customer.email,
       phone: customer.phone || 'N/A',
       membershipType: customer.memberships[0]?.membershipType || 'None',
-      status: customer.memberships[0]?.status || 'INACTIVE',
+      // 🚀 FIX: Show subscription status (PAUSED/CANCELLED) instead of just membership status
+      status: customer.subscriptions[0]?.status || customer.memberships[0]?.status || 'INACTIVE',
+      subscriptionStatus: customer.subscriptions[0]?.status || 'NO_SUBSCRIPTION',
+      membershipStatus: customer.memberships[0]?.status || 'NO_MEMBERSHIP',
+      cancelAtPeriodEnd: customer.subscriptions[0]?.cancelAtPeriodEnd || false,
       joinDate: customer.createdAt.toISOString().split('T')[0],
       lastPayment: customer.payments[0]?.createdAt.toISOString().split('T')[0] || 'N/A',
       totalPaid: customer.payments.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0),

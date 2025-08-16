@@ -62,6 +62,9 @@ interface CustomerDetail {
   phone: string
   membershipType: string
   status: string
+  subscriptionStatus: string
+  membershipStatus: string
+  cancelAtPeriodEnd: boolean
   joinDate: string
   lastPayment: string
   totalPaid: number
@@ -458,6 +461,8 @@ export default function AdminDashboard() {
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case 'ACTIVE': return 'default'
+      case 'PAUSED': return 'outline'
+      case 'CANCELLED': return 'destructive'
       case 'PENDING_PAYMENT': return 'destructive'
       case 'SUSPENDED': return 'secondary'
       case 'CONFIRMED': return 'default'
@@ -746,11 +751,18 @@ export default function AdminDashboard() {
                             Joined {new Date(customer.joinDate).toLocaleDateString()}
                           </p>
                         </td>
-                        <td className="p-4 border-r border-white/5">
-                          <Badge variant={getStatusBadgeVariant(customer.status)}>
-                            {customer.status}
-                          </Badge>
-                        </td>
+                                <td className="p-4 border-r border-white/5">
+          <div className="space-y-1">
+            <Badge variant={getStatusBadgeVariant(customer.status)}>
+              {customer.status}
+            </Badge>
+            {customer.cancelAtPeriodEnd && (
+              <Badge variant="destructive" className="text-xs">
+                Ending Soon
+              </Badge>
+            )}
+          </div>
+        </td>
                         <td className="p-4 border-r border-white/5">
                           <div className="flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-white/60" />
@@ -1160,7 +1172,13 @@ export default function AdminDashboard() {
             <div className="border-t border-white/10 pt-4 mt-6">
               <h4 className="text-white font-semibold mb-4">Membership Management</h4>
               <div className="grid grid-cols-2 gap-3">
-                {selectedCustomer.status === 'ACTIVE' && (
+                {/* Show current subscription status for debugging */}
+                <div className="col-span-2 mb-2 p-2 bg-blue-500/10 rounded text-xs text-blue-300">
+                  Subscription: {selectedCustomer.subscriptionStatus} | Membership: {selectedCustomer.membershipStatus}
+                  {selectedCustomer.cancelAtPeriodEnd && ' | Scheduled for cancellation'}
+                </div>
+                
+                {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && (
                   <>
                     <Button 
                       variant="outline" 
@@ -1178,7 +1196,7 @@ export default function AdminDashboard() {
                     </Button>
                   </>
                 )}
-                {selectedCustomer.status === 'SUSPENDED' && (
+                {(selectedCustomer.subscriptionStatus === 'PAUSED' || selectedCustomer.status === 'PAUSED') && (
                   <Button 
                     variant="outline" 
                     onClick={() => openMembershipActionModal('resume')}
@@ -1187,9 +1205,14 @@ export default function AdminDashboard() {
                     Resume Membership
                   </Button>
                 )}
-                {selectedCustomer.status === 'CANCELLED' && (
+                {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && (
                   <div className="col-span-2 text-center text-white/60 py-2">
                     Membership has been cancelled
+                  </div>
+                )}
+                {selectedCustomer.cancelAtPeriodEnd && (
+                  <div className="col-span-2 text-center text-orange-400 py-2 text-sm">
+                    ⚠️ Scheduled for cancellation at period end
                   </div>
                 )}
               </div>
