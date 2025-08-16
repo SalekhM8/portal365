@@ -395,26 +395,37 @@ export default function AdminDashboard() {
       const result = await response.json()
 
       if (result.success) {
-        alert(`✅ ${membershipAction.toUpperCase()} successful: ${result.message}`)
+        // ✅ INDUSTRY STANDARD: Optimistic update with immediate DB refresh
+        console.log(`🔄 ${membershipAction.toUpperCase()} successful, refreshing data...`)
         
-        // Small delay to ensure webhook processing completes (industry standard)
-        console.log('⏳ Waiting for webhook processing...')
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        // Determine expected status based on action
+        const expectedStatus = membershipAction === 'pause' ? 'PAUSED' : 
+                              membershipAction === 'resume' ? 'ACTIVE' : 'CANCELLED'
         
-        // Refresh customer data and wait for completion
-        console.log('🔄 Refreshing admin data after successful operation...')
-        await fetchAdminData()
-        console.log('✅ Admin data refreshed successfully')
+        // Optimistically update the customer list immediately
+        setCustomers(customers.map(customer => 
+          customer.id === selectedCustomer.id 
+            ? { ...customer, status: expectedStatus, subscriptionStatus: expectedStatus }
+            : customer
+        ))
         
-        // Fetch fresh customer data to update the selected customer
-        const dashboardResponse = await fetch('/api/admin/dashboard')
-        const freshData = await dashboardResponse.json()
-        const updatedCustomer = freshData.customers.find((c: any) => c.id === selectedCustomer.id)
-        
-        if (updatedCustomer) {
-          console.log(`🔄 Updated selected customer status: ${selectedCustomer.status} → ${updatedCustomer.status}`)
-          setSelectedCustomer(updatedCustomer)
+        // Update selected customer immediately
+        const optimisticCustomer = { 
+          ...selectedCustomer, 
+          status: expectedStatus, 
+          subscriptionStatus: expectedStatus 
         }
+        setSelectedCustomer(optimisticCustomer)
+        
+        // Background refresh to ensure consistency (no await - non-blocking)
+        fetchAdminData().then(() => {
+          console.log('✅ Background refresh completed')
+        }).catch(error => {
+          console.error('❌ Background refresh failed:', error)
+          // Could implement rollback here if needed
+        })
+        
+        alert(`✅ ${membershipAction.toUpperCase()} successful: ${result.message}`)
         
         // Close modals and reset state
         setShowMembershipActionModal(false)
