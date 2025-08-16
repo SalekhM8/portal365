@@ -73,7 +73,7 @@ export async function POST(
       where: { id: customerId },
       include: {
         subscriptions: {
-          where: { status: 'ACTIVE' },
+          where: { status: { in: ['ACTIVE', 'TRIALING'] } },
           include: {
             routedEntity: true
           }

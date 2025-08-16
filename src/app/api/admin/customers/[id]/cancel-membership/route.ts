@@ -87,7 +87,7 @@ export async function POST(
       include: {
         subscriptions: {
           where: { 
-            status: { in: ['ACTIVE', 'PAUSED'] }
+            status: { in: ['ACTIVE', 'PAUSED', 'TRIALING'] }
           },
           include: {
             routedEntity: true
