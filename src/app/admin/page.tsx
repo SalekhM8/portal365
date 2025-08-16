@@ -1199,9 +1199,9 @@ export default function AdminDashboard() {
                         alert('Sync failed')
                       }
                     }}
-                    className="text-xs px-2 py-1"
+                    className="text-xs px-3 py-1 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
                   >
-                    🔄 Sync
+                    🔄 SYNC STATUS
                   </Button>
                 </div>
                 
