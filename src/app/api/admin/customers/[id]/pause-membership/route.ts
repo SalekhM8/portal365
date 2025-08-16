@@ -198,6 +198,19 @@ export async function POST(
       })
 
       console.log(`✅ [${operationId}] Database updated successfully`)
+      
+      // 🔍 VERIFY DATABASE UPDATE - Check what's actually in the database now
+      const verifySubscription = await prisma.subscription.findUnique({
+        where: { id: activeSubscription.id },
+        select: { status: true }
+      })
+      console.log(`🔍 [${operationId}] Database verification - subscription status is now: ${verifySubscription?.status}`)
+      
+      const verifyMembership = await prisma.membership.findFirst({
+        where: { userId: customer.id },
+        select: { status: true }
+      })
+      console.log(`🔍 [${operationId}] Database verification - membership status is now: ${verifyMembership?.status}`)
 
     } catch (dbError: any) {
       console.error(`❌ [${operationId}] Database update failed:`, dbError)
