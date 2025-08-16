@@ -6,7 +6,7 @@ import { stripe } from '@/lib/stripe'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 🔐 AUTHENTICATION & AUTHORIZATION
@@ -16,7 +16,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const customerId = params.id
+    const { id: customerId } = await params
     const operationId = `sync_${customerId}_${Date.now()}`
     
     console.log(`🔄 [${operationId}] Starting status sync for customer: ${customerId}`)
