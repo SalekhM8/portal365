@@ -168,25 +168,31 @@ export async function POST(
           data: { status: 'SUSPENDED' }
         })
 
-        // 📊 CREATE AUDIT LOG
-        await tx.subscriptionAuditLog.create({
-          data: {
-            subscriptionId: activeSubscription.id,
-            action: 'PAUSE',
-            performedBy: adminUser.id,
-            performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
-            reason: reason || 'No reason provided',
-            operationId,
-            metadata: JSON.stringify({
-              pauseBehavior,
-              stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
-              routedEntityId: activeSubscription.routedEntityId,
-              customerEmail: customer.email,
-              timestamp: new Date().toISOString(),
-              processingTimeMs: Date.now() - startTime
-            })
-          }
-        })
+        // 📊 CREATE AUDIT LOG (fail gracefully if table doesn't exist)
+        try {
+          await tx.subscriptionAuditLog.create({
+            data: {
+              subscriptionId: activeSubscription.id,
+              action: 'PAUSE',
+              performedBy: adminUser.id,
+              performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
+              reason: reason || 'No reason provided',
+              operationId,
+              metadata: JSON.stringify({
+                pauseBehavior,
+                stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
+                routedEntityId: activeSubscription.routedEntityId,
+                customerEmail: customer.email,
+                timestamp: new Date().toISOString(),
+                processingTimeMs: Date.now() - startTime
+              })
+            }
+          })
+          console.log(`✅ [${operationId}] Audit log created successfully`)
+        } catch (auditError) {
+          console.warn(`⚠️ [${operationId}] Audit log failed (table may not exist):`, auditError)
+          // Continue without audit log - don't fail the operation
+        }
       })
 
       console.log(`✅ [${operationId}] Database updated successfully`)
@@ -194,12 +200,14 @@ export async function POST(
     } catch (dbError: any) {
       console.error(`❌ [${operationId}] Database update failed:`, dbError)
       
-      // 🔄 ROLLBACK STRIPE OPERATION
-      try {
-        await stripe.subscriptions.resume(activeSubscription.stripeSubscriptionId)
-        console.log(`✅ [${operationId}] Stripe operation rolled back successfully`)
-      } catch (rollbackError) {
-        console.error(`❌ [${operationId}] CRITICAL: Rollback failed:`, rollbackError)
+      // 🔄 ROLLBACK STRIPE OPERATION (only if we actually paused it)
+      if (stripeOperationSuccess) {
+        try {
+          await stripe.subscriptions.resume(activeSubscription.stripeSubscriptionId)
+          console.log(`✅ [${operationId}] Stripe operation rolled back successfully`)
+        } catch (rollbackError) {
+          console.error(`❌ [${operationId}] CRITICAL: Rollback failed:`, rollbackError)
+        }
       }
 
       return NextResponse.json({ 

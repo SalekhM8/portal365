@@ -225,27 +225,33 @@ export async function POST(
           // Membership stays active until period end
         }
 
-        // 📊 CREATE AUDIT LOG
-        await tx.subscriptionAuditLog.create({
-          data: {
-            subscriptionId: activeSubscription.id,
-            action: cancelationType === 'immediate' ? 'CANCEL_IMMEDIATE' : 'CANCEL_SCHEDULED',
-            performedBy: adminUser.id,
-            performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
-            reason: reason,
-            operationId,
-            metadata: JSON.stringify({
-              cancelationType,
-              prorate,
-              stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
-              routedEntityId: activeSubscription.routedEntityId,
-              customerEmail: customer.email,
-              currentPeriodEnd: activeSubscription.currentPeriodEnd.toISOString(),
-              timestamp: new Date().toISOString(),
-              processingTimeMs: Date.now() - startTime
-            })
-          }
-        })
+        // 📊 CREATE AUDIT LOG (fail gracefully if table doesn't exist)
+        try {
+          await tx.subscriptionAuditLog.create({
+            data: {
+              subscriptionId: activeSubscription.id,
+              action: cancelationType === 'immediate' ? 'CANCEL_IMMEDIATE' : 'CANCEL_SCHEDULED',
+              performedBy: adminUser.id,
+              performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
+              reason: reason,
+              operationId,
+              metadata: JSON.stringify({
+                cancelationType,
+                prorate,
+                stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
+                routedEntityId: activeSubscription.routedEntityId,
+                customerEmail: customer.email,
+                currentPeriodEnd: activeSubscription.currentPeriodEnd.toISOString(),
+                timestamp: new Date().toISOString(),
+                processingTimeMs: Date.now() - startTime
+              })
+            }
+          })
+          console.log(`✅ [${operationId}] Audit log created successfully`)
+        } catch (auditError) {
+          console.warn(`⚠️ [${operationId}] Audit log failed (table may not exist):`, auditError)
+          // Continue without audit log - don't fail the operation
+        }
       })
 
       console.log(`✅ [${operationId}] Database updated successfully`)
@@ -253,20 +259,22 @@ export async function POST(
     } catch (dbError: any) {
       console.error(`❌ [${operationId}] Database update failed:`, dbError)
       
-      // 🔄 ROLLBACK STRIPE OPERATION
-      try {
-        if (cancelationType === 'immediate') {
-          // Can't easily rollback immediate cancellation, log critical error
-          console.error(`❌ [${operationId}] CRITICAL: Cannot rollback immediate cancellation`)
-        } else {
-          // Rollback scheduled cancellation
-          await stripe.subscriptions.update(activeSubscription.stripeSubscriptionId, {
-            cancel_at_period_end: false
-          })
-          console.log(`✅ [${operationId}] Stripe scheduled cancellation rolled back successfully`)
+      // 🔄 ROLLBACK STRIPE OPERATION (only if we actually made changes)
+      if (stripeOperationSuccess) {
+        try {
+          if (cancelationType === 'immediate') {
+            // Can't easily rollback immediate cancellation, log critical error
+            console.error(`❌ [${operationId}] CRITICAL: Cannot rollback immediate cancellation`)
+          } else {
+            // Rollback scheduled cancellation
+            await stripe.subscriptions.update(activeSubscription.stripeSubscriptionId, {
+              cancel_at_period_end: false
+            })
+            console.log(`✅ [${operationId}] Stripe scheduled cancellation rolled back successfully`)
+          }
+        } catch (rollbackError) {
+          console.error(`❌ [${operationId}] CRITICAL: Rollback failed:`, rollbackError)
         }
-      } catch (rollbackError) {
-        console.error(`❌ [${operationId}] CRITICAL: Rollback failed:`, rollbackError)
       }
 
       return NextResponse.json({ 
