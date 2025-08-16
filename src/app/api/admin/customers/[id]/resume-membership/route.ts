@@ -19,7 +19,7 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   const startTime = Date.now()
-  let operationId: string | null = null
+  let operationId = ''
   
   try {
     // 🔐 AUTHENTICATION & AUTHORIZATION
@@ -249,7 +249,7 @@ export async function POST(
       error: 'Internal server error during resume operation',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       code: 'INTERNAL_ERROR',
-      operationId,
+      operationId: operationId || 'unknown',
       processingTimeMs: processingTime
     }, { status: 500 })
   }
