@@ -1190,7 +1190,7 @@ export default function AdminDashboard() {
                         if (result.success) {
                           alert(`Status synced! ${result.previousStatus} → ${result.newStatus}`)
                           // Refresh data
-                          fetchDashboardData()
+                          fetchAdminData()
                         } else {
                           alert(`Sync failed: ${result.error}`)
                         }
