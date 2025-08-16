@@ -393,6 +393,8 @@ export default function AdminDashboard() {
       })
 
       const result = await response.json()
+      console.log(`📨 ${membershipAction.toUpperCase()} API Response:`, result)
+      console.log(`📊 Result success:`, result.success)
 
       if (result.success) {
         // ✅ INDUSTRY STANDARD: Optimistic update with immediate DB refresh
