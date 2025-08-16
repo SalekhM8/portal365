@@ -422,16 +422,22 @@ export default function AdminDashboard() {
         }
         setSelectedCustomer(optimisticCustomer)
         
-        // Background refresh to ensure consistency (with delay to allow optimistic update to show)
-        setTimeout(() => {
-          console.log('🔄 Starting background refresh after optimistic update...')
-          fetchAdminData().then(() => {
+        // DEBUG: Check what's actually in the database right now
+        setTimeout(async () => {
+          console.log('🔄 Checking database status after operation...')
+          try {
+            const dbCheck = await fetch('/api/admin/dashboard')
+            const dbData = await dbCheck.json()
+            const customerInDb = dbData.customers.find((c: any) => c.id === selectedCustomer.id)
+            console.log(`📊 Database shows customer status as: ${customerInDb?.status} (subscription: ${customerInDb?.subscriptionStatus})`)
+            
+            console.log('🔄 Starting background refresh after optimistic update...')
+            await fetchAdminData()
             console.log('✅ Background refresh completed')
-          }).catch(error => {
+          } catch (error) {
             console.error('❌ Background refresh failed:', error)
-            // Could implement rollback here if needed
-          })
-        }, 500) // Give optimistic update time to be visible
+          }
+        }, 500)
         
         alert(`✅ ${membershipAction.toUpperCase()} successful: ${result.message}`)
         
