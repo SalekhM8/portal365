@@ -414,6 +414,7 @@ model Subscription {
   routedEntity BusinessEntity        @relation(fields: [routedEntityId], references: [id])
   routing      SubscriptionRouting[] // Routing audit trail
   invoices     Invoice[] // Billing history
+  auditLogs    SubscriptionAuditLog[] // Operation audit trail
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -466,4 +467,30 @@ model Invoice {
   @@index([subscriptionId])
   @@index([stripeInvoiceId])
   @@map("invoices")
+}
+
+// ============================================================================
+// SUBSCRIPTION AUDIT TRAIL - Enterprise-grade operation tracking
+// ============================================================================
+
+model SubscriptionAuditLog {
+  id              String @id @default(cuid())
+  subscriptionId  String
+  action          String // PAUSE, RESUME, CANCEL_IMMEDIATE, CANCEL_SCHEDULED, CREATE, UPDATE
+  performedBy     String // User ID who performed the action
+  performedByName String // Name for quick reference
+  reason          String // Human-readable reason for the action
+  operationId     String // Unique operation tracking ID
+  metadata        String // JSON metadata with operation details
+  
+  // Relationships
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([subscriptionId])
+  @@index([action])
+  @@index([performedBy])
+  @@index([createdAt])
+  @@map("subscription_audit_logs")
 }

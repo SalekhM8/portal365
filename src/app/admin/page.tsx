@@ -167,6 +167,14 @@ export default function AdminDashboard() {
     customerEmail: string;
     customerName: string;
   } | null>(null)
+  
+  // 🚀 NEW: Membership management states
+  const [membershipAction, setMembershipAction] = useState<'pause' | 'resume' | 'cancel' | null>(null)
+  const [membershipActionLoading, setMembershipActionLoading] = useState(false)
+  const [membershipActionReason, setMembershipActionReason] = useState('')
+  const [cancelationType, setCancelationType] = useState<'immediate' | 'end_of_period'>('end_of_period')
+  const [pauseBehavior, setPauseBehavior] = useState<'void' | 'keep_as_draft' | 'mark_uncollectible'>('void')
+  const [showMembershipActionModal, setShowMembershipActionModal] = useState(false)
 
   useEffect(() => {
     // ✅ ADD authentication check
@@ -334,6 +342,83 @@ export default function AdminDashboard() {
     } finally {
       setResetPasswordLoading(false)
     }
+  }
+
+  // 🚀 NEW: Membership management functions
+  const handleMembershipAction = async () => {
+    if (!selectedCustomer || !membershipAction) return
+
+    if (!membershipActionReason.trim() || membershipActionReason.trim().length < 5) {
+      alert('Please provide a reason (minimum 5 characters)')
+      return
+    }
+
+    const confirmMessage = {
+      pause: 'Are you sure you want to PAUSE this customer\'s membership? They will lose access immediately.',
+      resume: 'Are you sure you want to RESUME this customer\'s membership? Billing will restart.',
+      cancel: cancelationType === 'immediate' 
+        ? 'Are you sure you want to IMMEDIATELY CANCEL this membership? This cannot be undone.'
+        : 'Are you sure you want to schedule this membership for CANCELLATION at period end?'
+    }
+
+    if (!confirm(confirmMessage[membershipAction])) {
+      return
+    }
+
+    setMembershipActionLoading(true)
+
+    try {
+      const endpoint = `/api/admin/customers/${selectedCustomer.id}/${membershipAction}-membership`
+      const requestBody: any = { reason: membershipActionReason.trim() }
+
+      // Add action-specific parameters
+      if (membershipAction === 'pause') {
+        requestBody.pauseBehavior = pauseBehavior
+      } else if (membershipAction === 'cancel') {
+        requestBody.cancelationType = cancelationType
+        requestBody.prorate = true
+      } else if (membershipAction === 'resume') {
+        requestBody.resumeImmediately = true
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        alert(`✅ ${membershipAction.toUpperCase()} successful: ${result.message}`)
+        
+        // Refresh customer data
+        fetchAdminData()
+        
+        // Close modals and reset state
+        setShowMembershipActionModal(false)
+        setSelectedCustomer(null)
+        setMembershipAction(null)
+        setMembershipActionReason('')
+        
+        console.log(`✅ Membership ${membershipAction} successful for ${selectedCustomer.email}`)
+      } else {
+        alert(`❌ ${membershipAction.toUpperCase()} failed: ${result.error}`)
+      }
+    } catch (error) {
+      console.error(`❌ Membership ${membershipAction} error:`, error)
+      alert(`Network error during ${membershipAction} operation`)
+    } finally {
+      setMembershipActionLoading(false)
+    }
+  }
+
+  const openMembershipActionModal = (action: 'pause' | 'resume' | 'cancel') => {
+    setMembershipAction(action)
+    setMembershipActionReason('')
+    setShowMembershipActionModal(true)
   }
 
   // Filter functions
@@ -1071,16 +1156,55 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2 mt-6">
+            {/* 🚀 NEW: Membership Management Actions */}
+            <div className="border-t border-white/10 pt-4 mt-6">
+              <h4 className="text-white font-semibold mb-4">Membership Management</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {selectedCustomer.status === 'ACTIVE' && (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => openMembershipActionModal('pause')}
+                      className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10"
+                    >
+                      Pause Membership
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => openMembershipActionModal('cancel')}
+                      className="border-red-500/20 text-red-400 hover:bg-red-500/10"
+                    >
+                      Cancel Membership
+                    </Button>
+                  </>
+                )}
+                {selectedCustomer.status === 'SUSPENDED' && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => openMembershipActionModal('resume')}
+                    className="border-green-500/20 text-green-400 hover:bg-green-500/10 col-span-2"
+                  >
+                    Resume Membership
+                  </Button>
+                )}
+                {selectedCustomer.status === 'CANCELLED' && (
+                  <div className="col-span-2 text-center text-white/60 py-2">
+                    Membership has been cancelled
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6 border-t border-white/10 pt-4">
               <Button 
                 variant="outline" 
                 onClick={() => handlePasswordReset(selectedCustomer.id)}
                 disabled={resetPasswordLoading}
-                className="border-red-500/20 text-red-400 hover:bg-red-500/10"
+                className="border-blue-500/20 text-blue-400 hover:bg-blue-500/10"
               >
                 {resetPasswordLoading ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-400 mr-2" />
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 mr-2" />
                     Resetting...
                   </>
                 ) : (
@@ -1436,6 +1560,130 @@ export default function AdminDashboard() {
             <div className="mt-4 text-center text-xs text-white/60 border-t border-white/10 pt-4">
               Customer membership will be activated after payment method is set up.
               No charge until {addCustomerData.startDate}.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 NEW: Membership Action Modal */}
+      {showMembershipActionModal && membershipAction && selectedCustomer && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold mb-4 text-white">
+              {membershipAction === 'pause' && 'Pause Membership'}
+              {membershipAction === 'resume' && 'Resume Membership'}
+              {membershipAction === 'cancel' && 'Cancel Membership'}
+            </h3>
+            
+            <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg mb-4">
+              <p className="text-sm text-white/90">
+                <strong>Customer:</strong> {selectedCustomer.name}
+              </p>
+              <p className="text-sm text-white/90">
+                <strong>Membership:</strong> {selectedCustomer.membershipType}
+              </p>
+              <p className="text-sm text-white/90">
+                <strong>Current Status:</strong> {selectedCustomer.status}
+              </p>
+            </div>
+
+            {membershipAction === 'pause' && (
+              <div className="mb-4">
+                <Label htmlFor="pauseBehavior" className="text-white mb-2 block">Pause Behavior</Label>
+                <Select value={pauseBehavior} onValueChange={(value: any) => setPauseBehavior(value)}>
+                  <SelectTrigger className="bg-white/5 border-white/20 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black border-white/20">
+                    <SelectItem value="void" className="text-white hover:bg-white/10">Void invoices (recommended)</SelectItem>
+                    <SelectItem value="keep_as_draft" className="text-white hover:bg-white/10">Keep as draft</SelectItem>
+                    <SelectItem value="mark_uncollectible" className="text-white hover:bg-white/10">Mark uncollectible</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-white/60 mt-1">
+                  Void: Cancels pending invoices. Draft: Keeps for manual collection. Uncollectible: Marks as bad debt.
+                </p>
+              </div>
+            )}
+
+            {membershipAction === 'cancel' && (
+              <div className="mb-4">
+                <Label htmlFor="cancelationType" className="text-white mb-2 block">Cancellation Type</Label>
+                <Select value={cancelationType} onValueChange={(value: any) => setCancelationType(value)}>
+                  <SelectTrigger className="bg-white/5 border-white/20 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black border-white/20">
+                    <SelectItem value="end_of_period" className="text-white hover:bg-white/10">End of billing period (recommended)</SelectItem>
+                    <SelectItem value="immediate" className="text-white hover:bg-white/10">Immediate cancellation</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-white/60 mt-1">
+                  {cancelationType === 'end_of_period' 
+                    ? 'Customer keeps access until period ends, no refund required.' 
+                    : 'Immediate loss of access, may require prorated refund.'}
+                </p>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <Label htmlFor="membershipReason" className="text-white mb-2 block">
+                Reason <span className="text-red-400">*</span>
+              </Label>
+              <textarea
+                id="membershipReason"
+                placeholder={`Why are you ${membershipAction === 'cancel' ? 'cancelling' : membershipAction === 'pause' ? 'pausing' : 'resuming'} this membership?`}
+                value={membershipActionReason}
+                onChange={(e) => setMembershipActionReason(e.target.value)}
+                className="w-full p-3 bg-white/5 border border-white/20 rounded text-white placeholder:text-white/50 min-h-[80px]"
+                maxLength={500}
+              />
+              <p className="text-xs text-white/60 mt-1">
+                {membershipActionReason.length}/500 characters (minimum 5 required)
+              </p>
+            </div>
+
+            {membershipAction === 'cancel' && cancelationType === 'immediate' && (
+              <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg mb-4">
+                <p className="text-red-300 text-sm font-medium">⚠️ Warning: Immediate Cancellation</p>
+                <p className="text-red-300/80 text-xs mt-1">
+                  This will immediately cancel the subscription and remove access. 
+                  Consider if a prorated refund is needed.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowMembershipActionModal(false)}
+                variant="outline"
+                className="flex-1 border-white/20 text-white hover:bg-white/10"
+                disabled={membershipActionLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleMembershipAction}
+                disabled={membershipActionLoading || membershipActionReason.trim().length < 5}
+                className={`flex-1 ${
+                  membershipAction === 'pause' ? 'bg-yellow-600 hover:bg-yellow-700' :
+                  membershipAction === 'resume' ? 'bg-green-600 hover:bg-green-700' :
+                  'bg-red-600 hover:bg-red-700'
+                } text-white`}
+              >
+                {membershipActionLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    {membershipAction === 'pause' && 'Pause Membership'}
+                    {membershipAction === 'resume' && 'Resume Membership'}
+                    {membershipAction === 'cancel' && `${cancelationType === 'immediate' ? 'Cancel Now' : 'Schedule Cancellation'}`}
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>
