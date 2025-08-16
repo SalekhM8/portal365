@@ -45,8 +45,11 @@ export async function handlePaymentFailed(invoice: any) {
 
 export async function handleSubscriptionUpdated(stripeSubscription: any) {
   try {
+    console.log(`🔄 [WEBHOOK] Processing subscription update for ${stripeSubscription.id}`)
+    
     // 🚀 Handle pause collection properly
     let subscriptionStatus = stripeSubscription.status.toUpperCase()
+    const originalStatus = subscriptionStatus
     
     // Map TRIALING to ACTIVE since trialing customers have full access
     if (subscriptionStatus === 'TRIALING') {
@@ -58,13 +61,19 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
       subscriptionStatus = 'PAUSED'
     }
     
+    console.log(`📊 [WEBHOOK] Status mapping: Stripe ${originalStatus} + pause_collection: ${!!stripeSubscription.pause_collection} → Local ${subscriptionStatus}`)
+    
     const subscription = await prisma.subscription.findUnique({ 
       where: { stripeSubscriptionId: stripeSubscription.id }, 
       include: { user: true } 
     })
-    if (!subscription) return
+    if (!subscription) {
+      console.log(`❌ [WEBHOOK] Subscription not found in database: ${stripeSubscription.id}`)
+      return
+    }
 
-    await prisma.subscription.update({ 
+    const previousStatus = subscription.status
+    const updatedSubscription = await prisma.subscription.update({ 
       where: { id: subscription.id }, 
       data: { 
         status: subscriptionStatus,
@@ -75,15 +84,21 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
       } 
     })
     
+    console.log(`✅ [WEBHOOK] Updated subscription: ${previousStatus} → ${updatedSubscription.status}`)
+    
     // Update membership status to match
     const membershipStatus = subscriptionStatus === 'PAUSED' ? 'SUSPENDED' : 
                             subscriptionStatus === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE'
     
-    await prisma.membership.updateMany({ 
+    const updatedMemberships = await prisma.membership.updateMany({ 
       where: { userId: subscription.userId }, 
       data: { status: membershipStatus } 
     })
-  } catch {}
+    
+    console.log(`✅ [WEBHOOK] Updated ${updatedMemberships.count} memberships to ${membershipStatus}`)
+  } catch (error) {
+    console.error(`❌ [WEBHOOK] Failed to handle subscription update:`, error)
+  }
 }
 
 export async function handleSubscriptionCancelled(stripeSubscription: any) {

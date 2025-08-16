@@ -154,19 +154,21 @@ export async function POST(
     try {
       await prisma.$transaction(async (tx) => {
         // Update subscription status
-        await tx.subscription.update({
+        const updatedSubscription = await tx.subscription.update({
           where: { id: activeSubscription.id },
           data: { status: 'PAUSED' }
         })
+        console.log(`📊 [${operationId}] Updated subscription status: ${activeSubscription.status} → ${updatedSubscription.status}`)
 
-        // Update membership status
-        await tx.membership.updateMany({
+        // Update membership status (for ALL active memberships, not just ACTIVE ones)
+        const updatedMemberships = await tx.membership.updateMany({
           where: { 
             userId: customer.id,
-            status: 'ACTIVE'
+            status: { in: ['ACTIVE', 'SUSPENDED'] } // Update both ACTIVE and already SUSPENDED
           },
           data: { status: 'SUSPENDED' }
         })
+        console.log(`📊 [${operationId}] Updated ${updatedMemberships.count} memberships to SUSPENDED`)
 
         // 📊 CREATE AUDIT LOG (fail gracefully if table doesn't exist)
         try {

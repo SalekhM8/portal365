@@ -26,7 +26,7 @@ export async function POST(
       where: { id: customerId },
       include: {
         subscriptions: {
-          where: { status: { in: ['ACTIVE', 'PAUSED', 'PAST_DUE'] } },
+          where: { status: { in: ['ACTIVE', 'PAUSED', 'PAST_DUE', 'TRIALING', 'CANCELLED'] } },
           orderBy: { createdAt: 'desc' },
           take: 1
         }

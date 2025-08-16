@@ -150,20 +150,22 @@ export async function POST(
     // 💾 UPDATE LOCAL DATABASE (Webhooks will also update, but we do it immediately for consistency)
     try {
       await prisma.$transaction(async (tx) => {
-        // Update subscription status
-        await tx.subscription.update({
+        // Update subscription status 
+        const updatedSubscription = await tx.subscription.update({
           where: { id: pausedSubscription.id },
           data: { status: 'ACTIVE' }
         })
+        console.log(`📊 [${operationId}] Updated subscription status: ${pausedSubscription.status} → ${updatedSubscription.status}`)
 
-        // Update membership status
-        await tx.membership.updateMany({
+        // Update membership status (for ALL suspended memberships)
+        const updatedMemberships = await tx.membership.updateMany({
           where: { 
             userId: customer.id,
-            status: 'SUSPENDED'
+            status: { in: ['SUSPENDED', 'ACTIVE'] } // Update both SUSPENDED and already ACTIVE
           },
           data: { status: 'ACTIVE' }
         })
+        console.log(`📊 [${operationId}] Updated ${updatedMemberships.count} memberships to ACTIVE`)
 
         // 📊 CREATE AUDIT LOG (fail gracefully if table doesn't exist)
         try {
