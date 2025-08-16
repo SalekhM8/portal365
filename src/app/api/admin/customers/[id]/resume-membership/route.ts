@@ -123,16 +123,13 @@ export async function POST(
     // 🚀 RESUME STRIPE SUBSCRIPTION
     let stripeOperationSuccess = false
     try {
-      const resumeConfig: any = {}
-      
-      // Only reset billing cycle if explicitly requested
-      if (!resumeImmediately) {
-        resumeConfig.billing_cycle_anchor = 'now'
-      }
-
-      const updatedStripeSubscription = await stripe.subscriptions.resume(
+      // For paused collections, we need to use update() not resume()
+      const updatedStripeSubscription = await stripe.subscriptions.update(
         pausedSubscription.stripeSubscriptionId,
-        resumeConfig
+        {
+          pause_collection: null, // Remove the pause collection
+          proration_behavior: 'none' // Don't prorate when resuming
+        }
       )
 
       stripeOperationSuccess = true
