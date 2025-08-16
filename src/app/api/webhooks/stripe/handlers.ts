@@ -48,6 +48,11 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
     // 🚀 Handle pause collection properly
     let subscriptionStatus = stripeSubscription.status.toUpperCase()
     
+    // Map TRIALING to ACTIVE since trialing customers have full access
+    if (subscriptionStatus === 'TRIALING') {
+      subscriptionStatus = 'ACTIVE'
+    }
+    
     // If collection is paused, override status to PAUSED
     if (stripeSubscription.pause_collection?.behavior === 'void') {
       subscriptionStatus = 'PAUSED'

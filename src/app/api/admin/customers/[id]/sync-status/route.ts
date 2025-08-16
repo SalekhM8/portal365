@@ -63,6 +63,12 @@ export async function POST(
 
     // Determine correct status
     let localStatus = stripeSubscription.status.toUpperCase()
+    
+    // Map TRIALING to ACTIVE since trialing customers have full access
+    if (localStatus === 'TRIALING') {
+      localStatus = 'ACTIVE'
+    }
+    
     if (stripeSubscription.pause_collection?.behavior === 'void') {
       localStatus = 'PAUSED'
     }

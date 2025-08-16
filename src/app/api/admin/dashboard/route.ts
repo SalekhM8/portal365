@@ -349,7 +349,13 @@ export async function GET() {
       phone: customer.phone || 'N/A',
       membershipType: customer.memberships[0]?.membershipType || 'None',
       // 🚀 FIX: Show subscription status (PAUSED/CANCELLED) instead of just membership status
-      status: customer.subscriptions[0]?.status || customer.memberships[0]?.status || 'INACTIVE',
+      // Map TRIALING to ACTIVE since trialing customers have full access
+      status: (() => {
+        const subStatus = customer.subscriptions[0]?.status
+        const memStatus = customer.memberships[0]?.status
+        if (subStatus === 'TRIALING') return 'ACTIVE'
+        return subStatus || memStatus || 'INACTIVE'
+      })(),
       subscriptionStatus: customer.subscriptions[0]?.status || 'NO_SUBSCRIPTION',
       membershipStatus: customer.memberships[0]?.status || 'NO_MEMBERSHIP',
       cancelAtPeriodEnd: customer.subscriptions[0]?.cancelAtPeriodEnd || false,
