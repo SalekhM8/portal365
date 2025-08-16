@@ -1173,9 +1173,35 @@ export default function AdminDashboard() {
               <h4 className="text-white font-semibold mb-4">Membership Management</h4>
               <div className="grid grid-cols-2 gap-3">
                 {/* Show current subscription status for debugging */}
-                <div className="col-span-2 mb-2 p-2 bg-blue-500/10 rounded text-xs text-blue-300">
-                  Subscription: {selectedCustomer.subscriptionStatus} | Membership: {selectedCustomer.membershipStatus}
-                  {selectedCustomer.cancelAtPeriodEnd && ' | Scheduled for cancellation'}
+                <div className="col-span-2 mb-2 p-2 bg-blue-500/10 rounded text-xs text-blue-300 flex justify-between items-center">
+                  <span>
+                    Subscription: {selectedCustomer.subscriptionStatus} | Membership: {selectedCustomer.membershipStatus}
+                    {selectedCustomer.cancelAtPeriodEnd && ' | Scheduled for cancellation'}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/admin/customers/${selectedCustomer.id}/sync-status`, {
+                          method: 'POST'
+                        })
+                        const result = await response.json()
+                        if (result.success) {
+                          alert(`Status synced! ${result.previousStatus} → ${result.newStatus}`)
+                          // Refresh data
+                          fetchDashboardData()
+                        } else {
+                          alert(`Sync failed: ${result.error}`)
+                        }
+                      } catch (error) {
+                        alert('Sync failed')
+                      }
+                    }}
+                    className="text-xs px-2 py-1"
+                  >
+                    🔄 Sync
+                  </Button>
                 </div>
                 
                 {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && (

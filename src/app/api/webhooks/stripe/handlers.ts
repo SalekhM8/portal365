@@ -45,7 +45,39 @@ export async function handlePaymentFailed(invoice: any) {
 
 export async function handleSubscriptionUpdated(stripeSubscription: any) {
   try {
-    await prisma.subscription.updateMany({ where: { stripeSubscriptionId: stripeSubscription.id }, data: { status: stripeSubscription.status.toUpperCase(), currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000), currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000), nextBillingDate: new Date(stripeSubscription.current_period_end * 1000), cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end } })
+    // 🚀 Handle pause collection properly
+    let subscriptionStatus = stripeSubscription.status.toUpperCase()
+    
+    // If collection is paused, override status to PAUSED
+    if (stripeSubscription.pause_collection?.behavior === 'void') {
+      subscriptionStatus = 'PAUSED'
+    }
+    
+    const subscription = await prisma.subscription.findUnique({ 
+      where: { stripeSubscriptionId: stripeSubscription.id }, 
+      include: { user: true } 
+    })
+    if (!subscription) return
+
+    await prisma.subscription.update({ 
+      where: { id: subscription.id }, 
+      data: { 
+        status: subscriptionStatus,
+        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000), 
+        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000), 
+        nextBillingDate: new Date(stripeSubscription.current_period_end * 1000), 
+        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end 
+      } 
+    })
+    
+    // Update membership status to match
+    const membershipStatus = subscriptionStatus === 'PAUSED' ? 'SUSPENDED' : 
+                            subscriptionStatus === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE'
+    
+    await prisma.membership.updateMany({ 
+      where: { userId: subscription.userId }, 
+      data: { status: membershipStatus } 
+    })
   } catch {}
 }
 
