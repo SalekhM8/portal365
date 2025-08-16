@@ -397,12 +397,27 @@ export default function AdminDashboard() {
       if (result.success) {
         alert(`✅ ${membershipAction.toUpperCase()} successful: ${result.message}`)
         
-        // Refresh customer data
-        fetchAdminData()
+        // Small delay to ensure webhook processing completes (industry standard)
+        console.log('⏳ Waiting for webhook processing...')
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Refresh customer data and wait for completion
+        console.log('🔄 Refreshing admin data after successful operation...')
+        await fetchAdminData()
+        console.log('✅ Admin data refreshed successfully')
+        
+        // Fetch fresh customer data to update the selected customer
+        const dashboardResponse = await fetch('/api/admin/dashboard')
+        const freshData = await dashboardResponse.json()
+        const updatedCustomer = freshData.customers.find((c: any) => c.id === selectedCustomer.id)
+        
+        if (updatedCustomer) {
+          console.log(`🔄 Updated selected customer status: ${selectedCustomer.status} → ${updatedCustomer.status}`)
+          setSelectedCustomer(updatedCustomer)
+        }
         
         // Close modals and reset state
         setShowMembershipActionModal(false)
-        setSelectedCustomer(null)
         setMembershipAction(null)
         setMembershipActionReason('')
         
