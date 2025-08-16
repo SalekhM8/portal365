@@ -194,6 +194,13 @@ export async function POST(
 
       console.log(`✅ [${operationId}] Database updated successfully`)
 
+      // 🔍 VERIFY UPDATE - Check the updated status
+      const updatedSubscription = await prisma.subscription.findUnique({
+        where: { id: pausedSubscription.id },
+        include: { user: true }
+      })
+      console.log(`🔍 [${operationId}] Updated subscription status: ${updatedSubscription?.status}`)
+
     } catch (dbError: any) {
       console.error(`❌ [${operationId}] Database update failed:`, dbError)
       
