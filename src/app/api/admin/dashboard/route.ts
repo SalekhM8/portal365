@@ -304,7 +304,10 @@ export async function GET() {
       where: { role: 'CUSTOMER' },
       include: {
         memberships: {
-          where: { status: { in: ['ACTIVE', 'PENDING_PAYMENT'] } },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        },
+        subscriptions: {
           orderBy: { createdAt: 'desc' },
           take: 1
         },
