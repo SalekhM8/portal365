@@ -403,11 +403,16 @@ export default function AdminDashboard() {
                               membershipAction === 'resume' ? 'ACTIVE' : 'CANCELLED'
         
         // Optimistically update the customer list immediately
-        setCustomers(customers.map(customer => 
+        console.log(`🔄 Optimistic update: ${selectedCustomer.id} status ${selectedCustomer.status} → ${expectedStatus}`)
+        const updatedCustomers = customers.map(customer => 
           customer.id === selectedCustomer.id 
             ? { ...customer, status: expectedStatus, subscriptionStatus: expectedStatus }
             : customer
-        ))
+        )
+        console.log(`📊 Updated customers array:`, updatedCustomers.find(c => c.id === selectedCustomer.id))
+        console.log(`🔍 Current status filter: "${statusFilter}"`)
+        console.log(`🔍 Will customer be visible after filter? Expected status "${expectedStatus}" matches filter "${statusFilter}":`, statusFilter === 'all' || expectedStatus === statusFilter)
+        setCustomers(updatedCustomers)
         
         // Update selected customer immediately
         const optimisticCustomer = { 
@@ -417,13 +422,16 @@ export default function AdminDashboard() {
         }
         setSelectedCustomer(optimisticCustomer)
         
-        // Background refresh to ensure consistency (no await - non-blocking)
-        fetchAdminData().then(() => {
-          console.log('✅ Background refresh completed')
-        }).catch(error => {
-          console.error('❌ Background refresh failed:', error)
-          // Could implement rollback here if needed
-        })
+        // Background refresh to ensure consistency (with delay to allow optimistic update to show)
+        setTimeout(() => {
+          console.log('🔄 Starting background refresh after optimistic update...')
+          fetchAdminData().then(() => {
+            console.log('✅ Background refresh completed')
+          }).catch(error => {
+            console.error('❌ Background refresh failed:', error)
+            // Could implement rollback here if needed
+          })
+        }, 500) // Give optimistic update time to be visible
         
         alert(`✅ ${membershipAction.toUpperCase()} successful: ${result.message}`)
         
