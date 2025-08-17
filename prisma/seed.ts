@@ -20,7 +20,7 @@ async function main() {
     },
     {
       name: 'aura_tuition',
-      displayName: 'Aura Tuition Company',
+      displayName: 'IQ Learning Centre',
       description: '1-on-1 personal training & coaching',
       vatThreshold: 90000,
       currentRevenue: 45200,
@@ -40,7 +40,7 @@ async function main() {
     },
     {
       name: 'aura_wellness',
-      displayName: 'Aura Wellness Center',
+      displayName: 'Aura Fitness Centre',
       description: 'Recovery, wellness & mental health',
       vatThreshold: 90000,
       currentRevenue: 67300,

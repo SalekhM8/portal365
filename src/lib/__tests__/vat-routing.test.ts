@@ -43,7 +43,7 @@ describe('VAT routing', () => {
       },
       {
         id: 'entity_b',
-        name: 'Aura Wellness',
+        name: 'Aura Fitness Centre',
         vatThreshold: 90000,
         payments: [
           { amount: 1000, createdAt: new Date() }

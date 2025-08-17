@@ -740,9 +740,9 @@ export default function AdminDashboard() {
                 <SelectContent>
                   <SelectItem value="all">All Entities</SelectItem>
                   <SelectItem value="Aura MMA">Aura MMA</SelectItem>
-                  <SelectItem value="Aura Tuition">Aura Tuition</SelectItem>
+                  <SelectItem value="IQ Learning Centre">IQ Learning Centre</SelectItem>
                   <SelectItem value="Aura Women's">Aura Women's Gym</SelectItem>
-                  <SelectItem value="Aura Wellness">Aura Wellness</SelectItem>
+                  <SelectItem value="Aura Fitness Centre">Aura Fitness Centre</SelectItem>
                 </SelectContent>
               </Select>
             </div>
