@@ -229,34 +229,70 @@ export async function POST(
 
       // 📊 CREATE AUDIT LOG OUTSIDE TRANSACTION (won't rollback main updates if it fails)
       try {
-          await prisma.subscriptionAuditLog.create({
-            data: {
-              subscriptionId: activeSubscription.id,
-              action: cancelationType === 'immediate' ? 'CANCEL_IMMEDIATE' : 'CANCEL_SCHEDULED',
-              performedBy: adminUser.id,
-              performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
-              reason: reason,
-              operationId,
-              metadata: JSON.stringify({
-                cancelationType,
-                prorate,
-                stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
-                routedEntityId: activeSubscription.routedEntityId,
-                customerEmail: customer.email,
-                currentPeriodEnd: activeSubscription.currentPeriodEnd.toISOString(),
-                timestamp: new Date().toISOString(),
-                processingTimeMs: Date.now() - startTime
-              })
-            }
-          })
-          console.log(`✅ [${operationId}] Audit log created successfully`)
-        } catch (auditError) {
-          console.warn(`⚠️ [${operationId}] Audit log failed (table may not exist):`, auditError)
-          // Continue without audit log - don't fail the operation
-        }
+        await prisma.subscriptionAuditLog.create({
+          data: {
+            subscriptionId: activeSubscription.id,
+            action: cancelationType === 'immediate' ? 'CANCEL_IMMEDIATE' : 'CANCEL_SCHEDULED',
+            performedBy: adminUser.id,
+            performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
+            reason: reason,
+            operationId,
+            metadata: JSON.stringify({
+              cancelationType,
+              prorate,
+              stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
+              routedEntityId: activeSubscription.routedEntityId,
+              customerEmail: customer.email,
+              currentPeriodEnd: activeSubscription.currentPeriodEnd.toISOString(),
+              timestamp: new Date().toISOString(),
+              processingTimeMs: Date.now() - startTime
+            })
+          }
+        })
+        console.log(`✅ [${operationId}] Audit log created successfully`)
+      } catch (auditError) {
+        console.warn(`⚠️ [${operationId}] Audit log failed (table may not exist):`, auditError)
+        // Continue without audit log - don't fail the operation
       }
 
       console.log(`✅ [${operationId}] Database updated successfully`)
+
+      // 🎉 SUCCESS RESPONSE
+      const processingTime = Date.now() - startTime
+      console.log(`✅ [${operationId}] Membership cancellation completed successfully in ${processingTime}ms`)
+
+      const responseData: any = {
+        success: true,
+        message: cancelationType === 'immediate' 
+          ? 'Membership cancelled immediately' 
+          : 'Membership scheduled for cancellation at period end',
+        subscription: {
+          id: activeSubscription.id,
+          stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
+          status: cancelationType === 'immediate' ? 'CANCELLED' : activeSubscription.status,
+          customerId: customer.id,
+          customerName: `${customer.firstName} ${customer.lastName}`,
+          customerEmail: customer.email,
+          membershipType: activeSubscription.membershipType,
+          routedEntity: activeSubscription.routedEntity.displayName,
+          cancelationType,
+          cancelledAt: new Date().toISOString(),
+          cancelledBy: `${adminUser.firstName} ${adminUser.lastName}`,
+          reason: reason
+        },
+        operationId,
+        processingTimeMs: processingTime,
+        code: cancelationType === 'immediate' ? 'IMMEDIATE_CANCELLATION_SUCCESS' : 'SCHEDULED_CANCELLATION_SUCCESS'
+      }
+
+      // Add period end info for scheduled cancellations
+      if (cancelationType === 'end_of_period') {
+        responseData.subscription.cancelAtPeriodEnd = true
+        responseData.subscription.periodEndDate = activeSubscription.currentPeriodEnd.toISOString()
+        responseData.subscription.accessUntil = activeSubscription.currentPeriodEnd.toISOString()
+      }
+
+      return NextResponse.json(responseData)
 
     } catch (dbError: any) {
       console.error(`❌ [${operationId}] Database update failed:`, dbError)
@@ -288,43 +324,6 @@ export async function POST(
         rollbackAttempted: cancelationType !== 'immediate'
       }, { status: 500 })
     }
-
-    // 🎉 SUCCESS RESPONSE
-    const processingTime = Date.now() - startTime
-    console.log(`✅ [${operationId}] Membership cancellation completed successfully in ${processingTime}ms`)
-
-    const responseData: any = {
-      success: true,
-      message: cancelationType === 'immediate' 
-        ? 'Membership cancelled immediately' 
-        : 'Membership scheduled for cancellation at period end',
-      subscription: {
-        id: activeSubscription.id,
-        stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
-        status: cancelationType === 'immediate' ? 'CANCELLED' : activeSubscription.status,
-        customerId: customer.id,
-        customerName: `${customer.firstName} ${customer.lastName}`,
-        customerEmail: customer.email,
-        membershipType: activeSubscription.membershipType,
-        routedEntity: activeSubscription.routedEntity.displayName,
-        cancelationType,
-        cancelledAt: new Date().toISOString(),
-        cancelledBy: `${adminUser.firstName} ${adminUser.lastName}`,
-        reason: reason
-      },
-      operationId,
-      processingTimeMs: processingTime,
-      code: cancelationType === 'immediate' ? 'IMMEDIATE_CANCELLATION_SUCCESS' : 'SCHEDULED_CANCELLATION_SUCCESS'
-    }
-
-    // Add period end info for scheduled cancellations
-    if (cancelationType === 'end_of_period') {
-      responseData.subscription.cancelAtPeriodEnd = true
-      responseData.subscription.periodEndDate = activeSubscription.currentPeriodEnd.toISOString()
-      responseData.subscription.accessUntil = activeSubscription.currentPeriodEnd.toISOString()
-    }
-
-    return NextResponse.json(responseData)
 
   } catch (error: any) {
     const processingTime = Date.now() - startTime
