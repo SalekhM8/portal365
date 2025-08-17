@@ -751,6 +751,50 @@ export default function AdminDashboard() {
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
+              <Button 
+                variant="outline" 
+                className="bg-blue-600 border-blue-500 hover:bg-blue-700"
+                onClick={async () => {
+                  if (confirm('Update business entity names?\n\nAura Tuition → IQ Learning Centre\nAura Wellness → Aura Fitness Centre')) {
+                    try {
+                      const response = await fetch('/api/admin/update-business-names', { method: 'POST' })
+                      const result = await response.json()
+                      if (result.success) {
+                        alert('✅ Business names updated successfully!')
+                        await fetchAdminData()
+                      } else {
+                        alert('❌ Failed to update names: ' + result.error)
+                      }
+                    } catch (error) {
+                      alert('❌ Error: ' + error)
+                    }
+                  }
+                }}
+              >
+                🏢 Update Names
+              </Button>
+              <Button 
+                variant="outline" 
+                className="bg-red-600 border-red-500 hover:bg-red-700"
+                onClick={async () => {
+                  if (confirm('⚠️ CLEAR ALL TEST DATA?\n\nThis will permanently delete:\n- All customers\n- All memberships\n- All payments\n- All subscriptions\n\nAdmin accounts will be preserved.\n\nAre you sure?')) {
+                    try {
+                      const response = await fetch('/api/admin/clear-test-data', { method: 'POST' })
+                      const result = await response.json()
+                      if (result.success) {
+                        alert('✅ Test data cleared successfully!')
+                        await fetchAdminData()
+                      } else {
+                        alert('❌ Failed to clear data: ' + result.error)
+                      }
+                    } catch (error) {
+                      alert('❌ Error: ' + error)
+                    }
+                  }
+                }}
+              >
+                🧹 Clear Test Data
+              </Button>
               <Button onClick={() => setShowAddCustomer(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add Customer
