@@ -393,19 +393,17 @@ export default function AdminDashboard() {
       })
 
       const result = await response.json()
-      console.log(`📨 ${membershipAction.toUpperCase()} API Response:`, result)
-      console.log(`📊 Result success:`, result.success)
 
       if (result.success) {
         // ✅ INDUSTRY STANDARD: Optimistic update with immediate DB refresh
-        console.log(`🔄 ${membershipAction.toUpperCase()} successful, refreshing data...`)
+
         
         // Determine expected status based on action
         const expectedStatus = membershipAction === 'pause' ? 'PAUSED' : 
                               membershipAction === 'resume' ? 'ACTIVE' : 'CANCELLED'
         
         // Optimistically update the customer list immediately
-        console.log(`🔄 Optimistic update: ${selectedCustomer.id} status ${selectedCustomer.status} → ${expectedStatus}`)
+
         const updatedCustomers = customers.map(customer => 
           customer.id === selectedCustomer.id 
             ? { ...customer, status: expectedStatus, subscriptionStatus: expectedStatus }
@@ -424,21 +422,9 @@ export default function AdminDashboard() {
         }
         setSelectedCustomer(optimisticCustomer)
         
-        // DEBUG: Check what's actually in the database right now
+        // Background refresh to sync with database
         setTimeout(async () => {
-          console.log('🔄 Checking database status after operation...')
-          try {
-            const dbCheck = await fetch('/api/admin/dashboard')
-            const dbData = await dbCheck.json()
-            const customerInDb = dbData.customers.find((c: any) => c.id === selectedCustomer.id)
-            console.log(`📊 Database shows customer status as: ${customerInDb?.status} (subscription: ${customerInDb?.subscriptionStatus})`)
-            
-            console.log('🔄 Starting background refresh after optimistic update...')
-            await fetchAdminData()
-            console.log('✅ Background refresh completed')
-          } catch (error) {
-            console.error('❌ Background refresh failed:', error)
-          }
+          await fetchAdminData()
         }, 500)
         
         alert(`✅ ${membershipAction.toUpperCase()} successful: ${result.message}`)
@@ -1276,29 +1262,6 @@ export default function AdminDashboard() {
                     Subscription: {selectedCustomer.subscriptionStatus} | Membership: {selectedCustomer.membershipStatus}
                     {selectedCustomer.cancelAtPeriodEnd && ' | Scheduled for cancellation'}
                   </span>
-                  <Button
-                    size="sm" 
-                    variant="outline"
-                    onClick={async () => {
-                      try {
-                        const response = await fetch(`/api/admin/customers/${selectedCustomer.id}/sync-status`, {
-                          method: 'POST'
-                        })
-                        const result = await response.json()
-                        if (result.success) {
-                          alert(`Status synced! ${result.previousStatus} → ${result.newStatus}`)
-                          fetchAdminData()
-                        } else {
-                          alert(`Sync failed: ${result.error}`)
-                        }
-                      } catch (error) {
-                        alert('Sync failed')
-                      }
-                    }}
-                    className="text-xs px-3 py-1 border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10"
-                  >
-                    🔄 SYNC STATUS
-                  </Button>
                 </div>
                 
                 {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && (
