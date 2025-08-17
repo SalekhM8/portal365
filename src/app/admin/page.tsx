@@ -810,10 +810,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="flex justify-between items-center mb-6">
-            <div></div>
-            <div className="flex gap-2">
-          </div>
+
 
           <Card>
             <CardContent className="p-0">
