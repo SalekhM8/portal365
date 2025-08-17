@@ -195,6 +195,7 @@ export async function POST(
 
     // 💾 UPDATE LOCAL DATABASE
     try {
+      // 🔥 MAIN DATABASE UPDATE (without audit log to prevent transaction rollback)
       await prisma.$transaction(async (tx) => {
         if (cancelationType === 'immediate') {
           // Immediate cancellation - update status immediately
@@ -224,10 +225,11 @@ export async function POST(
           })
           // Membership stays active until period end
         }
+      })
 
-        // 📊 CREATE AUDIT LOG (fail gracefully if table doesn't exist)
-        try {
-          await tx.subscriptionAuditLog.create({
+      // 📊 CREATE AUDIT LOG OUTSIDE TRANSACTION (won't rollback main updates if it fails)
+      try {
+          await prisma.subscriptionAuditLog.create({
             data: {
               subscriptionId: activeSubscription.id,
               action: cancelationType === 'immediate' ? 'CANCEL_IMMEDIATE' : 'CANCEL_SCHEDULED',

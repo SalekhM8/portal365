@@ -152,6 +152,7 @@ export async function POST(
 
     // 💾 UPDATE LOCAL DATABASE (Webhooks will also update, but we do it immediately for consistency)
     try {
+      // 🔥 MAIN DATABASE UPDATE (without audit log to prevent transaction rollback)
       await prisma.$transaction(async (tx) => {
         // Update subscription status
         const updatedSubscription = await tx.subscription.update({
@@ -169,33 +170,33 @@ export async function POST(
           data: { status: 'SUSPENDED' }
         })
         console.log(`📊 [${operationId}] Updated ${updatedMemberships.count} memberships to SUSPENDED`)
-
-        // 📊 CREATE AUDIT LOG (fail gracefully if table doesn't exist)
-        try {
-          await tx.subscriptionAuditLog.create({
-            data: {
-              subscriptionId: activeSubscription.id,
-              action: 'PAUSE',
-              performedBy: adminUser.id,
-              performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
-              reason: reason || 'No reason provided',
-              operationId,
-              metadata: JSON.stringify({
-                pauseBehavior,
-                stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
-                routedEntityId: activeSubscription.routedEntityId,
-                customerEmail: customer.email,
-                timestamp: new Date().toISOString(),
-                processingTimeMs: Date.now() - startTime
-              })
-            }
-          })
-          console.log(`✅ [${operationId}] Audit log created successfully`)
-        } catch (auditError) {
-          console.warn(`⚠️ [${operationId}] Audit log failed (table may not exist):`, auditError)
-          // Continue without audit log - don't fail the operation
-        }
       })
+
+      // 📊 CREATE AUDIT LOG OUTSIDE TRANSACTION (won't rollback main updates if it fails)
+      try {
+        await prisma.subscriptionAuditLog.create({
+          data: {
+            subscriptionId: activeSubscription.id,
+            action: 'PAUSE',
+            performedBy: adminUser.id,
+            performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
+            reason: reason || 'No reason provided',
+            operationId,
+            metadata: JSON.stringify({
+              pauseBehavior,
+              stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
+              routedEntityId: activeSubscription.routedEntityId,
+              customerEmail: customer.email,
+              timestamp: new Date().toISOString(),
+              processingTimeMs: Date.now() - startTime
+            })
+          }
+        })
+        console.log(`✅ [${operationId}] Audit log created successfully`)
+      } catch (auditError) {
+        console.warn(`⚠️ [${operationId}] Audit log failed (table may not exist):`, auditError)
+        // Continue without audit log - operation still succeeded
+      }
 
       console.log(`✅ [${operationId}] Database updated successfully`)
       
