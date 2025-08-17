@@ -744,57 +744,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* 🚨 PRODUCTION SETUP BUTTONS */}
-          <div className="bg-gradient-to-r from-blue-600/20 to-red-600/20 border border-blue-500/30 rounded-lg p-4 mb-6">
-            <h3 className="text-lg font-bold text-white mb-2">🚀 Production Setup</h3>
-            <p className="text-white/70 text-sm mb-3">Click these buttons to prepare your platform for real customers:</p>
-            <div className="flex flex-wrap gap-3">
-              <Button 
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                onClick={async () => {
-                  if (confirm('🏢 UPDATE BUSINESS ENTITY NAMES?\n\n• Aura Tuition → IQ Learning Centre\n• Aura Wellness → Aura Fitness Centre\n\nThis will update your live database.')) {
-                    try {
-                      const response = await fetch('/api/admin/update-business-names', { method: 'POST' })
-                      const result = await response.json()
-                      if (result.success) {
-                        alert('✅ Business names updated successfully!\n\nYour routing entities now show the correct names.')
-                        await fetchAdminData()
-                      } else {
-                        alert('❌ Failed to update names: ' + result.error)
-                      }
-                    } catch (error) {
-                      alert('❌ Error: ' + error)
-                    }
-                  }
-                }}
-              >
-                🏢 Update Business Names
-              </Button>
-              <Button 
-                size="lg" 
-                className="bg-red-600 hover:bg-red-700 text-white font-semibold"
-                onClick={async () => {
-                  if (confirm('⚠️ CLEAR ALL TEST DATA?\n\nThis will permanently delete:\n• All customers & memberships\n• All payments & subscriptions\n• All test statistics\n\n✅ Admin accounts will be preserved\n✅ Business entities will remain\n\nPlatform will be ready for real customers!')) {
-                    try {
-                      const response = await fetch('/api/admin/clear-test-data', { method: 'POST' })
-                      const result = await response.json()
-                      if (result.success) {
-                        alert('✅ Test data cleared successfully!\n\n🚀 Platform is now ready for real customers!')
-                        await fetchAdminData()
-                      } else {
-                        alert('❌ Failed to clear data: ' + result.error)
-                      }
-                    } catch (error) {
-                      alert('❌ Error: ' + error)
-                    }
-                  }
-                }}
-              >
-                🧹 Clear Test Data
-              </Button>
-            </div>
-          </div>
+
 
 
 
