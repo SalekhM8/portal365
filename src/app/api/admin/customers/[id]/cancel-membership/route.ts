@@ -254,7 +254,7 @@ export async function POST(
           console.warn(`⚠️ [${operationId}] Audit log failed (table may not exist):`, auditError)
           // Continue without audit log - don't fail the operation
         }
-      })
+      }
 
       console.log(`✅ [${operationId}] Database updated successfully`)
 
