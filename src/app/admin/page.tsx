@@ -746,21 +746,33 @@ export default function AdminDashboard() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline">
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
+              <Button onClick={() => setShowAddCustomer(true)}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Customer
+              </Button>
+            </div>
+          </div>
+
+          {/* 🚨 PRODUCTION SETUP BUTTONS */}
+          <div className="bg-gradient-to-r from-blue-600/20 to-red-600/20 border border-blue-500/30 rounded-lg p-4 mb-6">
+            <h3 className="text-lg font-bold text-white mb-2">🚀 Production Setup</h3>
+            <p className="text-white/70 text-sm mb-3">Click these buttons to prepare your platform for real customers:</p>
+            <div className="flex flex-wrap gap-3">
               <Button 
-                variant="outline" 
-                className="bg-blue-600 border-blue-500 hover:bg-blue-700"
+                size="lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
                 onClick={async () => {
-                  if (confirm('Update business entity names?\n\nAura Tuition → IQ Learning Centre\nAura Wellness → Aura Fitness Centre')) {
+                  if (confirm('🏢 UPDATE BUSINESS ENTITY NAMES?\n\n• Aura Tuition → IQ Learning Centre\n• Aura Wellness → Aura Fitness Centre\n\nThis will update your live database.')) {
                     try {
                       const response = await fetch('/api/admin/update-business-names', { method: 'POST' })
                       const result = await response.json()
                       if (result.success) {
-                        alert('✅ Business names updated successfully!')
+                        alert('✅ Business names updated successfully!\n\nYour routing entities now show the correct names.')
                         await fetchAdminData()
                       } else {
                         alert('❌ Failed to update names: ' + result.error)
@@ -771,18 +783,18 @@ export default function AdminDashboard() {
                   }
                 }}
               >
-                🏢 Update Names
+                🏢 Update Business Names
               </Button>
               <Button 
-                variant="outline" 
-                className="bg-red-600 border-red-500 hover:bg-red-700"
+                size="lg" 
+                className="bg-red-600 hover:bg-red-700 text-white font-semibold"
                 onClick={async () => {
-                  if (confirm('⚠️ CLEAR ALL TEST DATA?\n\nThis will permanently delete:\n- All customers\n- All memberships\n- All payments\n- All subscriptions\n\nAdmin accounts will be preserved.\n\nAre you sure?')) {
+                  if (confirm('⚠️ CLEAR ALL TEST DATA?\n\nThis will permanently delete:\n• All customers & memberships\n• All payments & subscriptions\n• All test statistics\n\n✅ Admin accounts will be preserved\n✅ Business entities will remain\n\nPlatform will be ready for real customers!')) {
                     try {
                       const response = await fetch('/api/admin/clear-test-data', { method: 'POST' })
                       const result = await response.json()
                       if (result.success) {
-                        alert('✅ Test data cleared successfully!')
+                        alert('✅ Test data cleared successfully!\n\n🚀 Platform is now ready for real customers!')
                         await fetchAdminData()
                       } else {
                         alert('❌ Failed to clear data: ' + result.error)
@@ -795,11 +807,12 @@ export default function AdminDashboard() {
               >
                 🧹 Clear Test Data
               </Button>
-              <Button onClick={() => setShowAddCustomer(true)}>
-                <UserPlus className="h-4 w-4 mr-2" />
-                Add Customer
-              </Button>
             </div>
+          </div>
+
+          <div className="flex justify-between items-center mb-6">
+            <div></div>
+            <div className="flex gap-2">
           </div>
 
           <Card>
