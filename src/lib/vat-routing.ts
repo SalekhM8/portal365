@@ -88,7 +88,7 @@ export class VATCalculationEngine {
       
       positions.push({
         entityId: entity.id,
-        entityName: entity.name,
+        entityName: entity.displayName, // Use displayName instead of internal name
         currentRevenue: totalRevenue,
         vatThreshold: Number(entity.vatThreshold),
         headroom,
