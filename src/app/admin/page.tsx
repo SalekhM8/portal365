@@ -739,21 +739,21 @@ export default function AdminDashboard() {
               </Button>
               <Button 
                 variant="outline"
-                className="bg-red-600 border-red-500 hover:bg-red-700 text-white"
+                className="bg-green-600 border-green-500 hover:bg-green-700 text-white"
                 onClick={async () => {
-                  if (confirm('🧹 FIX FAKE PAYMENT RECORDS?\n\nThis will:\n• Find all fake "CONFIRMED" payments\n• Mark them as "FAILED" \n• Clean up the Payments tab\n\nThis targets the specific payment bug.')) {
+                  if (confirm('🔄 RESTORE PAYMENTS?\n\nThis will restore payments that were incorrectly marked as FAILED by the cleanup.\n\nThis is safe and will only restore payments that were marked failed by our cleanup process.')) {
                     try {
-                      const response = await fetch('/api/admin/fix-fake-payments', { method: 'POST' })
+                      const response = await fetch('/api/admin/restore-payments', { method: 'POST' })
                       const result = await response.json()
                       if (result.success) {
-                        console.log('🧹 Payment fix result:', result)
-                        alert(`✅ Payment cleanup completed!\n\n${result.summary.fixedCount} fake payments marked as FAILED\n\nPage will refresh to show correct payment data.`)
+                        console.log('🔄 Payment restore result:', result)
+                        alert(`✅ Payment restoration completed!\n\n${result.summary.restoredCount} payments restored to CONFIRMED\n\nPage will refresh to show restored data.`)
                         
                         // Force immediate page refresh to reload all data
                         window.location.reload()
                       } else {
-                        console.error('❌ Payment fix failed:', result)
-                        alert('❌ Payment fix failed: ' + result.error)
+                        console.error('❌ Payment restore failed:', result)
+                        alert('❌ Payment restore failed: ' + result.error)
                       }
                     } catch (error) {
                       alert('❌ Error: ' + error)
@@ -761,7 +761,7 @@ export default function AdminDashboard() {
                   }
                 }}
               >
-                🧹 Fix Fake Payments
+                🔄 Restore Payments
               </Button>
               <Button onClick={() => setShowAddCustomer(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
