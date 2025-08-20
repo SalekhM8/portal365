@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
     // Create setup intent for new payment method
     const setupIntent = await stripe.setupIntents.create({
       customer: subscription.stripeCustomerId,
+      payment_method_types: ['card', 'bacs_debit'], // Support UK bank cards and direct debit
       usage: 'off_session', // For future payments
       metadata: {
         userId: user.id,
