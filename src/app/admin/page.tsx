@@ -739,21 +739,21 @@ export default function AdminDashboard() {
               </Button>
               <Button 
                 variant="outline"
-                className="bg-green-600 border-green-500 hover:bg-green-700 text-white"
+                className="bg-red-600 border-red-500 hover:bg-red-700 text-white"
                 onClick={async () => {
-                  if (confirm('🔄 RESTORE ALL PAYMENTS?\n\nThis will restore ALL payments back to CONFIRMED status.\n\nUse this to undo the overly broad payment cleanup.')) {
+                  if (confirm('🎯 FIX INCOMPLETE USER PAYMENTS?\n\nThis will ONLY target users who show INCOMPLETE/PENDING in the Customers tab.\n\nThis is the precise fix you requested.')) {
                     try {
-                      const response = await fetch('/api/admin/restore-payments', { method: 'POST' })
+                      const response = await fetch('/api/admin/fix-incomplete-payments', { method: 'POST' })
                       const result = await response.json()
                       if (result.success) {
-                        console.log('🔄 Payment restore result:', result)
-                        alert(`✅ Payment restoration completed!\n\n${result.summary.restoredCount} payments restored to CONFIRMED\n\nPage will refresh to show restored data.`)
+                        console.log('🎯 Incomplete payment fix result:', result)
+                        alert(`✅ Surgical fix completed!\n\n${result.summary.paymentsFixed} fake payments fixed for ${result.summary.incompleteUsers} incomplete users\n\nPage will refresh to show correct data.`)
                         
                         // Force immediate page refresh to reload all data
                         window.location.reload()
                       } else {
-                        console.error('❌ Payment restore failed:', result)
-                        alert('❌ Payment restore failed: ' + result.error)
+                        console.error('❌ Incomplete payment fix failed:', result)
+                        alert('❌ Fix failed: ' + result.error)
                       }
                     } catch (error) {
                       alert('❌ Error: ' + error)
@@ -761,7 +761,7 @@ export default function AdminDashboard() {
                   }
                 }}
               >
-                🔄 Restore Payments
+                🎯 Fix Incomplete Users Only
               </Button>
               <Button onClick={() => setShowAddCustomer(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
