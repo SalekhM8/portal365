@@ -43,14 +43,38 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
     metadata: { userId: subscription.userId, membershipType: subscription.membershipType, routedEntityId: subscription.routedEntityId, dbSubscriptionId: subscription.id }
   }, { idempotencyKey: `start-sub:${subscription.id}:${trialEndTimestamp}` })
 
-  await prisma.subscription.update({ where: { id: subscription.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
-  await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE', nextBillingDate } })
+  // 🔄 Update subscription with Stripe ID but keep as PENDING_PAYMENT until webhook confirms payment
+  await prisma.subscription.update({ 
+    where: { id: subscription.id }, 
+    data: { 
+      stripeSubscriptionId: stripeSubscription.id,
+      status: 'PENDING_PAYMENT', // Will be updated to ACTIVE by webhook after payment succeeds
+      nextBillingDate 
+    } 
+  })
 
-  if (proratedAmount > 0) {
-    await prisma.payment.create({ data: { userId: subscription.userId, amount: proratedAmount, currency: 'GBP', status: 'CONFIRMED', description: 'Prorated first month payment', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
-  }
+  console.log(`✅ Payment method setup completed for ${subscription.user.email}`)
+  console.log(`🔄 Subscription status: PENDING_PAYMENT (will activate via webhook after payment)`)
+  console.log(`💰 Prorated amount: £${proratedAmount} (will be charged via auto_advance invoice)`)
 
-  return NextResponse.json({ success: true, message: 'Payment method setup completed and subscription activated', subscription: { id: subscription.id, status: 'ACTIVE', proratedAmount, nextBillingDate: nextBillingKey }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
+  return NextResponse.json({ 
+    success: true, 
+    message: 'Payment method setup completed. Subscription will activate after payment confirmation.',
+    subscription: { 
+      id: subscription.id, 
+      status: 'PENDING_PAYMENT',
+      stripeSubscriptionId: stripeSubscription.id,
+      proratedAmount, 
+      nextBillingDate: nextBillingKey 
+    }, 
+    user: { 
+      id: subscription.user.id, 
+      email: subscription.user.email, 
+      firstName: subscription.user.firstName, 
+      lastName: subscription.user.lastName 
+    },
+    note: 'Subscription will activate automatically after payment is processed'
+  })
 }
 
 export async function handlePaymentIntentConfirmation(body: { paymentIntentId: string, subscriptionId: string }) {

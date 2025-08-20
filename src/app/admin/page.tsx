@@ -737,6 +737,28 @@ export default function AdminDashboard() {
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
+              <Button 
+                variant="outline"
+                className="bg-yellow-600 border-yellow-500 hover:bg-yellow-700 text-white"
+                onClick={async () => {
+                  if (confirm('🔄 SYNC ALL SUBSCRIPTIONS WITH STRIPE?\n\nThis will:\n• Check actual Stripe subscription status\n• Fix any inconsistencies\n• Update users with incomplete payments\n\nThis is safe and recommended after the payment bug fix.')) {
+                    try {
+                      const response = await fetch('/api/admin/sync-stripe-subscriptions', { method: 'POST' })
+                      const result = await response.json()
+                      if (result.success) {
+                        alert(`✅ Sync completed!\n\n${result.summary.fixedCount} subscriptions fixed\n${result.summary.correctCount} already correct\n${result.summary.errorCount} errors\n\nDashboard will refresh to show correct data.`)
+                        await fetchAdminData()
+                      } else {
+                        alert('❌ Sync failed: ' + result.error)
+                      }
+                    } catch (error) {
+                      alert('❌ Error: ' + error)
+                    }
+                  }
+                }}
+              >
+                🔄 Sync Stripe Status
+              </Button>
               <Button onClick={() => setShowAddCustomer(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add Customer

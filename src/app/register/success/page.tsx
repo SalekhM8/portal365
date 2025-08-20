@@ -68,16 +68,17 @@ function SuccessContent() {
           const confirmResult = await response.json()
 
           if (confirmResult.success) {
-            // Success! User is already logged in, just redirect to dashboard
-            console.log('✅ Payment processed successfully')
+            // Success! Payment method setup completed
+            console.log('✅ Payment method setup completed')
             setUserEmail(confirmResult.user.email)
             setIsProcessing(false)
             
-            // Wait 2 seconds then redirect to dashboard (user is already authenticated)
+            // Show success message and redirect to dashboard
+            // Note: Subscription will activate via webhook after payment is processed
             setTimeout(() => {
               router.push('/dashboard')
               router.refresh() // Refresh to ensure session is current
-            }, 2000)
+            }, 3000) // Slightly longer to show the message
           } else {
             setError(confirmResult.error || 'Failed to complete subscription setup')
             setIsProcessing(false)
