@@ -27,11 +27,11 @@ const businesses = [
     color: 'bg-gradient-to-br from-red-500 to-red-600',
     offerings: ['World class grappling', 'Elite level striking coaching', 'Professional MMA fighters and coaches', 'National Champions Wrestling coach', 'World class Strength and Conditioning Facility'],
     membershipTypes: [
-      { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true },
-      { name: 'Weekend Only', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false },
-      { name: 'Kids Unlimited (Under 14s)', price: MEMBERSHIP_PLANS.FULL_UNDER18.monthlyPrice, popular: false },
-      { name: 'Kids Weekend (Under 14s)', price: MEMBERSHIP_PLANS.WEEKEND_UNDER18.monthlyPrice, popular: false },
-      { name: 'Masters Program (30+)', price: MEMBERSHIP_PLANS.MASTERS.monthlyPrice, popular: false }
+      { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true, key: 'FULL_ADULT' },
+      { name: 'Weekend Only', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false, key: 'WEEKEND_ADULT' },
+      { name: 'Kids Unlimited (Under 14s)', price: MEMBERSHIP_PLANS.FULL_UNDER18.monthlyPrice, popular: false, key: 'FULL_UNDER18' },
+      { name: 'Kids Weekend (Under 14s)', price: MEMBERSHIP_PLANS.WEEKEND_UNDER18.monthlyPrice, popular: false, key: 'WEEKEND_UNDER18' },
+      { name: 'Masters Program (30+)', price: MEMBERSHIP_PLANS.MASTERS.monthlyPrice, popular: false, key: 'MASTERS' }
     ]
   },
   {
@@ -42,7 +42,7 @@ const businesses = [
     color: 'bg-gradient-to-br from-pink-500 to-pink-600',
     offerings: ['Muay Thai Only', 'Women-Only Classes', 'Qualified Female Instructor', 'Technique-Focused Training'],
     membershipTypes: [
-      { name: "Women's Program", price: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice, popular: true }
+      { name: "Women's Program", price: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice, popular: true, key: 'WOMENS_CLASSES' }
     ]
   }
 ];
@@ -181,62 +181,67 @@ export default function Home() {
             {businesses.map((business) => {
               const IconComponent = business.icon;
               return (
-                <Link key={business.id} href={`/register?business=${business.id}`}>
-                  <Card className="group bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-500 cursor-pointer backdrop-blur-sm">
-                    <CardHeader className="space-y-6 p-6 sm:p-8">
-                      <div className="flex items-start gap-4">
-                        <div className={`p-4 rounded-xl ${business.color} text-white shadow-lg`}>
-                          <IconComponent className="h-7 w-7" />
-                        </div>
-                        <div className="flex-1">
-                          <CardTitle className="text-xl sm:text-2xl text-white font-bold mb-2">{business.name}</CardTitle>
-                          <CardDescription className="text-base text-white/70">
-                            {business.description}
-                          </CardDescription>
-                        </div>
+                <Card key={business.id} className="bg-white/5 border-white/10 backdrop-blur-sm">
+                  <CardHeader className="space-y-6 p-6 sm:p-8">
+                    <div className="flex items-start gap-4">
+                      <div className={`p-4 rounded-xl ${business.color} text-white shadow-lg`}>
+                        <IconComponent className="h-7 w-7" />
                       </div>
-                    </CardHeader>
-                  
-                    <CardContent className="space-y-8 p-6 sm:p-8 pt-0">
-                      {/* Offerings */}
-                      <div className="space-y-4">
-                        <h4 className="font-semibold text-white/90 text-sm uppercase tracking-wider">What's Included:</h4>
-                        <div className="grid gap-3">
-                          {business.offerings.map((offering, index) => (
-                            <div key={index} className="flex items-start gap-3 text-sm text-white/80">
-                              <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0 mt-0.5" />
-                              <span className="leading-relaxed">{offering}</span>
-                            </div>
-                          ))}
-                        </div>
+                      <div className="flex-1">
+                        <CardTitle className="text-xl sm:text-2xl text-white font-bold mb-2">{business.name}</CardTitle>
+                        <CardDescription className="text-base text-white/70">
+                          {business.description}
+                        </CardDescription>
                       </div>
+                    </div>
+                  </CardHeader>
+                
+                  <CardContent className="space-y-8 p-6 sm:p-8 pt-0">
+                    {/* Offerings */}
+                    <div className="space-y-4">
+                      <h4 className="font-semibold text-white/90 text-sm uppercase tracking-wider">What's Included:</h4>
+                      <div className="grid gap-3">
+                        {business.offerings.map((offering, index) => (
+                          <div key={index} className="flex items-start gap-3 text-sm text-white/80">
+                            <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0 mt-0.5" />
+                            <span className="leading-relaxed">{offering}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
-                      {/* Membership Options */}
-                      <div className="space-y-4">
-                        <h4 className="font-semibold text-white/90 text-sm uppercase tracking-wider">Membership Options:</h4>
-                        <div className="space-y-3">
-                          {business.membershipTypes.map((membership, index) => (
-                            <div key={index} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+                    {/* Membership Options */}
+                    <div className="space-y-4">
+                      <h4 className="font-semibold text-white/90 text-sm uppercase tracking-wider">Membership Options:</h4>
+                      <div className="space-y-3">
+                        {business.membershipTypes.map((membership, index) => (
+                          <Link key={index} href={`/register/details?business=${business.id}&plan=${membership.key}`}>
+                            <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer group">
                               <span className="flex items-center gap-2 text-white">
                                 {membership.name}
                                 {membership.popular && (
                                   <Badge className="bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs border-0">Popular</Badge>
                                 )}
                               </span>
-                              <span className="font-bold text-white">£{membership.price}<span className="text-sm text-white/60">/mo</span></span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-white">£{membership.price}<span className="text-sm text-white/60">/mo</span></span>
+                                <ArrowRight className="h-4 w-4 text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all duration-300" />
+                              </div>
                             </div>
-                          ))}
-                        </div>
+                          </Link>
+                        ))}
                       </div>
+                    </div>
 
-                      {/* CTA Button */}
-                      <Button className="w-full bg-white text-black hover:bg-white/90 font-semibold text-base py-6 rounded-xl transition-all duration-300 group-hover:shadow-lg group-hover:shadow-white/20">
-                        Join {business.name}
-                        <ArrowRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform duration-300" />
+                    {/* CTA Button - Fallback for users who want to see all options */}
+                    <Link href={`/register?business=${business.id}`}>
+                      <Button className="w-full bg-white text-black hover:bg-white/90 font-semibold text-base py-6 rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-white/20">
+                        View All {business.name} Options
+                        <ArrowRight className="h-5 w-5 ml-2 hover:translate-x-1 transition-transform duration-300" />
                       </Button>
-                    </CardContent>
-                  </Card>
-                </Link>
+                    </Link>
+                  </CardContent>
+                </Card>
               );
             })}
           </div>
