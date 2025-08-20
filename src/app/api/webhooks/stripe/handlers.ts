@@ -5,7 +5,11 @@ export async function handlePaymentSucceeded(invoice: any) {
     const subscriptionId = invoice.subscription
     const amountPaid = invoice.amount_paid / 100
 
-    const subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
+    // First try to link by stripe subscription id, if missing (prorated before sub), use our metadata
+    let subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
+    if (!subscription && invoice.metadata?.dbSubscriptionId) {
+      subscription = await prisma.subscription.findUnique({ where: { id: invoice.metadata.dbSubscriptionId }, include: { user: true } })
+    }
     if (!subscription) return
 
     const existingInvoice = await prisma.invoice.findUnique({ where: { stripeInvoiceId: invoice.id } })

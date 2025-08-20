@@ -29,6 +29,14 @@ export async function POST(request: NextRequest) {
       case 'invoice.payment_failed':
         await handlePaymentFailed(event.data.object)
         break
+      case 'customer.subscription.created':
+        // Treat creation the same as update so trialing -> ACTIVE mapping applies immediately
+        await handleSubscriptionUpdated(event.data.object)
+        break
+      case 'invoice.payment_action_required':
+        // Handle 3D Secure and other payment authentication requirements
+        console.log('🔐 Payment action required for invoice:', event.data.object.id)
+        break
       case 'customer.subscription.updated':
         await handleSubscriptionUpdated(event.data.object)
         break

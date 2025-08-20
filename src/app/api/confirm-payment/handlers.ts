@@ -43,7 +43,7 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
     }, { idempotencyKey: `prorate-invoice:${subscription.id}:${nextBillingKey}` })
     
     // Wait a moment for auto_advance to process, then check invoice status
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    await new Promise(resolve => setTimeout(resolve, 4000))
     const updatedInvoice = await stripe.invoices.retrieve(invoice.id!)
     
     if (updatedInvoice.status === 'open' || updatedInvoice.amount_paid === 0) {
