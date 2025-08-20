@@ -9,7 +9,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   typescript: true,
-  apiVersion: '2024-06-20', // Use stable API version instead of beta
+  apiVersion: '2025-06-30.basil',
   appInfo: { name: 'Portal365', version: '1.0.0' }
 })
 
@@ -106,7 +106,7 @@ export class SubscriptionProcessor {
       // 6. Create SetupIntent for payment method collection
       const setupIntent = await stripe.setupIntents.create({
         customer: customer.id,
-        payment_method_types: ['card', 'bacs_debit'], // Support UK bank cards and direct debit
+        payment_method_types: ['card'],
         usage: 'off_session', // For future recurring payments
         metadata: {
           userId: request.userId,

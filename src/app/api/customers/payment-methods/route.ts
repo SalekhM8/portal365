@@ -12,20 +12,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user and their subscription (include failed/incomplete subscriptions)
+    // Get user and their subscription
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
         subscriptions: {
-          where: { status: { in: ['ACTIVE', 'INCOMPLETE', 'PENDING_PAYMENT', 'PAST_DUE'] } },
-          orderBy: { createdAt: 'desc' },
+          where: { status: 'ACTIVE' },
           take: 1
         }
       }
     })
 
     if (!user || user.subscriptions.length === 0) {
-      return NextResponse.json({ error: 'No subscription found' }, { status: 404 })
+      return NextResponse.json({ error: 'No active subscription found' }, { status: 404 })
     }
 
     const subscription = user.subscriptions[0]
@@ -53,7 +52,6 @@ export async function GET(request: NextRequest) {
     // Create setup intent for new payment method
     const setupIntent = await stripe.setupIntents.create({
       customer: subscription.stripeCustomerId,
-      payment_method_types: ['card', 'bacs_debit'], // Support UK bank cards and direct debit
       usage: 'off_session', // For future payments
       metadata: {
         userId: user.id,

@@ -28,9 +28,7 @@ export async function handlePaymentSucceeded(invoice: any) {
     await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'ACTIVE', currentPeriodStart: new Date(invoice.period_start * 1000), currentPeriodEnd: new Date(invoice.period_end * 1000), nextBillingDate: new Date(invoice.period_end * 1000) } })
     await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
     await prisma.payment.create({ data: { userId: subscription.userId, amount: amountPaid, currency: invoice.currency.toUpperCase(), status: 'CONFIRMED', description: invoice.billing_reason === 'subscription_create' ? 'Initial subscription payment (prorated)' : 'Monthly membership payment', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
-  } catch (error) {
-    console.error('Error handling payment succeeded:', error)
-  }
+  } catch {}
 }
 
 export async function handlePaymentFailed(invoice: any) {
@@ -42,9 +40,7 @@ export async function handlePaymentFailed(invoice: any) {
     await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
     await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
     await prisma.payment.create({ data: { userId: subscription.userId, amount: amountDue, currency: invoice.currency.toUpperCase(), status: 'FAILED', description: 'Failed monthly membership payment', routedEntityId: subscription.routedEntityId, failureReason: 'Payment declined', processedAt: new Date() } })
-  } catch (error) {
-    console.error('Error handling payment failed:', error)
-  }
+  } catch {}
 }
 
 export async function handleSubscriptionUpdated(stripeSubscription: any) {
@@ -111,7 +107,5 @@ export async function handleSubscriptionCancelled(stripeSubscription: any) {
     if (!subscription) return
     await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED' } })
     await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'CANCELLED' } })
-  } catch (error) {
-    console.error('Error handling subscription cancelled:', error)
-  }
+  } catch {}
 } 
