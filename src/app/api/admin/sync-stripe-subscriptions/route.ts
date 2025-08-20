@@ -43,6 +43,15 @@ export async function POST(request: NextRequest) {
     const localSubscriptions = await prisma.subscription.findMany({
       include: { user: true }
     })
+    
+    console.log(`📊 Found ${localSubscriptions.length} subscriptions to check`)
+    
+    // Also check all current payments to see what we're working with
+    const allPayments = await prisma.payment.findMany({
+      where: { status: 'CONFIRMED' },
+      include: { user: { select: { email: true } } }
+    })
+    console.log(`📊 Found ${allPayments.length} CONFIRMED payments currently in database`)
 
     const syncResults = []
     let fixedCount = 0
@@ -100,21 +109,36 @@ export async function POST(request: NextRequest) {
 
           // 🚨 CRITICAL: Remove fake payment records for incomplete subscriptions
           if (correctStatus === 'INCOMPLETE' || stripeSub.status === 'incomplete') {
+            console.log(`🔍 Checking for fake payments for user ${localSub.user.email}`)
+            
+            // Look for fake payment records (broader search)
             const fakePayments = await prisma.payment.findMany({
               where: {
                 userId: localSub.userId,
                 status: 'CONFIRMED',
-                description: { contains: 'Prorated first month payment' }
+                OR: [
+                  { description: { contains: 'Prorated first month payment' } },
+                  { description: { contains: 'prorated' } },
+                  { description: { contains: 'Initial subscription payment' } }
+                ]
               }
             })
             
+            console.log(`🔍 Found ${fakePayments.length} potential fake payments for ${localSub.user.email}`)
+            
             if (fakePayments.length > 0) {
-              await prisma.payment.deleteMany({
+              // Mark as FAILED instead of deleting (better audit trail)
+              await prisma.payment.updateMany({
                 where: {
                   id: { in: fakePayments.map(p => p.id) }
+                },
+                data: {
+                  status: 'FAILED',
+                  failureReason: 'Payment incomplete in Stripe - marked as failed during sync',
+                  failedAt: new Date()
                 }
               })
-              console.log(`🗑️ Removed ${fakePayments.length} fake payment records for ${localSub.user.email}`)
+              console.log(`🔄 Marked ${fakePayments.length} fake payments as FAILED for ${localSub.user.email}`)
             }
           }
 
