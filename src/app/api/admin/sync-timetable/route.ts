@@ -117,9 +117,9 @@ const membershipRule: MembershipRule = (e) => {
     return ['WOMENS_CLASSES']
   }
 
-  const allowed: string[] = ['FULL_ADULT', 'FULL_UNDER18']
+  const allowed: string[] = ['FULL_ADULT', 'KIDS_UNLIMITED_UNDER14']
   if (isWeekendDay) {
-    allowed.push('WEEKEND_ADULT', 'WEEKEND_UNDER18')
+    allowed.push('WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14')
   }
   return allowed
 }

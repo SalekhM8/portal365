@@ -29,8 +29,8 @@ const businesses = [
     membershipTypes: [
       { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true, key: 'FULL_ADULT' },
       { name: 'Weekend Only', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false, key: 'WEEKEND_ADULT' },
-      { name: 'Kids Unlimited (Under 14s)', price: MEMBERSHIP_PLANS.FULL_UNDER18.monthlyPrice, popular: false, key: 'FULL_UNDER18' },
-      { name: 'Kids Weekend (Under 14s)', price: MEMBERSHIP_PLANS.WEEKEND_UNDER18.monthlyPrice, popular: false, key: 'WEEKEND_UNDER18' },
+      { name: 'Kids Unlimited (Under 14s)', price: MEMBERSHIP_PLANS.KIDS_UNLIMITED_UNDER14.monthlyPrice, popular: false, key: 'KIDS_UNLIMITED_UNDER14' },
+      { name: 'Kids Weekend (Under 14s)', price: MEMBERSHIP_PLANS.KIDS_WEEKEND_UNDER14.monthlyPrice, popular: false, key: 'KIDS_WEEKEND_UNDER14' },
       { name: 'Masters Program (30+)', price: MEMBERSHIP_PLANS.MASTERS.monthlyPrice, popular: false, key: 'MASTERS' }
     ]
   },

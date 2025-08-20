@@ -19,8 +19,8 @@ const businessConfigs = {
     memberships: [
       { type: 'FULL_ADULT', popular: true },
       { type: 'WEEKEND_ADULT', popular: false },
-      { type: 'FULL_UNDER18', popular: false },
-      { type: 'WEEKEND_UNDER18', popular: false },
+      { type: 'KIDS_UNLIMITED_UNDER14', popular: false },
+      { type: 'KIDS_WEEKEND_UNDER14', popular: false },
       { type: 'MASTERS', popular: false }
     ]
   },

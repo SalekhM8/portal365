@@ -59,10 +59,10 @@ export async function POST(request: NextRequest) {
       } else if (isWomenOnlyClass) {
         newRequiredMemberships = ['WOMENS_CLASSES']
       } else if (isKidsClass) {
-        // Kids classes: FULL_UNDER18 always, WEEKEND_UNDER18 only on weekends
-        newRequiredMemberships = ['FULL_UNDER18']
+        // Kids classes: KIDS_UNLIMITED_UNDER14 always, KIDS_WEEKEND_UNDER14 only on weekends
+        newRequiredMemberships = ['KIDS_UNLIMITED_UNDER14']
         if (isWeekendDay) {
-          newRequiredMemberships.push('WEEKEND_UNDER18')
+          newRequiredMemberships.push('KIDS_WEEKEND_UNDER14')
         }
       } else {
         // Adult classes: FULL_ADULT always, WEEKEND_ADULT only on weekends

@@ -136,9 +136,9 @@ const membershipRule: MembershipRule = (e) => {
   // For all other classes (non-women, non-masters):
   // - Adults: FULL_ADULT always, WEEKEND_ADULT on Fri/Sat/Sun
   // - Youth: FULL_UNDER18 always, WEEKEND_UNDER18 on Fri/Sat/Sun
-  const allowed: string[] = ['FULL_ADULT', 'FULL_UNDER18']
+  const allowed: string[] = ['FULL_ADULT', 'KIDS_UNLIMITED_UNDER14']
   if (isWeekendDay) {
-    allowed.push('WEEKEND_ADULT', 'WEEKEND_UNDER18')
+    allowed.push('WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14')
   }
   return allowed
 }

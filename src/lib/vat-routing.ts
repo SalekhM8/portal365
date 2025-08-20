@@ -5,7 +5,7 @@ import { SAFETY_BUFFER_GBP } from '@/config/routing'
 type VATRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'EXCEEDED'
 type RoutingMethod = 'LOAD_BALANCING' | 'VAT_OPTIMIZED' | 'SERVICE_PREFERENCE' | 'HEADROOM_OPTIMIZED' | 'MANUAL_OVERRIDE'
 type RoutingConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'FORCED'
-type MembershipType = 'WEEKEND_ADULT' | 'WEEKEND_UNDER18' | 'FULL_ADULT' | 'FULL_UNDER18' | 'PERSONAL_TRAINING' | 'WOMENS_CLASSES' | 'WELLNESS_PACKAGE' | 'CORPORATE'
+type MembershipType = 'WEEKEND_ADULT' | 'KIDS_WEEKEND_UNDER14' | 'FULL_ADULT' | 'KIDS_UNLIMITED_UNDER14' | 'PERSONAL_TRAINING' | 'WOMENS_CLASSES' | 'WELLNESS_PACKAGE' | 'CORPORATE'
 
 // Simple payment type to avoid any
 type PaymentData = {

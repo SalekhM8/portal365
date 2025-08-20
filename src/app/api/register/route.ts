@@ -17,7 +17,7 @@ const registerSchema = z.object({
     phone: z.string(),
     relationship: z.string()
   }).optional(),
-  membershipType: z.enum(['WEEKEND_ADULT', 'WEEKEND_UNDER18', 'FULL_ADULT', 'FULL_UNDER18', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
+  membershipType: z.enum(['WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14', 'FULL_ADULT', 'KIDS_UNLIMITED_UNDER14', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
   businessId: z.string()
 })
 
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         setupFee: membershipDetails.setupFee || 0,
         accessPermissions: JSON.stringify(membershipDetails.accessPermissions),
         scheduleAccess: JSON.stringify(membershipDetails.scheduleAccess),
-        ageCategory: validatedData.membershipType.includes('UNDER18') ? 'YOUTH' : 'ADULT',
+        ageCategory: validatedData.membershipType.includes('UNDER14') ? 'YOUTH' : 'ADULT',
         billingDay: 1, // Always bill on the 1st of the month
         nextBillingDate: (() => {
           // Set to 1st of next month to match prorated billing strategy
@@ -196,7 +196,7 @@ function getMembershipDetails(membershipType: string) {
         timeSlots: ['morning', 'afternoon', 'evening']
       }
     },
-    'WEEKEND_UNDER18': {
+    'KIDS_WEEKEND_UNDER14': {
       monthlyPrice: 40,
       setupFee: 0,
       accessPermissions: {
@@ -226,7 +226,7 @@ function getMembershipDetails(membershipType: string) {
         timeSlots: ['morning', 'afternoon', 'evening']
       }
     },
-    'FULL_UNDER18': {
+    'KIDS_UNLIMITED_UNDER14': {
       monthlyPrice: 55,
       setupFee: 0,
       accessPermissions: {

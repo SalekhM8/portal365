@@ -1,8 +1,8 @@
 export type MembershipKey =
   | 'WEEKEND_ADULT'
-  | 'WEEKEND_UNDER18'
+  | 'KIDS_WEEKEND_UNDER14'
   | 'FULL_ADULT'
-  | 'FULL_UNDER18'
+  | 'KIDS_UNLIMITED_UNDER14'
   | 'MASTERS'
   | 'PERSONAL_TRAINING'
   | 'WOMENS_CLASSES'
@@ -29,8 +29,8 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     features: ['Weekend access (Fri, Sat & Sun)', 'BJJ, MMA, Striking', 'Equipment access'],
     preferredEntities: ['aura_mma']
   },
-  WEEKEND_UNDER18: {
-    key: 'WEEKEND_UNDER18',
+  KIDS_WEEKEND_UNDER14: {
+    key: 'KIDS_WEEKEND_UNDER14',
     name: 'Kids Weekend',
     displayName: 'Kids Weekend (Under 14s)',
     monthlyPrice: 40,
@@ -47,8 +47,8 @@ export const MEMBERSHIP_PLANS: Record<MembershipKey, MembershipPlan> = {
     features: ['7 days/week access', 'BJJ, MMA, Striking', 'Equipment access', 'Priority access'],
     preferredEntities: ['aura_mma']
   },
-  FULL_UNDER18: {
-    key: 'FULL_UNDER18',
+  KIDS_UNLIMITED_UNDER14: {
+    key: 'KIDS_UNLIMITED_UNDER14',
     name: 'Kids Unlimited',
     displayName: 'Kids Unlimited (Under 14s)',
     monthlyPrice: 55,

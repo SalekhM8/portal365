@@ -110,9 +110,9 @@ function DashboardContent() {
   const getMembershipDisplayName = (type: string) => {
     const names: Record<string, string> = {
       'WEEKEND_ADULT': 'Weekend Only Membership',
-      'WEEKEND_UNDER18': 'Kids Weekend (Under 14s)',
+      'KIDS_WEEKEND_UNDER14': 'Kids Weekend (Under 14s)',
       'FULL_ADULT': 'Full Access Membership',
-      'FULL_UNDER18': 'Kids Unlimited (Under 14s)',
+      'KIDS_UNLIMITED_UNDER14': 'Kids Unlimited (Under 14s)',
       'PERSONAL_TRAINING': 'Personal Training',
       'WOMENS_CLASSES': "Women's Classes",
       'WELLNESS_PACKAGE': 'Wellness Package',
