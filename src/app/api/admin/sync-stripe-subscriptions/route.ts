@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Get actual Stripe subscription
-        const stripeSub = await stripe.subscriptions.retrieve(localSub.stripeSubscriptionId)
+        const stripeSub = await stripe.subscriptions.retrieve(localSub.stripeSubscriptionId) as any
         
         // Determine correct status
         let correctStatus = stripeSub.status.toUpperCase()
@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
             where: { id: localSub.id },
             data: { 
               status: correctStatus,
-              cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
-              currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-              currentPeriodEnd: new Date(stripeSub.current_period_end * 1000)
+              cancelAtPeriodEnd: stripeSub.cancel_at_period_end || false,
+              currentPeriodStart: stripeSub.current_period_start ? new Date(stripeSub.current_period_start * 1000) : localSub.currentPeriodStart,
+              currentPeriodEnd: stripeSub.current_period_end ? new Date(stripeSub.current_period_end * 1000) : localSub.currentPeriodEnd
             }
           })
 
