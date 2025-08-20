@@ -80,7 +80,14 @@ function SuccessContent() {
               router.refresh() // Refresh to ensure session is current
             }, 3000) // Slightly longer to show the message
           } else {
-            setError(confirmResult.error || 'Failed to complete subscription setup')
+            // Payment setup failed - show clear error message with retry option
+            const errorMessage = confirmResult.error || 'Failed to complete subscription setup'
+            
+            if (errorMessage.includes('declined') || errorMessage.includes('insufficient')) {
+              setError(`Payment failed: ${errorMessage}\n\nPlease check your card details and try again, or use a different payment method.`)
+            } else {
+              setError(`Setup failed: ${errorMessage}\n\nPlease try again or contact support if the issue persists.`)
+            }
             setIsProcessing(false)
           }
         } catch (error) {
@@ -148,17 +155,53 @@ function SuccessContent() {
   }, [searchParams, router])
 
   if (error) {
+    const isPaymentError = error.includes('declined') || error.includes('insufficient') || error.includes('Payment failed')
+    
     return (
       <div className="container mx-auto p-6 max-w-md">
         <Card>
           <CardContent className="p-6">
             <div className="text-center space-y-4">
-              <div className="text-destructive">⚠️</div>
-              <h3 className="text-lg font-semibold">Payment Error</h3>
+              <div className="text-destructive">
+                {isPaymentError ? <CreditCard className="h-12 w-12 mx-auto" /> : '⚠️'}
+              </div>
+              <h3 className="text-lg font-semibold">
+                {isPaymentError ? 'Payment Declined' : 'Setup Error'}
+              </h3>
               <p className="text-muted-foreground">{error}</p>
-              <Button onClick={() => router.push('/register')} className="w-full">
-                Try Again
-              </Button>
+              <div className="space-y-2">
+                {isPaymentError ? (
+                  <>
+                    <Button 
+                      onClick={() => {
+                        const urlParams = new URLSearchParams(window.location.search)
+                        const subscriptionId = urlParams.get('subscription_id')
+                        const clientSecret = urlParams.get('client_secret')
+                        if (subscriptionId && clientSecret) {
+                          router.push(`/register/payment?subscription_id=${subscriptionId}&client_secret=${clientSecret}`)
+                        } else {
+                          router.push('/register')
+                        }
+                      }} 
+                      className="w-full bg-green-600 hover:bg-green-700"
+                    >
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Try Different Payment Method
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => router.push('/register')} 
+                      className="w-full"
+                    >
+                      Start Over
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={() => router.push('/register')} className="w-full">
+                    Try Again
+                  </Button>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

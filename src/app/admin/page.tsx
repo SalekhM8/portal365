@@ -747,7 +747,9 @@ export default function AdminDashboard() {
                       const result = await response.json()
                       if (result.success) {
                         alert(`✅ Sync completed!\n\n${result.summary.fixedCount} subscriptions fixed\n${result.summary.correctCount} already correct\n${result.summary.errorCount} errors\n\nDashboard will refresh to show correct data.`)
-                        await fetchAdminData()
+                        await fetchAdminData() // This refreshes everything including recent activity
+                        // Force a page refresh to ensure all data is updated
+                        window.location.reload()
                       } else {
                         alert('❌ Sync failed: ' + result.error)
                       }

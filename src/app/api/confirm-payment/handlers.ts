@@ -26,8 +26,35 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
   await stripe.customers.update(subscription.stripeCustomerId, { invoice_settings: { default_payment_method: paymentMethodId } })
 
   if (proratedAmount > 0) {
-    await stripe.invoiceItems.create({ customer: subscription.stripeCustomerId, amount: Math.round(proratedAmount * 100), currency: 'gbp', description: `Prorated membership (${new Date().toISOString().split('T')[0]} → ${nextBillingKey})`, metadata: { dbSubscriptionId: subscription.id, reason: 'prorated_first_period' } }, { idempotencyKey: `prorate-item:${subscription.id}:${nextBillingKey}` })
-    await stripe.invoices.create({ customer: subscription.stripeCustomerId, auto_advance: true, metadata: { dbSubscriptionId: subscription.id, reason: 'prorated_first_period' } }, { idempotencyKey: `prorate-invoice:${subscription.id}:${nextBillingKey}` })
+    // Create invoice item for prorated amount
+    await stripe.invoiceItems.create({ 
+      customer: subscription.stripeCustomerId, 
+      amount: Math.round(proratedAmount * 100), 
+      currency: 'gbp', 
+      description: `Prorated membership (${new Date().toISOString().split('T')[0]} → ${nextBillingKey})`, 
+      metadata: { dbSubscriptionId: subscription.id, reason: 'prorated_first_period' } 
+    }, { idempotencyKey: `prorate-item:${subscription.id}:${nextBillingKey}` })
+    
+    // Create and attempt to charge invoice
+    const invoice = await stripe.invoices.create({ 
+      customer: subscription.stripeCustomerId, 
+      auto_advance: true, 
+      metadata: { dbSubscriptionId: subscription.id, reason: 'prorated_first_period' } 
+    }, { idempotencyKey: `prorate-invoice:${subscription.id}:${nextBillingKey}` })
+    
+    // Wait a moment for auto_advance to process, then check invoice status
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    const updatedInvoice = await stripe.invoices.retrieve(invoice.id!)
+    
+    if (updatedInvoice.status === 'open' || updatedInvoice.amount_paid === 0) {
+      // Invoice payment failed - return error
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Payment was declined. Please check your card details and try again.',
+        code: 'PAYMENT_DECLINED',
+        details: 'Your payment method was saved but the charge was not successful. You can try again with the same or different card.'
+      }, { status: 400 })
+    }
   }
 
   const membershipDetails = getPlan(subscription.membershipType)

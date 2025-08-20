@@ -98,6 +98,26 @@ export async function POST(request: NextRequest) {
             data: { status: membershipStatus }
           })
 
+          // 🚨 CRITICAL: Remove fake payment records for incomplete subscriptions
+          if (correctStatus === 'INCOMPLETE' || stripeSub.status === 'incomplete') {
+            const fakePayments = await prisma.payment.findMany({
+              where: {
+                userId: localSub.userId,
+                status: 'CONFIRMED',
+                description: { contains: 'Prorated first month payment' }
+              }
+            })
+            
+            if (fakePayments.length > 0) {
+              await prisma.payment.deleteMany({
+                where: {
+                  id: { in: fakePayments.map(p => p.id) }
+                }
+              })
+              console.log(`🗑️ Removed ${fakePayments.length} fake payment records for ${localSub.user.email}`)
+            }
+          }
+
           syncResults.push({
             localId: localSub.id,
             userEmail: localSub.user.email,
