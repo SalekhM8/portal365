@@ -737,32 +737,7 @@ export default function AdminDashboard() {
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
-              <Button 
-                variant="outline"
-                className="bg-red-600 border-red-500 hover:bg-red-700 text-white"
-                onClick={async () => {
-                  if (confirm('🎯 FIX INCOMPLETE USER PAYMENTS?\n\nThis will ONLY target users who show INCOMPLETE/PENDING in the Customers tab.\n\nThis is the precise fix you requested.')) {
-                    try {
-                      const response = await fetch('/api/admin/fix-incomplete-payments', { method: 'POST' })
-                      const result = await response.json()
-                      if (result.success) {
-                        console.log('🎯 Incomplete payment fix result:', result)
-                        alert(`✅ Surgical fix completed!\n\n${result.summary.paymentsFixed} fake payments fixed for ${result.summary.incompleteUsers} incomplete users\n\nPage will refresh to show correct data.`)
-                        
-                        // Force immediate page refresh to reload all data
-                        window.location.reload()
-                      } else {
-                        console.error('❌ Incomplete payment fix failed:', result)
-                        alert('❌ Fix failed: ' + result.error)
-                      }
-                    } catch (error) {
-                      alert('❌ Error: ' + error)
-                    }
-                  }
-                }}
-              >
-                🎯 Fix Incomplete Users Only
-              </Button>
+
               <Button onClick={() => setShowAddCustomer(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add Customer
@@ -905,9 +880,7 @@ export default function AdminDashboard() {
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Amount & Type</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Routed To</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Status & Processing</th>
-                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Routing Details</th>
-                      <th className="text-left p-4 font-medium text-white border-r border-white/10">GoCardless</th>
-                      <th className="text-left p-4 font-medium text-white">Actions</th>
+                      <th className="text-left p-4 font-medium text-white">Routing Details</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -956,23 +929,6 @@ export default function AdminDashboard() {
                             <p className="text-white/60 text-xs">
                               {payment.routingReason}
                             </p>
-                          </div>
-                        </td>
-                        <td className="p-4 border-r border-white/5">
-                          <div className="text-xs text-white/60">
-                            <p className="font-mono">{payment.goCardlessId}</p>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            {payment.status === 'FAILED' && (
-                              <Button variant="ghost" size="sm" className="text-blue-400 hover:bg-white/10">
-                                Retry
-                              </Button>
-                            )}
                           </div>
                         </td>
                       </tr>
