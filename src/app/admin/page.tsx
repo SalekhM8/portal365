@@ -739,21 +739,21 @@ export default function AdminDashboard() {
               </Button>
               <Button 
                 variant="outline"
-                className="bg-yellow-600 border-yellow-500 hover:bg-yellow-700 text-white"
+                className="bg-red-600 border-red-500 hover:bg-red-700 text-white"
                 onClick={async () => {
-                  if (confirm('🔄 SYNC ALL SUBSCRIPTIONS WITH STRIPE?\n\nThis will:\n• Check actual Stripe subscription status\n• Fix any inconsistencies\n• Update users with incomplete payments\n\nThis is safe and recommended after the payment bug fix.')) {
+                  if (confirm('🧹 FIX FAKE PAYMENT RECORDS?\n\nThis will:\n• Find all fake "CONFIRMED" payments\n• Mark them as "FAILED" \n• Clean up the Payments tab\n\nThis targets the specific payment bug.')) {
                     try {
-                      const response = await fetch('/api/admin/sync-stripe-subscriptions', { method: 'POST' })
+                      const response = await fetch('/api/admin/fix-fake-payments', { method: 'POST' })
                       const result = await response.json()
                       if (result.success) {
-                        console.log('🔄 Sync result:', result)
-                        alert(`✅ Sync completed!\n\n${result.summary.fixedCount} subscriptions fixed\n${result.summary.correctCount} already correct\n${result.summary.errorCount} errors\n\nPage will refresh to show updated data.`)
+                        console.log('🧹 Payment fix result:', result)
+                        alert(`✅ Payment cleanup completed!\n\n${result.summary.fixedCount} fake payments marked as FAILED\n\nPage will refresh to show correct payment data.`)
                         
                         // Force immediate page refresh to reload all data
                         window.location.reload()
                       } else {
-                        console.error('❌ Sync failed:', result)
-                        alert('❌ Sync failed: ' + result.error)
+                        console.error('❌ Payment fix failed:', result)
+                        alert('❌ Payment fix failed: ' + result.error)
                       }
                     } catch (error) {
                       alert('❌ Error: ' + error)
@@ -761,7 +761,7 @@ export default function AdminDashboard() {
                   }
                 }}
               >
-                🔄 Sync Stripe Status
+                🧹 Fix Fake Payments
               </Button>
               <Button onClick={() => setShowAddCustomer(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
