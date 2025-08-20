@@ -103,27 +103,29 @@ export class SubscriptionProcessor {
         proratedAmount: proratedAmountPence / 100
       })
 
-      // 6. Create SetupIntent for payment method collection
-      const setupIntent = await stripe.setupIntents.create({
+      // 6. Create PaymentIntent to charge prorated amount now (handles 3DS) and save card for future
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: proratedAmountPence,
+        currency: 'gbp',
         customer: customer.id,
-        payment_method_types: ['card'],
-        usage: 'off_session', // For future recurring payments
+        automatic_payment_methods: { enabled: true },
+        setup_future_usage: 'off_session',
         metadata: {
           userId: request.userId,
           membershipType: request.membershipType,
           routedEntityId: routing.selectedEntityId,
-          proratedAmount: (proratedAmountPence / 100).toString(),
-          nextBillingDate: startDate.toISOString().split('T')[0]
+          nextBillingDate: startDate.toISOString().split('T')[0],
+          reason: 'prorated_first_period'
         }
       })
 
-      console.log('✅ SetupIntent created for payment method collection:', setupIntent.id)
+      console.log('✅ PaymentIntent created for prorated charge:', paymentIntent.id)
 
-      // 7. Create subscription record in database (PENDING_PAYMENT status)
+      // 7. Create subscription record in database (PENDING_PAYMENT status). Temporarily store PI id until real Stripe subscription is created.
       const dbSubscription = await prisma.subscription.create({
         data: {
           userId: request.userId,
-          stripeSubscriptionId: setupIntent.id, // Temporarily store SetupIntent ID
+          stripeSubscriptionId: paymentIntent.id, // Temporary placeholder; replaced after creating Stripe subscription
           stripeCustomerId: customer.id,
           routedEntityId: routing.selectedEntityId,
           membershipType: request.membershipType,
@@ -150,11 +152,11 @@ export class SubscriptionProcessor {
         }
       })
 
-      console.log('✅ Setup ready - customer will complete payment method setup, then prorated billing will process')
+      console.log('✅ Ready - customer will complete payment with 3DS if needed; card saved for future billing')
 
       return {
         subscription: dbSubscription,
-        clientSecret: setupIntent.client_secret!, // SetupIntent client secret for frontend
+        clientSecret: paymentIntent.client_secret!, // PaymentIntent client secret for frontend
         routing,
         proratedAmount: proratedAmountPence / 100,
         nextBillingDate: startDate.toISOString().split('T')[0]

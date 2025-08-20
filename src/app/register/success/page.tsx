@@ -98,13 +98,13 @@ function SuccessContent() {
         return
       }
       
-      // Legacy PaymentIntent flow: confirm payment via API
+      // PaymentIntent flow: confirm payment via API
       const paymentIntent = searchParams.get('payment_intent')
       const redirectStatus = searchParams.get('redirect_status')
 
       if (paymentIntent && redirectStatus === 'succeeded' && subscriptionId) {
         try {
-          // Call API to confirm payment and update subscription status
+          // Call API to confirm payment and create the Stripe subscription
           const response = await fetch('/api/confirm-payment', {
             method: 'POST',
             headers: {

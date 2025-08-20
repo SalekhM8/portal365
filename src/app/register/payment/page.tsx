@@ -89,8 +89,8 @@ function PaymentForm({ subscriptionId }: { subscriptionId: string | null }) {
   const searchParams = useSearchParams()
   const clientSecret = searchParams.get('client_secret')
 
-  // Detect if this is a PaymentIntent or SetupIntent based on client secret prefix
-  const isSetupIntent = clientSecret?.startsWith('seti_')
+  // Detect if this is a PaymentIntent client secret (pi_)
+  const isPaymentIntent = clientSecret?.startsWith('pi_')
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -103,23 +103,7 @@ function PaymentForm({ subscriptionId }: { subscriptionId: string | null }) {
     setError(null)
 
     try {
-      if (isSetupIntent) {
-        // Use confirmSetup for SetupIntent
-        const result = await stripe.confirmSetup({
-          elements,
-          confirmParams: {
-            return_url: `${window.location.origin}/register/success?subscription_id=${subscriptionId}&setup_completed=true`,
-          },
-        })
-
-        if (result.error) {
-          setError(result.error.message || 'Setup failed')
-          setIsProcessing(false)
-        }
-        // Note: If successful, Stripe will redirect to return_url automatically
-        // The success page will handle the API call to process prorated billing
-      } else {
-        // Use confirmPayment for PaymentIntent
+      if (isPaymentIntent) {
         const result = await stripe.confirmPayment({
           elements,
           confirmParams: {
@@ -133,6 +117,9 @@ function PaymentForm({ subscriptionId }: { subscriptionId: string | null }) {
         } else {
           setPaymentComplete(true)
         }
+      } else {
+        setError('Invalid payment session')
+        setIsProcessing(false)
       }
     } catch (err) {
       setError('An unexpected error occurred')
