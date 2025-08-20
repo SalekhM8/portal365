@@ -746,11 +746,13 @@ export default function AdminDashboard() {
                       const response = await fetch('/api/admin/sync-stripe-subscriptions', { method: 'POST' })
                       const result = await response.json()
                       if (result.success) {
-                        alert(`✅ Sync completed!\n\n${result.summary.fixedCount} subscriptions fixed\n${result.summary.correctCount} already correct\n${result.summary.errorCount} errors\n\nDashboard will refresh to show correct data.`)
-                        await fetchAdminData() // This refreshes everything including recent activity
-                        // Force a page refresh to ensure all data is updated
+                        console.log('🔄 Sync result:', result)
+                        alert(`✅ Sync completed!\n\n${result.summary.fixedCount} subscriptions fixed\n${result.summary.correctCount} already correct\n${result.summary.errorCount} errors\n\nPage will refresh to show updated data.`)
+                        
+                        // Force immediate page refresh to reload all data
                         window.location.reload()
                       } else {
+                        console.error('❌ Sync failed:', result)
                         alert('❌ Sync failed: ' + result.error)
                       }
                     } catch (error) {
