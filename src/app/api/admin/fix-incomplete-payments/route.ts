@@ -38,19 +38,19 @@ export async function POST(request: NextRequest) {
 
     console.log('🎯 Starting surgical payment fix for incomplete users only...')
 
-    // 🎯 SURGICAL: Only get users with INCOMPLETE/PENDING subscriptions
+    // 🎯 SURGICAL: Only get users with INCOMPLETE/PENDING/EXPIRED subscriptions
     const incompleteUsers = await prisma.user.findMany({
       where: {
         subscriptions: {
           some: {
-            status: { in: ['INCOMPLETE', 'PENDING_PAYMENT'] }
+            status: { in: ['INCOMPLETE', 'PENDING_PAYMENT', 'INCOMPLETE_EXPIRED'] }
           }
         }
       },
       include: {
         subscriptions: {
           where: {
-            status: { in: ['INCOMPLETE', 'PENDING_PAYMENT'] }
+            status: { in: ['INCOMPLETE', 'PENDING_PAYMENT', 'INCOMPLETE_EXPIRED'] }
           }
         },
         payments: {
