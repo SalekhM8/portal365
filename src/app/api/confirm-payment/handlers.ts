@@ -47,7 +47,19 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
     const updatedInvoice = await stripe.invoices.retrieve(invoice.id!)
     
     if (updatedInvoice.status === 'open' || updatedInvoice.amount_paid === 0) {
-      // Invoice payment failed - return error
+      // Invoice payment failed - mark subscription as failed and return error
+      await prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { 
+          status: 'INCOMPLETE',
+        }
+      })
+      
+      await prisma.membership.updateMany({
+        where: { userId: subscription.userId },
+        data: { status: 'SUSPENDED' }
+      })
+      
       return NextResponse.json({ 
         success: false, 
         error: 'Payment was declined. Please check your card details and try again.',

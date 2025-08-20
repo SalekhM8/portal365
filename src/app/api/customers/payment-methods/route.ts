@@ -12,19 +12,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user and their subscription
+    // Get user and their subscription (include failed/incomplete subscriptions)
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: {
         subscriptions: {
-          where: { status: 'ACTIVE' },
+          where: { status: { in: ['ACTIVE', 'INCOMPLETE', 'PENDING_PAYMENT', 'PAST_DUE'] } },
+          orderBy: { createdAt: 'desc' },
           take: 1
         }
       }
     })
 
     if (!user || user.subscriptions.length === 0) {
-      return NextResponse.json({ error: 'No active subscription found' }, { status: 404 })
+      return NextResponse.json({ error: 'No subscription found' }, { status: 404 })
     }
 
     const subscription = user.subscriptions[0]
