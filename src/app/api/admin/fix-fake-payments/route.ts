@@ -38,32 +38,29 @@ export async function POST(request: NextRequest) {
 
     console.log('🧹 Starting fake payment cleanup...')
 
-    // Find all potentially fake payment records
-    const suspiciousPayments = await prisma.payment.findMany({
+    // Find payments for users who have INCOMPLETE/PENDING subscriptions (smart targeting)
+    const usersWithIncompleteSubscriptions = await prisma.user.findMany({
       where: {
-        status: 'CONFIRMED',
-        OR: [
-          { description: { contains: 'Prorated first month payment' } },
-          { description: { contains: 'prorated' } },
-          { description: { contains: 'Initial subscription payment' } },
-          { 
-            AND: [
-              { status: 'CONFIRMED' },
-              { processedAt: { not: null } },
-              // Payments processed in 0 seconds (suspicious)
-              { 
-                processedAt: {
-                  equals: prisma.payment.fields.createdAt
-                }
-              }
-            ]
+        subscriptions: {
+          some: {
+            status: { in: ['INCOMPLETE', 'PENDING_PAYMENT'] }
           }
-        ]
+        }
       },
       include: {
-        user: { select: { email: true, firstName: true, lastName: true } }
+        payments: {
+          where: { status: 'CONFIRMED' }
+        }
       }
     })
+
+    // Extract just the payments from incomplete users
+    const suspiciousPayments = usersWithIncompleteSubscriptions.flatMap(user => 
+      user.payments.map(payment => ({
+        ...payment,
+        user: { email: user.email, firstName: user.firstName, lastName: user.lastName }
+      }))
+    )
 
     console.log(`🔍 Found ${suspiciousPayments.length} suspicious CONFIRMED payments`)
 

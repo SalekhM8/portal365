@@ -741,7 +741,7 @@ export default function AdminDashboard() {
                 variant="outline"
                 className="bg-green-600 border-green-500 hover:bg-green-700 text-white"
                 onClick={async () => {
-                  if (confirm('🔄 RESTORE PAYMENTS?\n\nThis will restore payments that were incorrectly marked as FAILED by the cleanup.\n\nThis is safe and will only restore payments that were marked failed by our cleanup process.')) {
+                  if (confirm('🔄 RESTORE ALL PAYMENTS?\n\nThis will restore ALL payments back to CONFIRMED status.\n\nUse this to undo the overly broad payment cleanup.')) {
                     try {
                       const response = await fetch('/api/admin/restore-payments', { method: 'POST' })
                       const result = await response.json()
