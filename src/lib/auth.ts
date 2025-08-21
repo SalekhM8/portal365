@@ -27,11 +27,12 @@ export const authOptions: any = {
           return null
         }
 
-        const email = credentials.email.trim().toLowerCase()
-        console.log('authorize: lookup email', email)
+        const email = credentials.email.trim()
+        console.log('authorize: lookup email (case-insensitive)', email)
 
-        const user = await prisma.user.findUnique({
-          where: { email },
+        // Case-insensitive lookup to avoid login failures when emails were stored with mixed case
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
         })
 
         if (!user || !user.password) {
