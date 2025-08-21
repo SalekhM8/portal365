@@ -204,7 +204,7 @@ export async function POST(
             const invoices = await stripe.invoices.list({ customer: sub.customer as string, limit: 3 })
             for (const inv of invoices.data) {
               if (inv.status === 'open') {
-                await stripe.invoices.voidInvoice(inv.id)
+                await stripe.invoices.voidInvoice(inv.id as string)
               }
             }
           } catch {}
