@@ -200,7 +200,8 @@ export async function POST(
         if (cancelationType === 'immediate') {
           // Void any open invoice to avoid accidental collection
           try {
-            const invoices = await stripe.invoices.list({ customer: (await stripe.customers.retrieve(subscription.stripeCustomerId)) as any, limit: 3 })
+            const sub = await stripe.subscriptions.retrieve(activeSubscription.stripeSubscriptionId)
+            const invoices = await stripe.invoices.list({ customer: sub.customer as string, limit: 3 })
             for (const inv of invoices.data) {
               if (inv.status === 'open') {
                 await stripe.invoices.voidInvoice(inv.id)
