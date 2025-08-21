@@ -56,7 +56,7 @@ export async function POST(
       return NextResponse.json({ error: 'No open invoice to void' }, { status: 400 })
     }
 
-    const voided = await stripe.invoices.voidInvoice(invoice.id)
+    const voided = await stripe.invoices.voidInvoice(invoice.id as string)
 
     // Audit log
     try {

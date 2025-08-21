@@ -60,7 +60,7 @@ export async function POST(
     }
 
     // Attempt to pay the invoice (charge_automatically will use default payment method)
-    const paid = await stripe.invoices.pay(invoice.id)
+    const paid = await stripe.invoices.pay(invoice.id as string)
 
     // Audit log
     try {

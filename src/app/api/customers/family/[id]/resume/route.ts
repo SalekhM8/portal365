@@ -29,7 +29,7 @@ export async function POST(
     try {
       const invoices = await stripe.invoices.list({ customer: updated.customer as string, limit: 1 })
       const open = invoices.data.find(i => i.status === 'open')
-      if (open) await stripe.invoices.pay(open.id)
+      if (open && open.id) await stripe.invoices.pay(open.id as string)
     } catch {}
 
     await prisma.$transaction(async (tx) => {

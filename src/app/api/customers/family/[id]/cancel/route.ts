@@ -31,7 +31,7 @@ export async function POST(
       const result = await stripe.subscriptions.cancel(subscription.stripeSubscriptionId, { prorate: true })
       try {
         const invoices = await stripe.invoices.list({ customer: result.customer as string, limit: 3 })
-        for (const inv of invoices.data) if (inv.status === 'open') await stripe.invoices.voidInvoice(inv.id)
+        for (const inv of invoices.data) if (inv.status === 'open' && inv.id) await stripe.invoices.voidInvoice(inv.id as string)
       } catch {}
       await prisma.$transaction(async (tx) => {
         await tx.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED', cancelAtPeriodEnd: false } })
