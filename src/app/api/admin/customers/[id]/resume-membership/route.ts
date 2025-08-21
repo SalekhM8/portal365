@@ -136,8 +136,8 @@ export async function POST(
       try {
         const upcoming = await stripe.invoices.list({ customer: updatedStripeSubscription.customer as string, limit: 1 })
         const openInv = upcoming.data.find(i => i.status === 'open')
-        if (openInv) {
-          await stripe.invoices.pay(openInv.id)
+        if (openInv && openInv.id) {
+          await stripe.invoices.pay(openInv.id as string)
         }
       } catch {}
 
