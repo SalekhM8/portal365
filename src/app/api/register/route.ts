@@ -17,6 +17,11 @@ const registerSchema = z.object({
     phone: z.string(),
     relationship: z.string()
   }).optional(),
+  guardian: z.object({
+    name: z.string().min(1),
+    phone: z.string().min(1)
+  }).optional(),
+  guardianConsent: z.boolean().optional(),
   membershipType: z.enum(['WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14', 'FULL_ADULT', 'KIDS_UNLIMITED_UNDER14', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
   businessId: z.string()
 })
@@ -46,20 +51,46 @@ export async function POST(request: NextRequest) {
     // Store plain password temporarily for auto-login (will be cleared after use)
     const plainPassword = validatedData.password
     
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        firstName: validatedData.firstName,
-        lastName: validatedData.lastName,
-        email: validatedData.email,
-        password: hashedPassword,
-        phone: validatedData.phone,
-        dateOfBirth: validatedData.dateOfBirth ? new Date(validatedData.dateOfBirth) : null,
-        emergencyContact: validatedData.emergencyContact ? JSON.stringify(validatedData.emergencyContact) : null,
-        role: 'CUSTOMER',
-        status: 'ACTIVE'
+    // Age & guardian enforcement
+    let guardianConsentAt: Date | null = null
+    let emergencyContactPayload: any = validatedData.emergencyContact || null
+    if (validatedData.dateOfBirth) {
+      const dob = new Date(validatedData.dateOfBirth)
+      const today = new Date()
+      const age = today.getFullYear() - dob.getFullYear() - (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0)
+      if (age < 16) {
+        if (!validatedData.guardian || !validatedData.guardianConsent) {
+          return NextResponse.json({ error: 'Parental/guardian consent is required for under-16s' }, { status: 400 })
+        }
+        guardianConsentAt = new Date()
+        // Merge guardian into emergency contact blob for now
+        emergencyContactPayload = {
+          ...(validatedData.emergencyContact || {}),
+          guardian: {
+            name: validatedData.guardian.name,
+            phone: validatedData.guardian.phone,
+            relationship: 'guardian'
+          }
+        }
       }
-    })
+    }
+
+    // Create user
+    const userCreateData: any = {
+      firstName: validatedData.firstName,
+      lastName: validatedData.lastName,
+      email: validatedData.email,
+      password: hashedPassword,
+      phone: validatedData.phone,
+      dateOfBirth: validatedData.dateOfBirth ? new Date(validatedData.dateOfBirth) : null,
+      emergencyContact: emergencyContactPayload ? JSON.stringify(emergencyContactPayload) : null,
+      role: 'CUSTOMER',
+      status: 'ACTIVE'
+    }
+    if (guardianConsentAt) {
+      userCreateData.guardianConsentAt = guardianConsentAt
+    }
+    const user = await prisma.user.create({ data: userCreateData })
     
     console.log('✅ User created:', user.id)
     

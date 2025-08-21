@@ -151,6 +151,13 @@ function DashboardContent() {
           </Button>
           <Button
             variant="outline"
+            onClick={() => router.push('/dashboard/family')}
+            className="hidden sm:flex"
+          >
+            Family
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => router.push('/dashboard/payment-methods')}
             className="hidden sm:flex"
           >
@@ -173,6 +180,13 @@ function DashboardContent() {
         >
           <Crown className="h-4 w-4 mr-2" />
           Manage Plan
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => router.push('/dashboard/family')}
+          className="flex-1"
+        >
+          Family
         </Button>
         <Button
           variant="outline"

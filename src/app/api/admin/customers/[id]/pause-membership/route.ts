@@ -135,6 +135,18 @@ export async function POST(
         pauseConfig
       )
 
+      // If behavior is 'void', proactively void any open invoice
+      if (pauseBehavior === 'void') {
+        try {
+          const invoices = await stripe.invoices.list({ customer: updatedStripeSubscription.customer as string, limit: 3 })
+          for (const inv of invoices.data) {
+            if (inv.status === 'open') {
+              await stripe.invoices.voidInvoice(inv.id)
+            }
+          }
+        } catch {}
+      }
+
       stripeOperationSuccess = true
       console.log(`✅ [${operationId}] Stripe subscription paused successfully`)
 

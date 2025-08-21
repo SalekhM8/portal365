@@ -140,15 +140,8 @@ export class PaymentProcessor {
         }
       })
 
-      // 6. Update business entity revenue (for VAT tracking)
-      await prisma.businessEntity.update({
-        where: { id: routing.selectedEntityId },
-        data: {
-          currentRevenue: {
-            increment: request.amount
-          }
-        }
-      })
+      // 6. Do NOT mutate business entity revenue here.
+      // VATCalculationEngine periodically computes currentRevenue from CONFIRMED payments.
 
       console.log(`✅ DEMO: Payment processed successfully - £${request.amount} routed to ${routing.selectedEntityId}`)
 

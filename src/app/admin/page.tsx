@@ -41,6 +41,10 @@ import {
   X,
   Key
 } from 'lucide-react'
+import { loadStripe } from '@stripe/stripe-js'
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
 interface VATStatus {
   entityId: string
@@ -1164,6 +1168,22 @@ export default function AdminDashboard() {
                   <p className="text-white"><strong className="text-white/90">Name:</strong> {selectedCustomer.name}</p>
                   <p className="text-white"><strong className="text-white/90">Email:</strong> {selectedCustomer.email}</p>
                   <p className="text-white"><strong className="text-white/90">Phone:</strong> {selectedCustomer.phone}</p>
+                  {selectedCustomer.phone && (
+                    <div className="flex gap-2 mt-2">
+                      <Button variant="outline" asChild>
+                        <a href={`tel:${selectedCustomer.phone}`}>Call</a>
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <a href={`sms:${selectedCustomer.phone}`}>SMS</a>
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <a href={`https://wa.me/${selectedCustomer.phone.replace(/\D/g,'')}`} target="_blank">WhatsApp</a>
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <a href={`mailto:${selectedCustomer.email}`}>Email</a>
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="border-b border-white/10 pb-2">
                   <p className="text-white"><strong className="text-white/90">Membership Type:</strong> {selectedCustomer.membershipType}</p>
@@ -1174,12 +1194,43 @@ export default function AdminDashboard() {
                   <p className="text-white"><strong className="text-white/90">Last Payment:</strong> {new Date(selectedCustomer.lastPayment).toLocaleDateString()}</p>
                   <p className="text-white"><strong className="text-white/90">Total Paid:</strong> £{selectedCustomer.totalPaid}</p>
                   <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!confirm('Retry the latest open invoice for this customer?')) return
+                        const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/retry-invoice`, { method: 'POST' })
+                        const json = await resp.json()
+                        if (resp.ok) alert('Invoice retry requested. Status: ' + json.invoice.status)
+                        else alert('Retry failed: ' + (json.error || 'Unknown error'))
+                      }}
+                    >
+                      Retry Payment
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!confirm('Void the latest open invoice for this customer? This cannot be undone.')) return
+                        const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/void-invoice`, { method: 'POST' })
+                        const json = await resp.json()
+                        if (resp.ok) alert('Invoice voided. Status: ' + json.invoice.status)
+                        else alert('Void failed: ' + (json.error || 'Unknown error'))
+                      }}
+                      className="border-red-500/20 text-red-400 hover:bg-red-500/10"
+                    >
+                      Void Invoice
+                    </Button>
+                  </div>
                 </div>
                 <div className="border-b border-white/10 pb-2">
                   <p className="text-white"><strong className="text-white/90">Routed Entity:</strong> {selectedCustomer.routedEntity}</p>
                 </div>
                 <div>
                   <p className="text-white"><strong className="text-white/90">Emergency Contact:</strong> {selectedCustomer.emergencyContact?.name} ({selectedCustomer.emergencyContact?.relationship})</p>
+                  {/* Guardian details if captured during U16 registration */}
+                  {selectedCustomer?.emergencyContact && (selectedCustomer as any).emergencyContact?.guardian && (
+                    <p className="text-white"><strong className="text-white/90">Guardian:</strong> {(selectedCustomer as any).emergencyContact.guardian.name} — {(selectedCustomer as any).emergencyContact.guardian.phone}</p>
+                  )}
                   <p className="text-white"><strong className="text-white/90">Access History:</strong> {selectedCustomer.accessHistory?.totalVisits} visits, {selectedCustomer.accessHistory?.avgWeeklyVisits}/week avg</p>
                 </div>
               </div>
@@ -1516,7 +1567,6 @@ export default function AdminDashboard() {
             <p className="text-sm text-white/70 mb-4">
               Please have the customer enter their payment details to activate their membership.
             </p>
-            
             <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg mb-4">
               <div className="text-center">
                 <p className="text-lg font-semibold text-white">£{addCustomerData.customPrice}/month</p>
@@ -1529,75 +1579,14 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
-                <p className="text-sm font-medium mb-2 text-white">Payment Method Setup</p>
-                <p className="text-xs text-white/60">
-                  This would normally integrate with Stripe Elements for secure card collection.
-                  For demo purposes, we'll simulate payment method setup.
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="demo-card" className="text-white">Card Number (Demo)</Label>
-                <Input 
-                  id="demo-card" 
-                  placeholder="4242 4242 4242 4242"
-                  className="font-mono bg-white/5 border-white/20 text-white placeholder:text-white/50"
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label htmlFor="demo-expiry" className="text-white">Expiry</Label>
-                  <Input id="demo-expiry" placeholder="MM/YY" className="bg-white/5 border-white/20 text-white placeholder:text-white/50" />
-                </div>
-                <div>
-                  <Label htmlFor="demo-cvc" className="text-white">CVC</Label>
-                  <Input id="demo-cvc" placeholder="123" className="bg-white/5 border-white/20 text-white placeholder:text-white/50" />
-                </div>
-              </div>
-            </div>
+            <Elements stripe={stripePromise} options={{ clientSecret: paymentClientSecret, appearance: { theme: 'stripe' } }}>
+              <AdminSetupForm 
+                subscriptionId={createdSubscriptionId}
+                onSuccess={handlePaymentSuccess}
+                onError={handlePaymentError}
+              />
+            </Elements>
 
-            <div className="mt-6 space-y-2 border-t border-white/10 pt-4">
-              <Button
-                onClick={async () => {
-                  try {
-                    // Simulate payment method setup
-                    const response = await fetch('/api/confirm-payment', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        setupIntentId: paymentClientSecret.replace('seti_', '').split('_secret')[0],
-                        subscriptionId: createdSubscriptionId
-                      })
-                    })
-                    
-                    const result = await response.json()
-                    
-                    if (result.success) {
-                      handlePaymentSuccess()
-                    } else {
-                      handlePaymentError(result.error || 'Payment setup failed')
-                    }
-                  } catch (error) {
-                    handlePaymentError('Network error during payment setup')
-                  }
-                }}
-                className="w-full bg-white text-black hover:bg-white/90"
-              >
-                Complete Payment Setup
-              </Button>
-              
-              <Button
-                variant="outline"
-                onClick={() => setShowPaymentModal(false)}
-                className="w-full border-white/20 text-white hover:bg-white/10"
-              >
-                Cancel
-              </Button>
-            </div>
-            
             <div className="mt-4 text-center text-xs text-white/60 border-t border-white/10 pt-4">
               Customer membership will be activated after payment method is set up.
               No charge until {addCustomerData.startDate}.
@@ -1732,3 +1721,76 @@ export default function AdminDashboard() {
     </div>
   )
 } 
+
+function AdminSetupForm({ subscriptionId, onSuccess, onError }: { subscriptionId: string; onSuccess: () => void; onError: (e: string) => void }) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!stripe || !elements) return
+    setIsProcessing(true)
+    setError(null)
+    try {
+      const result = await stripe.confirmSetup({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: 'if_required'
+      })
+      if (result.error) {
+        setError(result.error.message || 'Failed to set up payment method')
+        onError(result.error.message || 'Failed to set up payment method')
+        setIsProcessing(false)
+        return
+      }
+
+      const setupIntentId = result.setupIntent?.id
+      if (setupIntentId) {
+        const resp = await fetch('/api/confirm-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ setupIntentId, subscriptionId })
+        })
+        const json = await resp.json()
+        if (resp.ok && json.success) {
+          onSuccess()
+        } else {
+          const msg = json?.error || 'Payment confirmation failed'
+          setError(msg)
+          onError(msg)
+        }
+      } else {
+        setError('Missing setup intent id')
+        onError('Missing setup intent id')
+      }
+    } catch (err) {
+      setError('Unexpected error during setup')
+      onError('Unexpected error during setup')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
+        <PaymentElement />
+      </div>
+      {error && (
+        <Alert variant="destructive" className="border-red-500/20 bg-red-500/10">
+          <AlertDescription className="text-red-300">{error}</AlertDescription>
+        </Alert>
+      )}
+      <div className="space-y-2">
+        <Button type="submit" disabled={!stripe || isProcessing} className="w-full bg-white text-black hover:bg-white/90">
+          {isProcessing ? 'Processing…' : 'Complete Payment Setup'}
+        </Button>
+        <Button type="button" variant="outline" onClick={() => window.history.back()} className="w-full border-white/20 text-white hover:bg-white/10">
+          Cancel
+        </Button>
+      </div>
+    </form>
+  )
+}

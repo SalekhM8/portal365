@@ -11,6 +11,10 @@ import { prisma } from '@/lib/prisma'
  */
 export async function POST(request: NextRequest) {
   try {
+    // Environment guard to prevent accidental production use
+    if (process.env.ALLOW_MAINTENANCE !== 'true') {
+      return NextResponse.json({ success: false, error: 'Maintenance operations disabled', code: 'MAINTENANCE_DISABLED' }, { status: 403 })
+    }
     // 🔐 AUTHENTICATION & AUTHORIZATION
     const session = await getServerSession(authOptions) as any
     
@@ -28,7 +32,7 @@ export async function POST(request: NextRequest) {
       select: { id: true, role: true, firstName: true, lastName: true }
     })
 
-    if (!adminUser || !['ADMIN', 'SUPER_ADMIN'].includes(adminUser.role)) {
+    if (!adminUser || !['SUPER_ADMIN'].includes(adminUser.role)) {
       return NextResponse.json({ 
         success: false, 
         error: 'Insufficient permissions - Admin access required',

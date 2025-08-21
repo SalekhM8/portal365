@@ -198,6 +198,15 @@ export async function POST(
       // 🔥 MAIN DATABASE UPDATE (without audit log to prevent transaction rollback)
       await prisma.$transaction(async (tx) => {
         if (cancelationType === 'immediate') {
+          // Void any open invoice to avoid accidental collection
+          try {
+            const invoices = await stripe.invoices.list({ customer: (await stripe.customers.retrieve(subscription.stripeCustomerId)) as any, limit: 3 })
+            for (const inv of invoices.data) {
+              if (inv.status === 'open') {
+                await stripe.invoices.voidInvoice(inv.id)
+              }
+            }
+          } catch {}
           // Immediate cancellation - update status immediately
           await tx.subscription.update({
             where: { id: activeSubscription.id },

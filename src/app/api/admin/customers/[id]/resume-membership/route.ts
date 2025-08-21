@@ -132,6 +132,15 @@ export async function POST(
         }
       )
 
+      // Attempt to pay any open invoice created while paused
+      try {
+        const upcoming = await stripe.invoices.list({ customer: updatedStripeSubscription.customer as string, limit: 1 })
+        const openInv = upcoming.data.find(i => i.status === 'open')
+        if (openInv) {
+          await stripe.invoices.pay(openInv.id)
+        }
+      } catch {}
+
       stripeOperationSuccess = true
       console.log(`✅ [${operationId}] Stripe subscription resumed successfully`)
 

@@ -83,6 +83,9 @@ model User {
   emergencyContact String? // JSON as string
   medicalInfo      String? // JSON as string
 
+  // Parental/Guardian consent for under-16s
+  guardianConsentAt DateTime?
+
   // Authentication
   password String? // Hashed password
   role     String  @default("CUSTOMER") // UserRole

@@ -71,7 +71,12 @@ function RegisterDetailsContent() {
       name: '',
       phone: '',
       relationship: ''
-    }
+    },
+    guardian: {
+      name: '',
+      phone: ''
+    },
+    guardianConsent: false
   })
 
   useEffect(() => {
@@ -97,6 +102,15 @@ function RegisterDetailsContent() {
         emergencyContact: {
           ...prev.emergencyContact,
           [contactField]: value
+        }
+      }))
+    } else if (field.startsWith('guardian.')) {
+      const gField = field.split('.')[1]
+      setFormData(prev => ({
+        ...prev,
+        guardian: {
+          ...prev.guardian,
+          [gField]: value
         }
       }))
     } else {
@@ -353,6 +367,55 @@ function RegisterDetailsContent() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Under-16 Guardian Consent */}
+                  {formData.dateOfBirth && (() => {
+                    const dob = new Date(formData.dateOfBirth)
+                    const today = new Date()
+                    const age = today.getFullYear() - dob.getFullYear() - (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0)
+                    return age < 16
+                  })() && (
+                    <div className="space-y-4 border-t border-white/10 pt-4">
+                      <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Parent/Guardian Consent (Required for under 16)
+                      </h3>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="guardianName" className="text-white/90">Guardian Name</Label>
+                          <Input
+                            id="guardianName"
+                            value={formData.guardian.name}
+                            onChange={(e) => handleInputChange('guardian.name', e.target.value)}
+                            className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                            placeholder="Full name"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="guardianPhone" className="text-white/90">Guardian Phone</Label>
+                          <Input
+                            id="guardianPhone"
+                            value={formData.guardian.phone}
+                            onChange={(e) => handleInputChange('guardian.phone', e.target.value)}
+                            className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                            placeholder="Contact number"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <Checkbox
+                          id="guardianConsent"
+                          checked={formData.guardianConsent}
+                          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, guardianConsent: !!checked }))}
+                        />
+                        <Label htmlFor="guardianConsent" className="text-sm text-white">
+                          I confirm I am the parent/guardian and consent to this membership
+                        </Label>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Emergency Contact */}
                   <div className="space-y-4">

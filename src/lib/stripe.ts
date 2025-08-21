@@ -28,6 +28,7 @@ export interface SubscriptionRequest {
   customPrice?: number     // If provided, overrides getPlan() price
   customStartDate?: string // If provided, overrides "next month" logic
   isAdminCreated?: boolean // Flag to skip prorated billing
+  payerUserId?: string     // If provided, create subscription under parent's Stripe customer
 }
 
 export interface SubscriptionResult {
@@ -65,15 +66,36 @@ export class SubscriptionProcessor {
       const routing = await IntelligentVATRouter.routePayment(routingOptions)
       console.log('✅ VAT routing decision:', routing)
 
-      // 3. Create Stripe customer
-      const customer = await stripe.customers.create({
-        email: request.customerEmail,
-        name: request.customerName,
-        metadata: {
-          userId: request.userId,
-          routedEntity: routing.selectedEntityId
+      // 3. Create or reuse Stripe customer
+      let customerIdToUse: string
+      if (request.payerUserId) {
+        // Use parent's Stripe customer if available; otherwise create one for parent
+        const payer = await prisma.subscription.findFirst({
+          where: { userId: request.payerUserId },
+          orderBy: { createdAt: 'desc' }
+        })
+        if (payer?.stripeCustomerId) {
+          customerIdToUse = payer.stripeCustomerId
+        } else {
+          const parentUser = await prisma.user.findUnique({ where: { id: request.payerUserId } })
+          const parentCustomer = await stripe.customers.create({
+            email: parentUser?.email || undefined,
+            name: parentUser ? `${parentUser.firstName} ${parentUser.lastName}` : undefined,
+            metadata: { userId: request.payerUserId }
+          })
+          customerIdToUse = parentCustomer.id
         }
-      })
+      } else {
+        const customer = await stripe.customers.create({
+          email: request.customerEmail,
+          name: request.customerName,
+          metadata: {
+            userId: request.userId,
+            routedEntity: routing.selectedEntityId
+          }
+        })
+        customerIdToUse = customer.id
+      }
 
       // 4. Get or create Stripe price for this membership type
       const priceId = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name })
@@ -86,28 +108,83 @@ export class SubscriptionProcessor {
       
       const trialEndTimestamp = Math.floor(startDate.getTime() / 1000)
       
-      // Calculate prorated amount (skip for admin-created)
-      let proratedAmountPence = 0
-      if (!request.isAdminCreated) {
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-        const daysRemaining = daysInMonth - now.getDate() + 1 // Include today
-        const fullAmountPence = membershipDetails.monthlyPrice * 100
-        proratedAmountPence = Math.round(fullAmountPence * (daysRemaining / daysInMonth))
+      // Branch: Admin-created subscriptions use SetupIntent + Elements, no upfront PaymentIntent
+      if (request.isAdminCreated) {
+        // Create DB subscription placeholder first
+        const dbSubscription = await prisma.subscription.create({
+          data: {
+            userId: request.userId,
+            stripeSubscriptionId: `setup_placeholder_${Date.now()}`,
+            stripeCustomerId: customerIdToUse,
+            routedEntityId: routing.selectedEntityId,
+            membershipType: request.membershipType,
+            monthlyPrice: membershipDetails.monthlyPrice,
+            status: 'PENDING_PAYMENT',
+            currentPeriodStart: now,
+            currentPeriodEnd: startDate,
+            nextBillingDate: startDate
+          }
+        })
+
+        // Create SetupIntent to collect and save card
+        const setupIntent = await stripe.setupIntents.create({
+          customer: customerIdToUse,
+          usage: 'off_session',
+          metadata: {
+            userId: request.userId,
+            membershipType: request.membershipType,
+            routedEntityId: routing.selectedEntityId,
+            nextBillingDate: startDate.toISOString().split('T')[0],
+            reason: 'admin_created_setup'
+          }
+        })
+
+        // Create routing audit record
+        await prisma.subscriptionRouting.create({
+          data: {
+            subscriptionId: dbSubscription.id,
+            selectedEntityId: routing.selectedEntityId,
+            availableEntities: JSON.stringify(routing.availableEntities),
+            routingReason: routing.routingReason,
+            routingMethod: routing.routingMethod,
+            confidence: routing.confidence,
+            vatPositionSnapshot: JSON.stringify(routing.availableEntities),
+            thresholdDistance: routing.thresholdDistance,
+            decisionTimeMs: routing.decisionTimeMs
+          }
+        })
+
+        console.log('✅ SetupIntent created for admin flow:', setupIntent.id)
+
+        return {
+          subscription: dbSubscription,
+          clientSecret: setupIntent.client_secret!,
+          routing,
+          proratedAmount: 0,
+          nextBillingDate: startDate.toISOString().split('T')[0]
+        }
       }
-      
+
+      // Non-admin flow: create upfront PaymentIntent for prorated amount and save card
+      // Calculate prorated amount
+      let proratedAmountPence = 0
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+      const daysRemaining = daysInMonth - now.getDate() + 1
+      const fullAmountPence = membershipDetails.monthlyPrice * 100
+      proratedAmountPence = Math.round(fullAmountPence * (daysRemaining / daysInMonth))
+
       console.log('📊 Billing calculation:', {
         today: now.toISOString().split('T')[0],
         nextBilling: startDate.toISOString().split('T')[0],
-        isAdminCreated: request.isAdminCreated || false,
+        isAdminCreated: false,
         fullAmount: membershipDetails.monthlyPrice,
         proratedAmount: proratedAmountPence / 100
       })
 
-      // 6. Create PaymentIntent to charge prorated amount now (handles 3DS) and save card for future
       const paymentIntent = await stripe.paymentIntents.create({
         amount: proratedAmountPence,
         currency: 'gbp',
-        customer: customer.id,
+        customer: customerIdToUse,
         automatic_payment_methods: { enabled: true },
         setup_future_usage: 'off_session',
         metadata: {
@@ -121,23 +198,21 @@ export class SubscriptionProcessor {
 
       console.log('✅ PaymentIntent created for prorated charge:', paymentIntent.id)
 
-      // 7. Create subscription record in database (PENDING_PAYMENT status). Temporarily store PI id until real Stripe subscription is created.
       const dbSubscription = await prisma.subscription.create({
         data: {
           userId: request.userId,
-          stripeSubscriptionId: paymentIntent.id, // Temporary placeholder; replaced after creating Stripe subscription
-          stripeCustomerId: customer.id,
+          stripeSubscriptionId: paymentIntent.id,
+          stripeCustomerId: customerIdToUse,
           routedEntityId: routing.selectedEntityId,
           membershipType: request.membershipType,
           monthlyPrice: membershipDetails.monthlyPrice,
-          status: 'PENDING_PAYMENT', // Will be updated after payment method setup
+          status: 'PENDING_PAYMENT',
           currentPeriodStart: now,
           currentPeriodEnd: startDate,
           nextBillingDate: startDate
         }
       })
 
-      // 8. Create routing audit record
       await prisma.subscriptionRouting.create({
         data: {
           subscriptionId: dbSubscription.id,
@@ -156,7 +231,7 @@ export class SubscriptionProcessor {
 
       return {
         subscription: dbSubscription,
-        clientSecret: paymentIntent.client_secret!, // PaymentIntent client secret for frontend
+        clientSecret: paymentIntent.client_secret!,
         routing,
         proratedAmount: proratedAmountPence / 100,
         nextBillingDate: startDate.toISOString().split('T')[0]
