@@ -349,29 +349,98 @@ function TimetableGrid({ classes }: { classes: any[] }) {
   }))
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
-      {byDay.map(col => (
-        <div key={col.day} className="border border-white/10 rounded-xl bg-white/5 overflow-hidden">
-          <div className="bg-red-600/90 text-white px-3 py-2 font-semibold text-sm">{col.label}</div>
-          <div className="divide-y divide-white/10">
-            {col.items.length === 0 ? (
-              <div className="p-3 text-sm text-white/60">No classes</div>
-            ) : (
-              col.items.map((c: any) => (
-                <div key={c.id} className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium">{c.name}</div>
-                    <Badge className="bg-red-600/80">{c.startTime}–{c.endTime}</Badge>
-                  </div>
-                  <div className="text-xs text-white/60 mt-1">{c.location} • {c.instructorName}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      ))}
+    <div className="md:grid md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+      {/* Mobile: horizontal scroll columns with snap */}
+      <div className="md:hidden overflow-x-auto -mx-2 px-2 snap-x snap-mandatory flex gap-3">
+        {byDay.map(col => (
+          <DayColumn key={col.day} label={col.label} items={col.items} className="min-w-[74%] snap-start" />
+        ))}
+      </div>
+
+      {/* Desktop grid */}
+      <div className="hidden md:contents">
+        {byDay.map(col => (
+          <DayColumn key={col.day} label={col.label} items={col.items} />
+        ))}
+      </div>
+
+      <LegendBar />
     </div>
   )
+}
+
+function DayColumn({ label, items, className }: { label: string; items: any[]; className?: string }) {
+  return (
+    <div className={`border border-white/10 rounded-xl bg-white/5 overflow-hidden ${className || ''}`}>
+      <div className="bg-red-600 text-white px-3 py-2 font-semibold text-sm sticky top-0 z-10">{label}</div>
+      <div className="divide-y divide-white/10">
+        {items.length === 0 ? (
+          <div className="p-4 text-sm text-white/60">No classes</div>
+        ) : (
+          items.map((c: any) => <ClassCard key={c.id} c={c} />)
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ClassCard({ c }: { c: any }) {
+  const tags = parseTags(c);
+  return (
+    <div className="p-3 hover:bg-white/10 transition-colors">
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-medium leading-tight truncate">{c.name}</div>
+        <span className="bg-red-600/90 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap">{c.startTime}–{c.endTime}</span>
+      </div>
+      <div className="text-xs text-white/70 mt-1 flex items-center gap-1">
+        <span className="truncate">{c.location}</span>
+        <span>•</span>
+        <span className="truncate">{c.instructorName}</span>
+      </div>
+      {tags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {tags.map((t: any) => (
+            <span key={t.key} className={`text-[10px] px-2 py-0.5 rounded-full ${t.variant === 'red' ? 'bg-red-600/90 text-white' : 'bg-white/10 text-white/80 border border-white/15'}`}>{t.label}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LegendBar() {
+  const items = [
+    { label: 'PRO', desc: 'Pro practice', variant: 'red' },
+    { label: '6M+', desc: '6 months experience', variant: 'neutral' },
+    { label: 'Ages 7+', desc: 'Kids eligibility', variant: 'neutral' },
+    { label: 'Invite', desc: 'Invite only', variant: 'neutral' },
+    { label: 'Beginners', desc: 'Beginners friendly', variant: 'neutral' },
+    { label: 'All levels', desc: 'All levels welcome', variant: 'neutral' },
+  ]
+  return (
+    <div className="col-span-full mt-4 border border-white/10 rounded-lg bg-white/5 p-3">
+      <div className="flex flex-wrap gap-2 items-center">
+        {items.map(i => (
+          <div key={i.label} className="flex items-center gap-2 text-xs text-white/70">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full ${i.variant === 'red' ? 'bg-red-600/90 text-white' : 'bg-white/10 text-white/80 border border-white/15'}`}>{i.label}</span>
+            <span className="hidden sm:inline">{i.desc}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function parseTags(c: any) {
+  const source = `${c.description || ''} ${c.name || ''}`.toLowerCase()
+  const tags: Array<{ key: string; label: string; variant: 'red' | 'neutral' }> = []
+  if (/(^|\s)pro(\s|$)/.test(source) || source.includes('pro ')) tags.push({ key: 'pro', label: 'PRO', variant: 'red' })
+  if (source.includes('6m+') || source.includes('6 months')) tags.push({ key: '6m', label: '6M+', variant: 'neutral' })
+  if (source.includes('ages 7')) tags.push({ key: 'ages', label: 'Ages 7+', variant: 'neutral' })
+  if (source.includes('invite')) tags.push({ key: 'invite', label: 'Invite', variant: 'neutral' })
+  if (source.includes('beginner')) tags.push({ key: 'beg', label: 'Beginners', variant: 'neutral' })
+  if (source.includes('all levels')) tags.push({ key: 'all', label: 'All levels', variant: 'neutral' })
+  return tags
 }
 
 function fullDayName(n: number) {
