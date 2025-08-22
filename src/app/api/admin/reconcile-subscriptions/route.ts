@@ -51,7 +51,8 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        const s = await stripe.subscriptions.retrieve(stripeSubId)
+        const resp = await stripe.subscriptions.retrieve(stripeSubId)
+        const s: any = (resp as any).data ?? resp
         const stripeStatus = (s.status || '').toLowerCase() as StripeLikeStatus
 
         // Determine target local status
