@@ -1167,7 +1167,7 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          {(session?.user as any)?.role === 'SUPER_ADMIN' && (
+          {(['ADMIN','SUPER_ADMIN'] as any[]).includes((session?.user as any)?.role) && (
             <Card>
               <CardHeader>
                 <CardTitle>Maintenance Tools (SUPER_ADMIN)</CardTitle>
