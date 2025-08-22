@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       where: {
         status: 'PENDING_PAYMENT',
         updatedAt: { gte: since },
-        stripeSubscriptionId: { not: null }
+        NOT: [{ stripeSubscriptionId: { startsWith: 'setup_placeholder_' } }]
       },
       include: { user: true }
     })
