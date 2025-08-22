@@ -212,7 +212,7 @@ export default function Home() {
                   {loadingClasses ? (
                     <div className="py-10 text-center text-white/70">Loading timetable…</div>
                   ) : (
-                    <TimetableGrid classes={classes} />
+                    <TimetableAccordion classes={classes} />
                   )}
                 </div>
               </AlertDialogContent>
@@ -364,6 +364,56 @@ function TimetableGrid({ classes }: { classes: any[] }) {
         ))}
       </div>
 
+      <LegendBar />
+    </div>
+  )
+}
+
+function TimetableAccordion({ classes }: { classes: any[] }) {
+  const days = [1,2,3,4,5,6,0]
+  const byDay = days.map(d => ({
+    day: d,
+    label: fullDayName(d),
+    items: classes.filter(c => c.dayOfWeek === d).sort((a,b) => a.startTime.localeCompare(b.startTime))
+  }))
+
+  return (
+    <div className="space-y-3">
+      {byDay.map(col => (
+        <details key={col.day} className="group border border-white/10 rounded-lg bg-white/5">
+          <summary className="list-none cursor-pointer select-none flex items-center justify-between gap-3 px-3 py-2 hover:bg-white/10 transition-colors">
+            <div className="flex items-center gap-2">
+              <span className="bg-red-600 text-white text-xs font-semibold px-2 py-1 rounded-md">{col.label}</span>
+              <span className="text-xs text-white/60">{col.items.length} classes</span>
+            </div>
+            <span className="text-white/60 text-xs group-open:rotate-180 transition-transform">▾</span>
+          </summary>
+          <div className="px-3 pb-3 pt-1 space-y-2">
+            {col.items.length === 0 ? (
+              <div className="text-sm text-white/60 py-2">No classes</div>
+            ) : (
+              col.items.map((c: any) => (
+                <div key={c.id} className="rounded-md border border-white/10 bg-black/40 p-3 hover:bg-white/10 transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-white font-semibold leading-tight truncate">{c.name}</div>
+                      <div className="text-xs text-white/70 mt-1 truncate">{c.location} • {c.instructorName}</div>
+                    </div>
+                    <span className="bg-red-600 text-white text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap">{c.startTime}–{c.endTime}</span>
+                  </div>
+                  {parseTags(c).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {parseTags(c).map((t: any) => (
+                        <span key={t.key} className={`text-[10px] px-2 py-0.5 rounded-full ${t.variant === 'red' ? 'bg-red-600 text-white' : 'bg-white/10 text-white/80 border border-white/15'}`}>{t.label}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </details>
+      ))}
       <LegendBar />
     </div>
   )
