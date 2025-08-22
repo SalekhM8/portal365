@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const me = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true, role: true } })
-    if (!me || me.role !== 'SUPER_ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!me || !['ADMIN','SUPER_ADMIN'].includes(me.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     if (process.env.ALLOW_MAINTENANCE !== 'true') {
       return NextResponse.json({ error: 'Maintenance not allowed (ALLOW_MAINTENANCE!=true)' }, { status: 403 })
