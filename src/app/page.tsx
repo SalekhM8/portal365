@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogTrigger,
+  AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 
 const businesses = [
@@ -67,7 +68,11 @@ export default function Home() {
     fetch('/api/classes')
       .then(r => r.json())
       .then(json => {
-        if (json?.success) setClasses(json.classes || []);
+        if (json?.success && Array.isArray(json.classes) && json.classes.length > 0) {
+          setClasses(json.classes);
+        } else {
+          setClasses(getFallbackTimetable());
+        }
       })
       .finally(() => setLoadingClasses(false));
   }, [timetableOpen, classes.length]);
@@ -186,41 +191,28 @@ export default function Home() {
           </div>
 
           {/* View Timetable Button */}
-          <div className="pt-6">
+          <div className="pt-2">
             <AlertDialog open={timetableOpen} onOpenChange={setTimetableOpen}>
               <AlertDialogTrigger asChild>
                 <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-6 rounded-xl font-semibold shadow-lg shadow-red-900/20">
                   View Timetable
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent className="bg-black/90 text-white border-white/10 max-w-4xl">
+              <AlertDialogContent className="bg-black/90 text-white border-white/10 max-w-6xl">
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Class Timetable</AlertDialogTitle>
+                  <div className="flex items-center justify-between">
+                    <AlertDialogTitle>Class Timetable</AlertDialogTitle>
+                    <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">Close</AlertDialogCancel>
+                  </div>
                   <AlertDialogDescription className="text-white/70">
                     Drop-in classes available with your membership. No booking required.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <div className="max-h-[70vh] overflow-y-auto pr-1">
+                <div className="max-h-[75vh] overflow-y-auto pr-1">
                   {loadingClasses ? (
                     <div className="py-10 text-center text-white/70">Loading timetable…</div>
                   ) : (
-                    <div className="space-y-4">
-                      {classes.length === 0 ? (
-                        <div className="py-10 text-center text-white/70">No classes available yet.</div>
-                      ) : (
-                        classes.map((c: any) => (
-                          <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-white/5">
-                            <div className="space-y-1">
-                              <div className="text-white font-semibold">{c.name}</div>
-                              <div className="text-xs text-white/60">
-                                {getDayName(c.dayOfWeek)} {c.startTime}–{c.endTime} • {c.location} • {c.instructorName}
-                              </div>
-                            </div>
-                            <Badge className="bg-red-600">{c.serviceName}</Badge>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                    <TimetableGrid classes={classes} />
                   )}
                 </div>
               </AlertDialogContent>
@@ -344,4 +336,93 @@ export default function Home() {
 function getDayName(dayOfWeek: number): string {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   return days[dayOfWeek] || 'Unknown';
+}
+
+function TimetableGrid({ classes }: { classes: any[] }) {
+  const days = [1,2,3,4,5,6,0]; // Mon..Sun
+  const byDay = days.map(d => ({
+    day: d,
+    label: fullDayName(d),
+    items: classes
+      .filter(c => c.dayOfWeek === d)
+      .sort((a,b) => a.startTime.localeCompare(b.startTime))
+  }))
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+      {byDay.map(col => (
+        <div key={col.day} className="border border-white/10 rounded-xl bg-white/5 overflow-hidden">
+          <div className="bg-red-600/90 text-white px-3 py-2 font-semibold text-sm">{col.label}</div>
+          <div className="divide-y divide-white/10">
+            {col.items.length === 0 ? (
+              <div className="p-3 text-sm text-white/60">No classes</div>
+            ) : (
+              col.items.map((c: any) => (
+                <div key={c.id} className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium">{c.name}</div>
+                    <Badge className="bg-red-600/80">{c.startTime}–{c.endTime}</Badge>
+                  </div>
+                  <div className="text-xs text-white/60 mt-1">{c.location} • {c.instructorName}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function fullDayName(n: number) {
+  const map = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  return map[n] || ''
+}
+
+function getFallbackTimetable() {
+  // Representative static schedule matching your shared image (minimal)
+  const to = (d: number, name: string, start: string, end: string, instructor: string, location: string) => ({
+    id: `${d}-${name}-${start}`,
+    name,
+    description: '',
+    instructorName: instructor,
+    dayOfWeek: d,
+    startTime: start,
+    endTime: end,
+    duration: 60,
+    maxParticipants: 30,
+    location,
+    serviceName: 'Martial Arts'
+  })
+
+  return [
+    // Monday
+    to(1,'Morning Class','06:30','07:30','Staff','Main Gym'),
+    to(1,'Kids Striking','17:30','18:30','Kids Coach','Main Gym'),
+    to(1,'Beginners No Gi BJJ','18:30','19:30','Coach','Mat Area 1'),
+    to(1,'Intermediate No Gi BJJ','18:30','19:30','Coach','Mat Area 2'),
+    to(1,'Gi BJJ','19:30','21:00','Coach','Mat Area 1'),
+    // Tuesday
+    to(2,'Morning Class','06:30','07:30','Staff','Main Gym'),
+    to(2,'No Gi BJJ','11:00','12:30','Dani','Mat Area 1'),
+    to(2,'Submission Grappling','18:30','19:45','Dani','Mat Area 1'),
+    to(2,'Adult MMA','19:45','21:00','Qudrat','Main Gym'),
+    to(2,'Masters BJJ','21:30','22:30','Top Black Belt','Mat Area 1'),
+    // Wednesday
+    to(3,'Beginners No Gi Sparring','18:00','19:00','Coach','Mat Area 1'),
+    to(3,'Adult Striking','19:00','20:00','Qudrat','Main Gym'),
+    // Thursday
+    to(4,'Submission Grappling','18:30','19:45','Dani','Mat Area 1'),
+    to(4,'Adult MMA','19:45','21:00','Qudrat','Main Gym'),
+    to(4,'Masters BJJ','21:30','22:30','Top Black Belt','Mat Area 2'),
+    // Friday
+    to(5,'Kids Gi BJJ','17:30','18:30','Kids Coach','Mat Area 1'),
+    to(5,'Beginners No Gi BJJ','18:30','19:30','Coach','Mat Area 1'),
+    to(5,'Gi BJJ','19:30','21:00','Dani','Mat Area 1'),
+    // Saturday
+    to(6,'Kids Striking','10:00','11:00','Kids Coach','Main Gym'),
+    to(6,'10 Rounds BJJ Sparring','19:00','20:00','Coach','Mat Area 1'),
+    // Sunday
+    to(0,'Adult Striking','19:00','20:00','Qudrat','Main Gym'),
+  ]
 }
