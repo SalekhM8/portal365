@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
       const dob = new Date(validatedData.dateOfBirth)
       const today = new Date()
       const age = today.getFullYear() - dob.getFullYear() - (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0)
-      if (age < 16) {
+      if (age < 18) {
         if (!validatedData.guardian || !validatedData.guardianConsent) {
-          return NextResponse.json({ error: 'Parental/guardian consent is required for under-16s' }, { status: 400 })
+          return NextResponse.json({ error: 'Parental/guardian consent is required for under-18s' }, { status: 400 })
         }
         guardianConsentAt = new Date()
         // Merge guardian into emergency contact blob for now

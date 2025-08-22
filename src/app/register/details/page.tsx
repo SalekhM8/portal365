@@ -373,12 +373,12 @@ function RegisterDetailsContent() {
                     const dob = new Date(formData.dateOfBirth)
                     const today = new Date()
                     const age = today.getFullYear() - dob.getFullYear() - (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0)
-                    return age < 16
+                    return age < 18
                   })() && (
                     <div className="space-y-4 border-t border-white/10 pt-4">
                       <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                         <Shield className="h-5 w-5" />
-                        Parent/Guardian Consent (Required for under 16)
+                        Parent/Guardian Consent (Required for under 18)
                       </h3>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
