@@ -182,6 +182,7 @@ export default function AdminDashboard() {
   const [cancelationType, setCancelationType] = useState<'immediate' | 'end_of_period'>('end_of_period')
   const [pauseBehavior, setPauseBehavior] = useState<'void' | 'keep_as_draft' | 'mark_uncollectible'>('void')
   const [showMembershipActionModal, setShowMembershipActionModal] = useState(false)
+  const [reconcileLoading, setReconcileLoading] = useState(false)
 
   useEffect(() => {
     // ✅ ADD authentication check
@@ -1165,6 +1166,73 @@ export default function AdminDashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {(session?.user as any)?.role === 'SUPER_ADMIN' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Maintenance Tools (SUPER_ADMIN)</CardTitle>
+                <CardDescription>
+                  Safely reconcile PENDING_PAYMENT subscriptions with Stripe. Dry‑run first.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-xs text-white/70">
+                  Requires server env ALLOW_MAINTENANCE=true. Only trialing/active Stripe subs will flip to ACTIVE. Failed/unpaid remain pending.
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={reconcileLoading}
+                    onClick={async () => {
+                      if (!confirm('Run DRY‑RUN reconcile for last 30 days? No changes will be made.')) return
+                      try {
+                        setReconcileLoading(true)
+                        const resp = await fetch('/api/admin/reconcile-subscriptions', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ dryRun: true, withinDays: 30 })
+                        })
+                        const json = await resp.json()
+                        if (!resp.ok) { alert(`Error: ${json.error || resp.status}`); return }
+                        alert(`Dry‑run scanned ${json.scanned}. Would activate ${json.activated}, pause ${json.paused}, cancel ${json.cancelled}, mark past due ${json.pastDue}. Left pending ${json.leftPending}.`)
+                      } catch (e: any) {
+                        alert('Error: ' + (e?.message || 'unknown'))
+                      } finally {
+                        setReconcileLoading(false)
+                      }
+                    }}
+                  >
+                    Dry‑run Reconcile
+                  </Button>
+                  <Button
+                    disabled={reconcileLoading}
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={async () => {
+                      if (!confirm('Proceed with LIVE reconcile? This will update statuses based on Stripe.')) return
+                      try {
+                        setReconcileLoading(true)
+                        const resp = await fetch('/api/admin/reconcile-subscriptions', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ dryRun: false, withinDays: 30 })
+                        })
+                        const json = await resp.json()
+                        if (!resp.ok) { alert(`Error: ${json.error || resp.status}`); return }
+                        alert(`Updated: activated ${json.activated}, paused ${json.paused}, cancelled ${json.cancelled}, past due ${json.pastDue}. Left pending ${json.leftPending}.`)
+                        await fetchAdminData()
+                      } catch (e: any) {
+                        alert('Error: ' + (e?.message || 'unknown'))
+                      } finally {
+                        setReconcileLoading(false)
+                      }
+                    }}
+                  >
+                    Reconcile Now
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
