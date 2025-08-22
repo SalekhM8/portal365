@@ -31,6 +31,17 @@ export async function POST(request: NextRequest) {
     console.log('🔄 Processing registration request...')
     
     const body = await request.json()
+
+    // Sanitize optional guardian payload: if both fields are blank, treat as undefined
+    if (body && body.guardian) {
+      const g = body.guardian || {}
+      const nameBlank = !g.name || String(g.name).trim().length === 0
+      const phoneBlank = !g.phone || String(g.phone).trim().length === 0
+      if (nameBlank && phoneBlank) {
+        delete body.guardian
+      }
+    }
+
     const validatedData = registerSchema.parse(body)
     
     // Check if user already exists
