@@ -16,7 +16,15 @@ import {
   X
 } from "lucide-react";
 import { MEMBERSHIP_PLANS } from "@/config/memberships";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const businesses = [
   {
@@ -49,6 +57,20 @@ const businesses = [
 
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [timetableOpen, setTimetableOpen] = useState(false);
+  const [classes, setClasses] = useState<Array<any>>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+
+  useEffect(() => {
+    if (!timetableOpen || classes.length) return;
+    setLoadingClasses(true);
+    fetch('/api/classes')
+      .then(r => r.json())
+      .then(json => {
+        if (json?.success) setClasses(json.classes || []);
+      })
+      .finally(() => setLoadingClasses(false));
+  }, [timetableOpen, classes.length]);
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -161,6 +183,48 @@ export default function Home() {
             <p className="text-base sm:text-lg font-medium text-white/90">
               One of the UK's top martial arts facilities
             </p>
+          </div>
+
+          {/* View Timetable Button */}
+          <div className="pt-6">
+            <AlertDialog open={timetableOpen} onOpenChange={setTimetableOpen}>
+              <AlertDialogTrigger asChild>
+                <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-6 rounded-xl font-semibold shadow-lg shadow-red-900/20">
+                  View Timetable
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="bg-black/90 text-white border-white/10 max-w-4xl">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Class Timetable</AlertDialogTitle>
+                  <AlertDialogDescription className="text-white/70">
+                    Drop-in classes available with your membership. No booking required.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="max-h-[70vh] overflow-y-auto pr-1">
+                  {loadingClasses ? (
+                    <div className="py-10 text-center text-white/70">Loading timetable…</div>
+                  ) : (
+                    <div className="space-y-4">
+                      {classes.length === 0 ? (
+                        <div className="py-10 text-center text-white/70">No classes available yet.</div>
+                      ) : (
+                        classes.map((c: any) => (
+                          <div key={c.id} className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-white/5">
+                            <div className="space-y-1">
+                              <div className="text-white font-semibold">{c.name}</div>
+                              <div className="text-xs text-white/60">
+                                {getDayName(c.dayOfWeek)} {c.startTime}–{c.endTime} • {c.location} • {c.instructorName}
+                              </div>
+                            </div>
+                            <Badge className="bg-red-600">{c.serviceName}</Badge>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </section>
@@ -275,4 +339,9 @@ export default function Home() {
       </footer>
     </div>
   );
+}
+
+function getDayName(dayOfWeek: number): string {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return days[dayOfWeek] || 'Unknown';
 }
