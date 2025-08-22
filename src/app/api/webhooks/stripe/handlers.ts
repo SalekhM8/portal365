@@ -67,13 +67,27 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
     
     console.log(`📊 [WEBHOOK] Status mapping: Stripe ${originalStatus} + pause_collection: ${!!stripeSubscription.pause_collection} → Local ${subscriptionStatus}`)
     
-    const subscription = await prisma.subscription.findUnique({ 
+    let subscription = await prisma.subscription.findUnique({ 
       where: { stripeSubscriptionId: stripeSubscription.id }, 
       include: { user: true } 
     })
     if (!subscription) {
-      console.log(`❌ [WEBHOOK] Subscription not found in database: ${stripeSubscription.id}`)
-      return
+      // Fallback: race condition where we created the sub and set metadata but DB row wasn't updated yet
+      const dbSubId = (stripeSubscription.metadata && (stripeSubscription.metadata as any).dbSubscriptionId) || undefined
+      if (dbSubId) {
+        const byDbId = await prisma.subscription.findUnique({ where: { id: dbSubId }, include: { user: true } })
+        if (byDbId) {
+          // Link the Stripe subscription ID retroactively
+          if (!byDbId.stripeSubscriptionId || byDbId.stripeSubscriptionId.startsWith('setup_placeholder_')) {
+            await prisma.subscription.update({ where: { id: byDbId.id }, data: { stripeSubscriptionId: stripeSubscription.id } })
+          }
+          subscription = byDbId
+        }
+      }
+      if (!subscription) {
+        console.log(`❌ [WEBHOOK] Subscription not found in database: ${stripeSubscription.id}`)
+        return
+      }
     }
 
     const previousStatus = subscription.status
