@@ -889,7 +889,18 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody>
                     {filteredPayments.map((payment) => (
-                      <tr key={payment.id} className="border-b border-white/10 hover:bg-white/5">
+                      <tr
+                        key={payment.id}
+                        className="border-b border-white/10 hover:bg-white/5 cursor-pointer"
+                        onClick={() => {
+                          const cust = customers.find(c => c.id === payment.customerId)
+                          if (cust) {
+                            setSelectedCustomer(cust)
+                          } else {
+                            alert('Customer details not available for this payment.')
+                          }
+                        }}
+                      >
                         <td className="p-4 border-r border-white/5">
                           <div>
                             <p className="font-medium text-white">{payment.customerName}</p>
