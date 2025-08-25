@@ -314,6 +314,25 @@ export default function AdminDashboard() {
     alert('Payment setup failed: ' + error)
   }
 
+  const handleRemovePendingSignup = async (customerId: string) => {
+    if (!confirm('Remove this abandoned signup? This will delete the pending subscription and related pending/failed payments.')) {
+      return
+    }
+    try {
+      const resp = await fetch(`/api/admin/customers/${customerId}/void-signup`, { method: 'POST' })
+      const json = await resp.json()
+      if (resp.ok) {
+        alert('Abandoned signup removed')
+        setSelectedCustomer(null)
+        await fetchAdminData()
+      } else {
+        alert('Remove failed: ' + (json?.error || 'Unknown error'))
+      }
+    } catch (e) {
+      alert('Network error while removing signup')
+    }
+  }
+
   const handlePasswordReset = async (customerId: string) => {
     if (!confirm('Are you sure you want to reset this customer\'s password? They will need to use the new temporary password to log in.')) {
       return
@@ -1208,6 +1227,18 @@ export default function AdminDashboard() {
                   <p className="text-white"><strong className="text-white/90">Total Paid:</strong> £{selectedCustomer.totalPaid}</p>
                   <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
                   <div className="flex gap-2 mt-3">
+                    {selectedCustomer.status === 'PENDING_PAYMENT' && (selectedCustomer.totalPaid || 0) === 0 ? (
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          await handleRemovePendingSignup(selectedCustomer.id)
+                        }}
+                        className="border-red-500/20 text-red-400 hover:bg-red-500/10"
+                      >
+                        Remove Abandoned Signup
+                      </Button>
+                    ) : (
+                      <>
                     <Button
                       variant="outline"
                       onClick={async () => {
@@ -1233,6 +1264,8 @@ export default function AdminDashboard() {
                     >
                       Void Invoice
                     </Button>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="border-b border-white/10 pb-2">
