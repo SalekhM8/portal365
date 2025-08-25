@@ -607,56 +607,56 @@ export default function AdminDashboard() {
       )}
 
       {/* Enhanced Key Metrics */}
-      <div className="grid gap-6 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-6 md:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Revenue</CardTitle>
             <PoundSterling className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-xl sm:text-2xl font-bold">
               £{businessMetrics?.totalRevenue.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
               <span className="text-green-600">+12.3%</span> from last month
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Recurring</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Monthly Recurring</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">£{businessMetrics?.monthlyRecurring.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-xl sm:text-2xl font-bold">£{businessMetrics?.monthlyRecurring.toLocaleString()}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
               <span className="text-green-600">+8.7%</span> MRR growth
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Members</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Members</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{vatStatus.reduce((sum, entity) => sum + entity.customerCount, 0)}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-xl sm:text-2xl font-bold">{vatStatus.reduce((sum, entity) => sum + entity.customerCount, 0)}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
               Churn rate: <span className="text-red-600">{businessMetrics?.churnRate}%</span>
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Payment Success</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium">Payment Success</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{businessMetrics?.paymentSuccessRate}%</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-xl sm:text-2xl font-bold">{businessMetrics?.paymentSuccessRate}%</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">
               Routing efficiency: {businessMetrics?.routingEfficiency}%
             </p>
           </CardContent>
@@ -676,7 +676,80 @@ export default function AdminDashboard() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
+          {/* Mobile: tab switcher to reduce scrolling */}
+          <div className="md:hidden">
+            <Card>
+              <CardHeader>
+                <CardTitle>Overview</CardTitle>
+                <CardDescription>Quick access</CardDescription>
+                <Tabs defaultValue="todo" className="mt-3">
+                  <TabsList className="grid w-full grid-cols-2 h-auto">
+                    <TabsTrigger value="todo" className="text-xs">To‑Do</TabsTrigger>
+                    <TabsTrigger value="activity" className="text-xs">Recent</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="todo" className="mt-4">
+                    <div className="space-y-4">
+                      {(() => {
+                        const failed = [...payments]
+                          .filter(p => p.status === 'FAILED')
+                          .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                          .slice(0, 10)
+                        if (failed.length === 0) {
+                          return (
+                            <div className="text-sm text-muted-foreground">No failed payments. You're all set.</div>
+                          )
+                        }
+                        return failed.map((p) => (
+                          <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-medium text-white">{p.customerName}</p>
+                                <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
+                                <div className="mt-1">
+                                  <Badge variant={getStatusBadgeVariant('FAILED')}>FAILED</Badge>
+                                </div>
+                              </div>
+                              <div className="flex flex-col gap-2 shrink-0">
+                                <Button variant="outline" onClick={() => handleRetryLatestInvoice(p.customerId)} className="text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/10">Retry</Button>
+                                <Button variant="outline" onClick={() => openCustomerModal(p.customerId)} className="border-white/20 text-white hover:bg-white/10">Contact</Button>
+                                <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="activity" className="mt-4">
+                    <div className="space-y-4">
+                      {recentActivity.length > 0 ? recentActivity.map((activity, index) => {
+                          const IconComponent = getActivityIcon(activity.icon)
+                          return (
+                            <div key={index} className="flex items-center space-x-3">
+                              <IconComponent className={`h-4 w-4 ${activity.color}`} />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium">{activity.message}</p>
+                                <p className="text-xs text-muted-foreground">{activity.detail}</p>
+                              </div>
+                              {activity.amount && (
+                                <div className="text-sm font-semibold text-muted-foreground">{activity.amount}</div>
+                              )}
+                            </div>
+                          )
+                        }) : (
+                          <div className="text-center text-muted-foreground">
+                            <p className="text-sm">No recent activity</p>
+                          </div>
+                        )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardHeader>
+            </Card>
+          </div>
+
+          {/* Desktop/tablet: two-column view */}
+          <div className="hidden md:grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>To‑Do</CardTitle>
