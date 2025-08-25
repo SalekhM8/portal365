@@ -314,6 +314,32 @@ export default function AdminDashboard() {
     alert('Payment setup failed: ' + error)
   }
 
+  const handleRetryLatestInvoice = async (customerId: string) => {
+    if (!confirm('Retry the latest open invoice for this customer?')) return
+    const resp = await fetch(`/api/admin/customers/${customerId}/retry-invoice`, { method: 'POST' })
+    const json = await resp.json()
+    if (resp.ok) alert('Invoice retry requested. Status: ' + json.invoice?.status)
+    else alert('Retry failed: ' + (json.error || 'Unknown error'))
+  }
+
+  const openCustomerModal = (customerId: string) => {
+    const cust = customers.find(c => c.id === customerId)
+    if (cust) setSelectedCustomer(cust)
+    else alert('Customer details not available.')
+  }
+
+  const openCancelFromTodo = (customerId: string) => {
+    const cust = customers.find(c => c.id === customerId)
+    if (!cust) {
+      alert('Customer details not available.')
+      return
+    }
+    setSelectedCustomer(cust)
+    setMembershipAction('cancel')
+    setMembershipActionReason('Cancelled from To-Do panel')
+    setShowMembershipActionModal(true)
+  }
+
   const handleRemovePendingSignup = async (customerId: string) => {
     if (!confirm('Remove this abandoned signup? This will delete the pending subscription and related pending/failed payments.')) {
       return
@@ -653,30 +679,40 @@ export default function AdminDashboard() {
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Business Entity Performance</CardTitle>
-                <CardDescription>Revenue and customer distribution across entities</CardDescription>
+                <CardTitle>To‑Do</CardTitle>
+                <CardDescription>Payments that need attention (recent failures)</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {vatStatus.map((entity) => (
-                    <div key={entity.entityId} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium">{entity.entityName}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {entity.customerCount} customers • Avg £{entity.avgPaymentValue}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">£{entity.currentRevenue.toLocaleString()}</p>
-                          <Badge variant={getRiskBadgeVariant(entity.riskLevel)} className="text-xs">
-                            {entity.riskLevel}
-                          </Badge>
+                  {(() => {
+                    const failed = [...payments]
+                      .filter(p => p.status === 'FAILED')
+                      .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                      .slice(0, 10)
+                    if (failed.length === 0) {
+                      return (
+                        <div className="text-sm text-muted-foreground">No failed payments. You're all set.</div>
+                      )
+                    }
+                    return failed.map((p) => (
+                      <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-white">{p.customerName}</p>
+                            <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
+                            <div className="mt-1">
+                              <Badge variant={getStatusBadgeVariant('FAILED')}>FAILED</Badge>
+                            </div>
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                            <Button variant="outline" onClick={() => handleRetryLatestInvoice(p.customerId)} className="text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/10">Retry</Button>
+                            <Button variant="outline" onClick={() => openCustomerModal(p.customerId)} className="border-white/20 text-white hover:bg-white/10">Contact</Button>
+                            <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
+                          </div>
                         </div>
                       </div>
-                      <Progress value={getVATProgress(entity.currentRevenue, entity.vatThreshold)} className="h-2" />
-                    </div>
-                  ))}
+                    ))
+                  })()}
                 </div>
               </CardContent>
             </Card>
