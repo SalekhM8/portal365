@@ -134,18 +134,10 @@ export async function POST(
         userStatusChanged = true
       }
 
-      // Audit log entry (store minimal payload since subscription is gone)
-      await tx.subscriptionAuditLog.create({
-        data: {
-          subscriptionId: subscription.id,
-          action: 'VOID_SIGNUP',
-          performedBy: adminUser.id,
-          performedByName: `${adminUser.firstName} ${adminUser.lastName}`,
-          reason: 'Admin cleanup of abandoned signup',
-          operationId: `void_signup_${subscription.id}_${Date.now()}`,
-          metadata: JSON.stringify({ deletedInvoices: deletedInvoices.count, deletedPayments: orphanPaymentIds.length, deletedMemberships, userStatusChanged })
-        }
-      })
+      // Note: We do not write a SubscriptionAuditLog here because the subscription
+      // has been deleted. The audit log table enforces a foreign key to an
+      // existing subscription, so writing after delete would violate the FK.
+      // If audit is required, we can add a separate system log not tied by FK.
 
       return { deletedInvoices: deletedInvoices.count, deletedPayments: orphanPaymentIds.length, deletedMemberships, userStatusChanged }
     })
