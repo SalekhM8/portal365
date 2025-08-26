@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
@@ -727,12 +728,17 @@ export default function AdminDashboard() {
                                 </div>
                               </div>
                               <div className="flex flex-col gap-2 shrink-0">
-                                <Button variant="outline" onClick={() => handleRetryLatestInvoice(p.customerId)} className="text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/10">Retry</Button>
-                                <Button variant="outline" onClick={() => openCustomerModal(p.customerId)} className="border-white/20 text-white hover:bg-white/10">Contact</Button>
-                                <div className="flex gap-2">
-                                  <Button variant="outline" onClick={() => dismissTodo(p.id)} className="border-white/20 text-white hover:bg-white/10">Remove</Button>
-                                  <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
-                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">Actions ▾</Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent className="bg-black border-white/20">
+                                    <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => dismissTodo(p.id)}>Remove</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} data-variant="destructive">Cancel</DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             </div>
                           </div>
@@ -799,12 +805,17 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                            <Button variant="outline" onClick={() => handleRetryLatestInvoice(p.customerId)} className="text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/10">Retry</Button>
-                            <Button variant="outline" onClick={() => openCustomerModal(p.customerId)} className="border-white/20 text-white hover:bg-white/10">Contact</Button>
-                            <div className="flex gap-2">
-                              <Button variant="outline" onClick={() => dismissTodo(p.id)} className="border-white/20 text-white hover:bg-white/10">Remove</Button>
-                              <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
-                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">Actions ▾</Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent className="bg-black border-white/20">
+                                <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => dismissTodo(p.id)}>Remove</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} data-variant="destructive">Cancel</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </div>
                       </div>
