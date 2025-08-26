@@ -736,7 +736,7 @@ export default function AdminDashboard() {
                                     <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => dismissTodo(p.id)}>Remove</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} data-variant="destructive">Cancel</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>
@@ -813,7 +813,7 @@ export default function AdminDashboard() {
                                 <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => dismissTodo(p.id)}>Remove</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} data-variant="destructive">Cancel</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
