@@ -702,7 +702,7 @@ export default function AdminDashboard() {
                         return failed.map((p) => (
                           <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
                             <div className="flex items-start justify-between gap-3">
-                              <div>
+                              <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
                                 <p className="text-sm font-medium text-white">{p.customerName}</p>
                                 <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                                 <div className="mt-1">
@@ -712,7 +712,15 @@ export default function AdminDashboard() {
                               <div className="flex flex-col gap-2 shrink-0">
                                 <Button variant="outline" onClick={() => handleRetryLatestInvoice(p.customerId)} className="text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/10">Retry</Button>
                                 <Button variant="outline" onClick={() => openCustomerModal(p.customerId)} className="border-white/20 text-white hover:bg-white/10">Contact</Button>
-                                <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
+                                {(() => {
+                                  const cust = customers.find(c => c.id === p.customerId)
+                                  const voidable = cust && ['PENDING_PAYMENT','INCOMPLETE','INCOMPLETE_EXPIRED'].includes((cust as any).subscriptionStatus || cust.status) && ((cust.totalPaid || 0) === 0)
+                                  return voidable ? (
+                                    <Button variant="outline" onClick={() => handleRemovePendingSignup(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Remove</Button>
+                                  ) : (
+                                    <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
+                                  )
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -770,7 +778,7 @@ export default function AdminDashboard() {
                     return failed.map((p) => (
                       <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
                         <div className="flex items-start justify-between gap-3">
-                          <div>
+                          <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
                             <p className="text-sm font-medium text-white">{p.customerName}</p>
                             <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                             <div className="mt-1">
@@ -780,7 +788,15 @@ export default function AdminDashboard() {
                           <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                             <Button variant="outline" onClick={() => handleRetryLatestInvoice(p.customerId)} className="text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/10">Retry</Button>
                             <Button variant="outline" onClick={() => openCustomerModal(p.customerId)} className="border-white/20 text-white hover:bg-white/10">Contact</Button>
-                            <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
+                            {(() => {
+                              const cust = customers.find(c => c.id === p.customerId)
+                              const voidable = cust && ['PENDING_PAYMENT','INCOMPLETE','INCOMPLETE_EXPIRED'].includes((cust as any).subscriptionStatus || cust.status) && ((cust.totalPaid || 0) === 0)
+                              return voidable ? (
+                                <Button variant="outline" onClick={() => handleRemovePendingSignup(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Remove</Button>
+                              ) : (
+                                <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
+                              )
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -859,7 +875,7 @@ export default function AdminDashboard() {
                   <SelectItem value="all">All Entities</SelectItem>
                   <SelectItem value="Aura MMA">Aura MMA</SelectItem>
                   <SelectItem value="IQ Learning Centre">IQ Learning Centre</SelectItem>
-                  <SelectItem value="Aura Women's">Aura Women's Gym</SelectItem>
+                  <SelectItem value="Women's Striking Classes">Women's Striking Classes</SelectItem>
                   <SelectItem value="Aura Fitness Centre">Aura Fitness Centre</SelectItem>
                 </SelectContent>
               </Select>

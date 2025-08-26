@@ -43,10 +43,10 @@ const businessConfigs = {
     description: 'Premier martial arts training facility'
   },
   aura_womens: {
-    name: "Aura Women's Gym",
+    name: "Women's Striking Classes",
     icon: Heart,
     color: 'bg-gradient-to-br from-pink-500 to-pink-600',
-    description: 'Dedicated women-only fitness space'
+    description: 'Dedicated women-only striking program'
   }
 } as const
 

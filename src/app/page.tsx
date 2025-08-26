@@ -45,8 +45,8 @@ const businesses = [
   },
   {
     id: 'aura_womens',
-    name: "Aura Women's Gym",
-    description: 'Top calibre womens muay thai training',
+    name: "Women's Striking Classes",
+    description: 'Women-only striking classes led by a qualified female instructor',
     icon: Heart,
     color: 'bg-gradient-to-br from-pink-500 to-pink-600',
     offerings: ['Muay Thai Only', 'Women-Only Classes', 'Qualified Female Instructor', 'Technique-Focused Training'],
