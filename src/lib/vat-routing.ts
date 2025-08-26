@@ -286,8 +286,11 @@ export class IntelligentVATRouter {
     const preferred = plan?.preferredEntities || []
 
     // DB-backed: ensure a Service actually prefers this entity
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
     for (const name of preferred) {
-      const found = entities.find(e => e.entityName.toLowerCase().includes(name.replace('aura_', '')))
+      const target = normalize(name.replace('aura_', ''))
+      const found = entities.find(e => normalize(e.entityName).includes(target))
       if (found) {
         const service = await prisma.service.findFirst({
           where: { preferredEntityId: found.entityId, isActive: true }
@@ -298,7 +301,8 @@ export class IntelligentVATRouter {
 
     // Config fallback: if no DB-backed service preference, still prefer based on plan hint
     for (const name of preferred) {
-      const found = entities.find(e => e.entityName.toLowerCase().includes(name.replace('aura_', '')))
+      const target = normalize(name.replace('aura_', ''))
+      const found = entities.find(e => normalize(e.entityName).includes(target))
       if (found) return found
     }
 

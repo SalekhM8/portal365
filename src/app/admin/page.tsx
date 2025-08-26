@@ -182,6 +182,8 @@ export default function AdminDashboard() {
   const [cancelationType, setCancelationType] = useState<'immediate' | 'end_of_period'>('end_of_period')
   const [pauseBehavior, setPauseBehavior] = useState<'void' | 'keep_as_draft' | 'mark_uncollectible'>('void')
   const [showMembershipActionModal, setShowMembershipActionModal] = useState(false)
+  // Dismissed To-Do items (client-side only)
+  const [dismissedTodoIds, setDismissedTodoIds] = useState<string[]>([])
 
   useEffect(() => {
     // ✅ ADD authentication check
@@ -199,6 +201,12 @@ export default function AdminDashboard() {
       return
     }
     
+    // Load dismissed To‑Do ids from localStorage
+    try {
+      const saved = localStorage.getItem('portal365.admin.dismissedTodos')
+      if (saved) setDismissedTodoIds(JSON.parse(saved))
+    } catch {}
+
     fetchAdminData()
   }, [session, status])
 
@@ -238,6 +246,14 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const dismissTodo = (paymentId: string) => {
+    setDismissedTodoIds((prev) => {
+      const next = Array.from(new Set([...(prev || []), paymentId]))
+      try { localStorage.setItem('portal365.admin.dismissedTodos', JSON.stringify(next)) } catch {}
+      return next
+    })
   }
 
   const handleAddCustomer = async (e: React.FormEvent) => {
@@ -692,6 +708,7 @@ export default function AdminDashboard() {
                       {(() => {
                         const failed = [...payments]
                           .filter(p => p.status === 'FAILED')
+                          .filter(p => !dismissedTodoIds.includes(p.id))
                           .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                           .slice(0, 10)
                         if (failed.length === 0) {
@@ -712,15 +729,10 @@ export default function AdminDashboard() {
                               <div className="flex flex-col gap-2 shrink-0">
                                 <Button variant="outline" onClick={() => handleRetryLatestInvoice(p.customerId)} className="text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/10">Retry</Button>
                                 <Button variant="outline" onClick={() => openCustomerModal(p.customerId)} className="border-white/20 text-white hover:bg-white/10">Contact</Button>
-                                {(() => {
-                                  const cust = customers.find(c => c.id === p.customerId)
-                                  const voidable = cust && ['PENDING_PAYMENT','INCOMPLETE','INCOMPLETE_EXPIRED'].includes((cust as any).subscriptionStatus || cust.status) && ((cust.totalPaid || 0) === 0)
-                                  return voidable ? (
-                                    <Button variant="outline" onClick={() => handleRemovePendingSignup(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Remove</Button>
-                                  ) : (
-                                    <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
-                                  )
-                                })()}
+                                <div className="flex gap-2">
+                                  <Button variant="outline" onClick={() => dismissTodo(p.id)} className="border-white/20 text-white hover:bg-white/10">Remove</Button>
+                                  <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -768,6 +780,7 @@ export default function AdminDashboard() {
                   {(() => {
                     const failed = [...payments]
                       .filter(p => p.status === 'FAILED')
+                      .filter(p => !dismissedTodoIds.includes(p.id))
                       .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                       .slice(0, 10)
                     if (failed.length === 0) {
@@ -788,15 +801,10 @@ export default function AdminDashboard() {
                           <div className="flex flex-col sm:flex-row gap-2 shrink-0">
                             <Button variant="outline" onClick={() => handleRetryLatestInvoice(p.customerId)} className="text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/10">Retry</Button>
                             <Button variant="outline" onClick={() => openCustomerModal(p.customerId)} className="border-white/20 text-white hover:bg-white/10">Contact</Button>
-                            {(() => {
-                              const cust = customers.find(c => c.id === p.customerId)
-                              const voidable = cust && ['PENDING_PAYMENT','INCOMPLETE','INCOMPLETE_EXPIRED'].includes((cust as any).subscriptionStatus || cust.status) && ((cust.totalPaid || 0) === 0)
-                              return voidable ? (
-                                <Button variant="outline" onClick={() => handleRemovePendingSignup(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Remove</Button>
-                              ) : (
-                                <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
-                              )
-                            })()}
+                            <div className="flex gap-2">
+                              <Button variant="outline" onClick={() => dismissTodo(p.id)} className="border-white/20 text-white hover:bg-white/10">Remove</Button>
+                              <Button variant="outline" onClick={() => openCancelFromTodo(p.customerId)} className="text-red-400 border-red-500/30 hover:bg-red-500/10">Cancel</Button>
+                            </div>
                           </div>
                         </div>
                       </div>
