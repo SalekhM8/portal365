@@ -59,6 +59,7 @@ const businesses = [
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [timetableOpen, setTimetableOpen] = useState(false);
+  const [specialOpen, setSpecialOpen] = useState(false);
   const [classes, setClasses] = useState<Array<any>>([]);
   const [loadingClasses, setLoadingClasses] = useState(false);
 
@@ -325,6 +326,51 @@ export default function Home() {
             </div>
             <div className="text-sm text-white/60">
               Multi-business fitness platform
+            </div>
+            {/* Hidden specials trigger */}
+            <div className="flex items-center">
+              <AlertDialog open={specialOpen} onOpenChange={setSpecialOpen}>
+                <AlertDialogTrigger asChild>
+                  <button
+                    aria-label="More"
+                    className="h-8 w-8 rounded-full border border-white/20 text-white/70 hover:text-white hover:border-white/40 hover:bg-white/10 transition"
+                    title="More"
+                  >
+                    •
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-black/90 text-white border-white/10 max-w-2xl">
+                  <AlertDialogHeader>
+                    <div className="flex items-center justify-between">
+                      <AlertDialogTitle>Special Signup Options</AlertDialogTitle>
+                      <AlertDialogCancel className="border-white/20 text-white hover:bg-white/10">Close</AlertDialogCancel>
+                    </div>
+                    <AlertDialogDescription className="text-white/70">
+                      These options are for existing members moving from direct debit. No payment is taken now; first charge on the 1st of next month.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="space-y-3">
+                    {[
+                      { label: 'Full Access £65', plan: 'FULL_ADULT', price: 65 },
+                      { label: 'Full Access £55', plan: 'FULL_ADULT', price: 55 },
+                      { label: 'Full Access £75 (from DD)', plan: 'FULL_ADULT', price: 75 },
+                      { label: 'Weekend Adult £45', plan: 'WEEKEND_ADULT', price: 45 },
+                      { label: 'Kids Unlimited £45', plan: 'KIDS_UNLIMITED_UNDER14', price: 45 },
+                    ].map((o) => (
+                      <Link
+                        key={`${o.plan}-${o.price}`}
+                        href={`/register/details?business=aura_mma&plan=${o.plan}&price=${o.price}&start=firstOfNextMonth`}
+                        onClick={() => setSpecialOpen(false)}
+                      >
+                        <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer group">
+                          <span className="text-white">{o.label}</span>
+                          <ArrowRight className="h-4 w-4 text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all duration-300" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         </div>

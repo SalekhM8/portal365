@@ -55,6 +55,8 @@ function RegisterDetailsContent() {
   const searchParams = useSearchParams()
   const [selectedBusiness, setSelectedBusiness] = useState<string>('')
   const [selectedPlan, setSelectedPlan] = useState<string>('')
+  const [specialPrice, setSpecialPrice] = useState<number | null>(null)
+  const [startOnFirst, setStartOnFirst] = useState<boolean>(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [acceptedWaiver, setAcceptedWaiver] = useState(false)
@@ -82,12 +84,20 @@ function RegisterDetailsContent() {
   useEffect(() => {
     const businessParam = searchParams.get('business')
     const planParam = searchParams.get('plan')
+    const priceParam = searchParams.get('price')
+    const startParam = searchParams.get('start')
     
     if (businessParam && (businessParam in businessConfigs)) {
       setSelectedBusiness(businessParam)
     }
     if (planParam && (planParam in MEMBERSHIP_PLANS)) {
       setSelectedPlan(planParam)
+    }
+    if (priceParam && !Number.isNaN(Number(priceParam))) {
+      setSpecialPrice(Number(priceParam))
+    }
+    if (startParam === 'firstOfNextMonth') {
+      setStartOnFirst(true)
     }
   }, [searchParams])
 
@@ -151,7 +161,10 @@ function RegisterDetailsContent() {
         body: JSON.stringify({
           ...formData,
           membershipType: selectedPlan,
-          businessId: selectedBusiness
+          businessId: selectedBusiness,
+          // Special price + no-proration path
+          ...(specialPrice !== null ? { customPrice: specialPrice } : {}),
+          ...(startOnFirst ? { startOnFirst: true } : {})
         }),
       })
 
@@ -525,7 +538,7 @@ function RegisterDetailsContent() {
                     {currentPlan.displayName}
                   </Badge>
                   <div className="text-3xl font-bold text-white">
-                    £{currentPlan.monthlyPrice}
+                    £{specialPrice !== null ? specialPrice : currentPlan.monthlyPrice}
                     <span className="text-sm text-white/60 font-normal">/month</span>
                   </div>
                   <p className="text-white/70 text-sm">{currentPlan.description}</p>
@@ -542,10 +555,11 @@ function RegisterDetailsContent() {
                 </div>
 
                 <div className="pt-4 border-t border-white/10 text-xs text-white/60">
-                  <p>
-                    Your membership will be prorated for the remainder of this month, 
-                    then billed monthly on the 1st.
-                  </p>
+                  {specialPrice !== null || startOnFirst ? (
+                    <p>No payment today. Your first payment will be taken on the 1st of next month, then monthly.</p>
+                  ) : (
+                    <p>Your membership will be prorated for the remainder of this month, then billed monthly on the 1st.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>

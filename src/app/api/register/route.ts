@@ -23,7 +23,10 @@ const registerSchema = z.object({
   }).optional(),
   guardianConsent: z.boolean().optional(),
   membershipType: z.enum(['WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14', 'FULL_ADULT', 'KIDS_UNLIMITED_UNDER14', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
-  businessId: z.string()
+  businessId: z.string(),
+  // Optional overrides for special flows (self-serve, no proration)
+  customPrice: z.number().positive().optional(),
+  startOnFirst: z.boolean().optional()
 })
 
 export async function POST(request: NextRequest) {
@@ -115,14 +118,13 @@ export async function POST(request: NextRequest) {
         membershipType: validatedData.membershipType,
         status: 'PENDING_PAYMENT',
         startDate: new Date(),
-        monthlyPrice: membershipDetails.monthlyPrice,
+        monthlyPrice: validatedData.customPrice ?? membershipDetails.monthlyPrice,
         setupFee: membershipDetails.setupFee || 0,
         accessPermissions: JSON.stringify(membershipDetails.accessPermissions),
         scheduleAccess: JSON.stringify(membershipDetails.scheduleAccess),
         ageCategory: validatedData.membershipType.includes('UNDER14') ? 'YOUTH' : 'ADULT',
         billingDay: 1, // Always bill on the 1st of the month
         nextBillingDate: (() => {
-          // Set to 1st of next month to match prorated billing strategy
           const now = new Date()
           const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
           return nextMonth
@@ -133,18 +135,30 @@ export async function POST(request: NextRequest) {
     console.log('✅ Membership created:', membership.id)
     
     try {
-      // ✅ CREATE SUBSCRIPTION WITH STRIPE (NEW PRORATED BILLING)
+      // ✅ CREATE SUBSCRIPTION WITH STRIPE
       console.log('🔄 Starting Stripe subscription creation...')
       console.log('🔍 Environment check:', {
         stripeKeyExists: !!process.env.STRIPE_SECRET_KEY
       })
       
+      // Determine path: admin-style (no proration) vs normal (prorated today)
+      const isNoProration = !!validatedData.startOnFirst || typeof validatedData.customPrice === 'number'
+
+      const customStartDate = (() => {
+        if (!isNoProration) return undefined
+        const now = new Date()
+        return new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1)).toISOString().split('T')[0]
+      })()
+
       const subscriptionResult = await SubscriptionProcessor.createSubscription({
         userId: user.id,
         membershipType: validatedData.membershipType,
         businessId: validatedData.businessId,
         customerEmail: validatedData.email,
-        customerName: `${validatedData.firstName} ${validatedData.lastName}`
+        customerName: `${validatedData.firstName} ${validatedData.lastName}`,
+        ...(validatedData.customPrice ? { customPrice: validatedData.customPrice } : {}),
+        ...(isNoProration ? { isAdminCreated: true } : {}),
+        ...(customStartDate ? { customStartDate } : {})
       })
 
       console.log('✅ Subscription created successfully')

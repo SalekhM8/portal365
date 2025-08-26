@@ -89,8 +89,9 @@ function PaymentForm({ subscriptionId }: { subscriptionId: string | null }) {
   const searchParams = useSearchParams()
   const clientSecret = searchParams.get('client_secret')
 
-  // Detect if this is a PaymentIntent client secret (pi_)
+  // Detect PaymentIntent vs SetupIntent
   const isPaymentIntent = clientSecret?.startsWith('pi_')
+  const isSetupIntent = clientSecret?.startsWith('seti_') || clientSecret?.includes('_secret_seti_')
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -113,6 +114,19 @@ function PaymentForm({ subscriptionId }: { subscriptionId: string | null }) {
 
         if (result.error) {
           setError(result.error.message || 'Payment failed')
+          setIsProcessing(false)
+        } else {
+          setPaymentComplete(true)
+        }
+      } else if (isSetupIntent) {
+        const result = await stripe.confirmSetup({
+          elements,
+          confirmParams: {
+            return_url: `${window.location.origin}/register/success?subscription_id=${subscriptionId}&setup_completed=true`,
+          },
+        })
+        if (result.error) {
+          setError(result.error.message || 'Card setup failed')
           setIsProcessing(false)
         } else {
           setPaymentComplete(true)
