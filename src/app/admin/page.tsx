@@ -726,7 +726,7 @@ export default function AdminDashboard() {
                                 <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                                 <div className="mt-1">
                                   <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
-                                    {p.status === 'INCOMPLETE_SIGNUP' ? "DIDN'T COMPLETE PAYMENT" : 'FAILED'}
+                                    {p.status === 'INCOMPLETE_SIGNUP' ? 'ABANDONED SIGNUP' : 'FAILED'}
                                   </Badge>
                                 </div>
                               </div>
@@ -805,7 +805,7 @@ export default function AdminDashboard() {
                             <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                             <div className="mt-1">
                               <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
-                                {p.status === 'INCOMPLETE_SIGNUP' ? "DIDN'T COMPLETE PAYMENT" : 'FAILED'}
+                                {p.status === 'INCOMPLETE_SIGNUP' ? 'ABANDONED SIGNUP' : 'FAILED'}
                               </Badge>
                             </div>
                           </div>

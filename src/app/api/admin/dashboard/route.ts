@@ -373,8 +373,8 @@ export async function GET() {
 
     for (const sub of rawIncompleteSubs) {
       const invoice = sub.invoices[0]
-      // Must have a non-paid invoice (proration path); otherwise skip
-      if (!invoice || ['paid', 'void'].includes(invoice.status)) continue
+      // Include when there is no invoice yet OR invoice is not paid/void
+      if (invoice && ['paid', 'void'].includes(invoice.status)) continue
 
       // Ensure no confirmed payment since subscription was created
       const hasConfirmed = await prisma.payment.count({
