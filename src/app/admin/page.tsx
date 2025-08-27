@@ -708,7 +708,7 @@ export default function AdminDashboard() {
                     <div className="space-y-4">
                       {(() => {
                         const failed = [...payments]
-                          .filter(p => p.status === 'FAILED')
+                          .filter(p => p.status === 'FAILED' || p.status === 'INCOMPLETE_SIGNUP')
                           .filter(p => !dismissedTodoIds.includes(p.id))
                           .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                           .slice(0, 10)
@@ -724,7 +724,9 @@ export default function AdminDashboard() {
                                 <p className="text-sm font-medium text-white">{p.customerName}</p>
                                 <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                                 <div className="mt-1">
-                                  <Badge variant={getStatusBadgeVariant('FAILED')}>FAILED</Badge>
+                                  <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
+                                    {p.status === 'INCOMPLETE_SIGNUP' ? "DIDN'T COMPLETE PAYMENT" : 'FAILED'}
+                                  </Badge>
                                 </div>
                               </div>
                               <div className="flex flex-col gap-2 shrink-0">
@@ -785,7 +787,7 @@ export default function AdminDashboard() {
                 <div className="space-y-4">
                   {(() => {
                     const failed = [...payments]
-                      .filter(p => p.status === 'FAILED')
+                      .filter(p => p.status === 'FAILED' || p.status === 'INCOMPLETE_SIGNUP')
                       .filter(p => !dismissedTodoIds.includes(p.id))
                       .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                       .slice(0, 10)
@@ -801,7 +803,9 @@ export default function AdminDashboard() {
                             <p className="text-sm font-medium text-white">{p.customerName}</p>
                             <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                             <div className="mt-1">
-                              <Badge variant={getStatusBadgeVariant('FAILED')}>FAILED</Badge>
+                              <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
+                                {p.status === 'INCOMPLETE_SIGNUP' ? "DIDN'T COMPLETE PAYMENT" : 'FAILED'}
+                              </Badge>
                             </div>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 shrink-0">

@@ -341,6 +341,68 @@ export async function GET() {
       }
     })
 
+    // Identify incomplete signups (proration now, but initial payment not completed)
+    // Criteria: subscription status in PENDING_PAYMENT/INCOMPLETE/INCOMPLETE_EXPIRED
+    // and latest invoice not paid; no confirmed payments since subscription creation
+    const rawIncompleteSubs = await prisma.subscription.findMany({
+      where: { status: { in: ['PENDING_PAYMENT', 'INCOMPLETE', 'INCOMPLETE_EXPIRED'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+        routedEntity: { select: { displayName: true } },
+        invoices: { orderBy: { createdAt: 'desc' }, take: 1 }
+      }
+    })
+
+    const incompleteToDos = [] as Array<{
+      id: string
+      customerName: string
+      customerId: string
+      amount: number
+      routedToEntity: string
+      routingReason: string
+      timestamp: string
+      status: string
+      goCardlessId: string | null
+      retryCount: number
+      processingTime: number
+      confidence: string
+      membershipType: string
+    }>
+
+    for (const sub of rawIncompleteSubs) {
+      const invoice = sub.invoices[0]
+      // Must have a non-paid invoice (proration path); otherwise skip
+      if (!invoice || ['paid', 'void'].includes(invoice.status)) continue
+
+      // Ensure no confirmed payment since subscription was created
+      const hasConfirmed = await prisma.payment.count({
+        where: {
+          userId: sub.userId,
+          status: 'CONFIRMED',
+          createdAt: { gte: sub.createdAt }
+        }
+      })
+      if (hasConfirmed > 0) continue
+
+      incompleteToDos.push({
+        id: `INC_${invoice.id}`,
+        customerName: `${sub.user.firstName} ${sub.user.lastName}`,
+        customerId: sub.userId,
+        amount: Number(invoice.amount),
+        routedToEntity: sub.routedEntity?.displayName || 'Not Routed',
+        routingReason: 'Prorated signup: initial payment not completed',
+        timestamp: invoice.createdAt.toISOString(),
+        status: 'INCOMPLETE_SIGNUP',
+        goCardlessId: null,
+        retryCount: 0,
+        processingTime: 0,
+        confidence: 'MEDIUM',
+        membershipType: sub.membershipType
+      })
+    }
+
     // Format the data for frontend
     const formattedCustomers = customers.map((customer: any) => ({
       id: customer.id,
@@ -372,7 +434,8 @@ export async function GET() {
       }
     }))
 
-    const formattedPayments = payments.map((payment: any) => ({
+    const formattedPayments = [
+      ...payments.map((payment: any) => ({
       id: payment.id,
       customerName: `${payment.user.firstName} ${payment.user.lastName}`,
       customerId: payment.userId,
@@ -386,7 +449,9 @@ export async function GET() {
       processingTime: payment.routing?.decisionTimeMs || 0,
       confidence: payment.routing?.confidence || 'MEDIUM',
       membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown'
-    }))
+    })),
+      ...incompleteToDos
+    ]
 
     return NextResponse.json({
       totalCustomers,
