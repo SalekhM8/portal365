@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions, hasPermission } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { VATCalculationEngine } from '@/lib/vat-routing'
+import { stripe } from '@/lib/stripe'
 
 export async function GET() {
   try {
@@ -386,14 +387,18 @@ export async function GET() {
       })
       if (hasConfirmed > 0) continue
 
+      const incId = invoice ? `INC_${invoice.id}` : `INC_SUB_${sub.id}`
+      const amount = invoice ? Number(invoice.amount) : Number(sub.monthlyPrice || 0)
+      const timestampIso = (invoice?.createdAt || sub.createdAt).toISOString()
+
       incompleteToDos.push({
-        id: `INC_${invoice.id}`,
+        id: incId,
         customerName: `${sub.user.firstName} ${sub.user.lastName}`,
         customerId: sub.userId,
-        amount: Number(invoice.amount),
+        amount,
         routedToEntity: sub.routedEntity?.displayName || 'Not Routed',
         routingReason: 'Prorated signup: initial payment not completed',
-        timestamp: invoice.createdAt.toISOString(),
+        timestamp: timestampIso,
         status: 'INCOMPLETE_SIGNUP',
         goCardlessId: null,
         retryCount: 0,
@@ -516,6 +521,39 @@ export async function GET() {
       ...membershipIncompleteToDos
     ]
 
+    // Fetch Stripe payouts (last paid and next/pending)
+    let lastPayout: any = null
+    let nextPayout: any = null
+    try {
+      const paidPayouts = await stripe.payouts.list({ status: 'paid', limit: 1 })
+      if (paidPayouts.data[0]) {
+        lastPayout = {
+          amount: Number(paidPayouts.data[0].amount) / 100,
+          currency: paidPayouts.data[0].currency.toUpperCase(),
+          arrivalDate: new Date(paidPayouts.data[0].arrival_date * 1000).toISOString().split('T')[0]
+        }
+      }
+      const pendingPayouts = await stripe.payouts.list({ status: 'pending', limit: 1 })
+      if (pendingPayouts.data[0]) {
+        nextPayout = {
+          amount: Number(pendingPayouts.data[0].amount) / 100,
+          currency: pendingPayouts.data[0].currency.toUpperCase(),
+          arrivalDate: new Date(pendingPayouts.data[0].arrival_date * 1000).toISOString().split('T')[0]
+        }
+      } else {
+        // Fallback: show pending balance as an estimate
+        const bal = await stripe.balance.retrieve()
+        const pendingTotal = (bal.pending || []).reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0)
+        nextPayout = {
+          amount: pendingTotal / 100,
+          currency: (bal.pending?.[0]?.currency || 'gbp').toUpperCase(),
+          arrivalDate: null
+        }
+      }
+    } catch (e) {
+      // Non-fatal; payouts not available
+    }
+
     return NextResponse.json({
       totalCustomers,
       activeSubscriptions,
@@ -534,7 +572,12 @@ export async function GET() {
         acquisitionRate: Math.round(acquisitionRate * 100) / 100,
         avgLifetimeValue: totalCustomers > 0 ? Math.round((Number(totalRevenue._sum.amount) || 0) / totalCustomers) : 0,
         paymentSuccessRate: Math.round(paymentSuccessRate * 100) / 100,
-        routingEfficiency: Math.round(actualRoutingEfficiency * 100) / 100
+        routingEfficiency: Math.round(actualRoutingEfficiency * 100) / 100,
+        totalMembers: activeSubscriptions,
+        payouts: {
+          last: lastPayout,
+          upcoming: nextPayout
+        }
       },
       // 🚀 NEW: Real business analytics by membership type
       analytics: {

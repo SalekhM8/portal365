@@ -112,6 +112,11 @@ interface BusinessMetrics {
   avgLifetimeValue: number
   paymentSuccessRate: number
   routingEfficiency: number
+  totalMembers?: number
+  payouts?: {
+    last?: { amount: number; currency: string; arrivalDate: string | null }
+    upcoming?: { amount: number; currency: string; arrivalDate: string | null }
+  }
 }
 
 interface AnalyticsData {
@@ -660,7 +665,7 @@ export default function AdminDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl sm:text-2xl font-bold">{vatStatus.reduce((sum, entity) => sum + entity.customerCount, 0)}</div>
+            <div className="text-xl sm:text-2xl font-bold">{businessMetrics?.totalMembers ?? 0}</div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
               Churn rate: <span className="text-red-600">{businessMetrics?.churnRate}%</span>
             </p>
@@ -669,14 +674,14 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Payment Success</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Payouts</CardTitle>
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl sm:text-2xl font-bold">{businessMetrics?.paymentSuccessRate}%</div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              Routing efficiency: {businessMetrics?.routingEfficiency}%
-            </p>
+            <div className="text-xs sm:text-sm text-muted-foreground space-y-1">
+              <div>Last: {businessMetrics?.payouts?.last ? `£${businessMetrics?.payouts?.last.amount} • ${businessMetrics?.payouts?.last.arrivalDate}` : '—'}</div>
+              <div>Upcoming: {businessMetrics?.payouts?.upcoming ? `£${businessMetrics?.payouts?.upcoming.amount}${businessMetrics?.payouts?.upcoming.arrivalDate ? ` • ${businessMetrics?.payouts?.upcoming.arrivalDate}` : ''}` : '—'}</div>
+            </div>
           </CardContent>
         </Card>
       </div>
