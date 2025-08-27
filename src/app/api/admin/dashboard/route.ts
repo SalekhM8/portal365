@@ -434,6 +434,51 @@ export async function GET() {
       }
     }))
 
+    // Build incomplete signup todos for users with a pending membership but no subscription yet
+    const membershipIncompleteToDos = [] as Array<{
+      id: string
+      customerName: string
+      customerId: string
+      amount: number
+      routedToEntity: string
+      routingReason: string
+      timestamp: string
+      status: string
+      goCardlessId: string | null
+      retryCount: number
+      processingTime: number
+      confidence: string
+      membershipType: string
+    }>
+
+    for (const c of customers) {
+      const membership = c.memberships[0]
+      const subscription = c.subscriptions[0]
+      if (!membership) continue
+      if (membership.status !== 'PENDING_PAYMENT') continue
+      // Only include if there is no subscription record yet
+      if (subscription) continue
+      // Ensure no confirmed payments (any time)
+      const confirmedCount = await prisma.payment.count({ where: { userId: c.id, status: 'CONFIRMED' } })
+      if (confirmedCount > 0) continue
+
+      membershipIncompleteToDos.push({
+        id: `INC_MEM_${membership.id}`,
+        customerName: `${c.firstName} ${c.lastName}`,
+        customerId: c.id,
+        amount: Number(membership.monthlyPrice || 0),
+        routedToEntity: 'Not Routed',
+        routingReason: 'Prorated signup: no payment started',
+        timestamp: membership.createdAt.toISOString(),
+        status: 'INCOMPLETE_SIGNUP',
+        goCardlessId: null,
+        retryCount: 0,
+        processingTime: 0,
+        confidence: 'MEDIUM',
+        membershipType: membership.membershipType
+      })
+    }
+
     const formattedPayments = [
       ...payments.map((payment: any) => ({
       id: payment.id,
@@ -450,7 +495,8 @@ export async function GET() {
       confidence: payment.routing?.confidence || 'MEDIUM',
       membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown'
     })),
-      ...incompleteToDos
+      ...incompleteToDos,
+      ...membershipIncompleteToDos
     ]
 
     return NextResponse.json({
