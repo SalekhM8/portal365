@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -611,6 +611,7 @@ export default function AdminDashboard() {
   }
 
   return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
     <div className="container mx-auto p-4 lg:p-6 space-y-6 lg:space-y-8">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
@@ -2007,6 +2008,7 @@ export default function AdminDashboard() {
         </div>
       )}
     </div>
+    </Suspense>
   )
 } 
 
