@@ -324,6 +324,17 @@ export async function GET() {
       take: 100
     })
 
+    // Lifetime total paid per customer (all confirmed payments)
+    const totals = await prisma.payment.groupBy({
+      by: ['userId'],
+      where: { status: 'CONFIRMED' },
+      _sum: { amount: true }
+    })
+    const totalPaidByUser: Record<string, number> = {}
+    for (const t of totals) {
+      totalPaidByUser[t.userId] = Number(t._sum.amount || 0)
+    }
+
     // Get recent payments with detailed info
     const payments = await prisma.payment.findMany({
       orderBy: { createdAt: 'desc' },
@@ -443,7 +454,7 @@ export async function GET() {
         cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd || false,
         joinDate: customer.createdAt.toISOString().split('T')[0],
         lastPayment: customer.payments[0]?.createdAt.toISOString().split('T')[0] || 'N/A',
-        totalPaid: customer.payments.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0),
+        totalPaid: totalPaidByUser[customer.id] ?? 0,
         routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
         nextBilling: nextBillingIso,
         startsOn,
