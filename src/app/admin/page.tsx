@@ -1368,7 +1368,7 @@ export default function AdminDashboard() {
       {/* Customer Details Modal */}
       {selectedCustomer && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[85vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4 text-white">Customer Details</h3>
             <div className="grid gap-4">
               <div className="space-y-3">
@@ -1488,7 +1488,18 @@ export default function AdminDashboard() {
                 </table>
               </div>
               <div className="mt-2 text-right">
-                <Button variant="outline" onClick={() => { setSearchTerm(selectedCustomer.name); setActiveTab('payments'); }} className="border-white/20 text-white hover:bg-white/10">View all payments</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm(selectedCustomer.name)
+                    setActiveTab('payments')
+                    setSelectedCustomer(null)
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}
+                  className="border-white/20 text-white hover:bg-white/10"
+                >
+                  View all payments
+                </Button>
               </div>
             </div>
 
