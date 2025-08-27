@@ -678,9 +678,17 @@ export default function AdminDashboard() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-xs sm:text-sm text-muted-foreground space-y-1">
-              <div>Last: {businessMetrics?.payouts?.last ? `£${businessMetrics?.payouts?.last.amount} • ${businessMetrics?.payouts?.last.arrivalDate}` : '—'}</div>
-              <div>Upcoming: {businessMetrics?.payouts?.upcoming ? `£${businessMetrics?.payouts?.upcoming.amount}${businessMetrics?.payouts?.upcoming.arrivalDate ? ` • ${businessMetrics?.payouts?.upcoming.arrivalDate}` : ''}` : '—'}</div>
+            <div className="space-y-3">
+              <div>
+                <div className="text-[10px] sm:text-xs text-white/60 tracking-wide uppercase">Last payout</div>
+                <div className="text-lg sm:text-xl font-semibold text-white">{businessMetrics?.payouts?.last ? `£${businessMetrics.payouts.last.amount}` : '—'}</div>
+                <div className="text-[10px] sm:text-xs text-white/60">{businessMetrics?.payouts?.last?.arrivalDate || ''}</div>
+              </div>
+              <div className="border-t border-white/10 pt-2">
+                <div className="text-[10px] sm:text-xs text-white/60 tracking-wide uppercase">Upcoming</div>
+                <div className="text-lg sm:text-xl font-semibold text-white">{businessMetrics?.payouts?.upcoming ? `£${businessMetrics.payouts.upcoming.amount}` : '—'}</div>
+                <div className="text-[10px] sm:text-xs text-white/60">{businessMetrics?.payouts?.upcoming?.arrivalDate || 'Estimated'}</div>
+              </div>
             </div>
           </CardContent>
         </Card>
