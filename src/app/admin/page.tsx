@@ -2,6 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -142,6 +143,8 @@ interface AnalyticsData {
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession() // ✅ ENABLE real session management
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [vatStatus, setVatStatus] = useState<VATStatus[]>([])
   const [customers, setCustomers] = useState<CustomerDetail[]>([])
   const [payments, setPayments] = useState<PaymentDetail[]>([])
@@ -215,8 +218,25 @@ export default function AdminDashboard() {
       if (saved) setDismissedTodoIds(JSON.parse(saved))
     } catch {}
 
+    // Initialize tab from URL (?tab=...)
+    const tab = searchParams.get('tab')
+    if (tab && ['overview','customers','payments','vat-monitor','analytics','settings'].includes(tab)) {
+      setActiveTab(tab)
+    }
+
     fetchAdminData()
   }, [session, status])
+
+  // Push tab changes into URL for back/forward support
+  useEffect(() => {
+    const current = searchParams.get('tab') || 'overview'
+    if (activeTab !== current) {
+      const params = new URLSearchParams(Array.from(searchParams.entries()))
+      params.set('tab', activeTab)
+      router.push(`/admin?${params.toString()}`, { scroll: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
 
   const fetchAdminData = async () => {
     try {
