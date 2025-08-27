@@ -942,9 +942,9 @@ export default function AdminDashboard() {
                     <tr>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Customer</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Membership</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Total Paid</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Status</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Routed Entity</th>
-                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Total Paid</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Next Billing</th>
                       <th className="text-left p-4 font-medium text-white">Activity</th>
                     </tr>
@@ -976,18 +976,22 @@ export default function AdminDashboard() {
                             </div>
                           )}
                         </td>
-                                <td className="p-4 border-r border-white/5">
-          <div className="space-y-1">
-            <Badge variant={getStatusBadgeVariant(customer.status)}>
-              {customer.status}
-            </Badge>
-            {customer.cancelAtPeriodEnd && (
-              <Badge variant="destructive" className="text-xs">
-                Ending Soon
-              </Badge>
-            )}
-          </div>
-        </td>
+                        <td className="p-4 border-r border-white/5">
+                          <p className="font-semibold text-white">£{customer.totalPaid}</p>
+                          <p className="text-sm text-white/60">Last: {new Date(customer.lastPayment).toLocaleDateString()}</p>
+                        </td>
+                        <td className="p-4 border-r border-white/5">
+                          <div className="space-y-1">
+                            <Badge variant={getStatusBadgeVariant(customer.status)}>
+                              {customer.status}
+                            </Badge>
+                            {customer.cancelAtPeriodEnd && (
+                              <Badge variant="destructive" className="text-xs">
+                                Ending Soon
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-4 border-r border-white/5">
                           <div className="flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-white/60" />
