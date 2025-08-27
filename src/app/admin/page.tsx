@@ -151,7 +151,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [entityFilter, setEntityFilter] = useState('all')
+  const [planFilter, setPlanFilter] = useState('all')
+  const [activeTab, setActiveTab] = useState('overview')
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null)
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [addCustomerData, setAddCustomerData] = useState({
@@ -529,15 +530,14 @@ export default function AdminDashboard() {
     const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          customer.email.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === 'all' || customer.status === statusFilter
-    const matchesEntity = entityFilter === 'all' || customer.routedEntity.includes(entityFilter)
-    return matchesSearch && matchesStatus && matchesEntity
+    const matchesPlan = planFilter === 'all' || customer.membershipType === planFilter
+    return matchesSearch && matchesStatus && matchesPlan
   })
 
   const filteredPayments = payments.filter(payment => {
     const matchesSearch = payment.customerName.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === 'all' || payment.status === statusFilter
-    const matchesEntity = entityFilter === 'all' || payment.routedToEntity.includes(entityFilter)
-    return matchesSearch && matchesStatus && matchesEntity
+    return matchesSearch && matchesStatus
   })
 
   if (loading) {
@@ -695,7 +695,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto">
           <TabsTrigger value="overview" className="text-xs lg:text-sm">Overview</TabsTrigger>
           <TabsTrigger value="customers" className="text-xs lg:text-sm">Customers</TabsTrigger>
@@ -854,7 +854,10 @@ export default function AdminDashboard() {
                       const IconComponent = getActivityIcon(activity.icon)
                       
                       return (
-                        <div key={index} className="flex items-center space-x-3">
+                        <div key={index} className="flex items-center space-x-3 cursor-pointer" onClick={() => {
+                          const cust = customers.find(c => c.id === activity.userId)
+                          if (cust) setSelectedCustomer(cust)
+                        }}>
                           <IconComponent className={`h-4 w-4 ${activity.color}`} />
                           <div className="flex-1">
                             <p className="text-sm font-medium">{activity.message}</p>
@@ -904,16 +907,18 @@ export default function AdminDashboard() {
                   <SelectItem value="SUSPENDED">Suspended</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={entityFilter} onValueChange={setEntityFilter}>
+              <Select value={planFilter} onValueChange={setPlanFilter}>
                 <SelectTrigger className="w-52">
-                  <SelectValue placeholder="Filter by entity" />
+                  <SelectValue placeholder="Filter by plan" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Entities</SelectItem>
-                  <SelectItem value="Aura MMA">Aura MMA</SelectItem>
-                  <SelectItem value="IQ Learning Centre">IQ Learning Centre</SelectItem>
-                  <SelectItem value="Women's Striking Classes">Women's Striking Classes</SelectItem>
-                  <SelectItem value="Aura Fitness Centre">Aura Fitness Centre</SelectItem>
+                  <SelectItem value="all">All Plans</SelectItem>
+                  <SelectItem value="FULL_ADULT">Full Adult</SelectItem>
+                  <SelectItem value="WEEKEND_ADULT">Weekend Adult</SelectItem>
+                  <SelectItem value="KIDS_UNLIMITED_UNDER14">Kids Unlimited U14</SelectItem>
+                  <SelectItem value="KIDS_WEEKEND_UNDER14">Kids Weekend U14</SelectItem>
+                  <SelectItem value="MASTERS">Masters (30+)</SelectItem>
+                  <SelectItem value="WOMENS_CLASSES">Women's Classes</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1452,6 +1457,41 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </div>
+            {/* 🚀 NEW: Recent Payments (mini) */}
+            <div className="border-t border-white/10 pt-4 mt-6">
+              <h4 className="text-white font-semibold mb-3">Recent Payments</h4>
+              <div className="bg-white/5 border border-white/10 rounded">
+                <table className="w-full text-sm">
+                  <thead className="text-white/60">
+                    <tr>
+                      <th className="text-left p-2">Date</th>
+                      <th className="text-left p-2">Amount</th>
+                      <th className="text-left p-2">Status</th>
+                      <th className="text-left p-2">Entity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.filter(p => p.customerId === selectedCustomer.id).slice(0, 6).map((p) => (
+                      <tr key={p.id} className="border-t border-white/10">
+                        <td className="p-2">{new Date(p.timestamp).toLocaleDateString()}</td>
+                        <td className="p-2">£{p.amount}</td>
+                        <td className="p-2"><Badge variant={getStatusBadgeVariant(p.status)}>{p.status}</Badge></td>
+                        <td className="p-2">{p.routedToEntity}</td>
+                      </tr>
+                    ))}
+                    {payments.filter(p => p.customerId === selectedCustomer.id).length === 0 && (
+                      <tr>
+                        <td className="p-3 text-white/60" colSpan={4}>No payments yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-2 text-right">
+                <Button variant="outline" onClick={() => { setSearchTerm(selectedCustomer.name); setActiveTab('payments'); }} className="border-white/20 text-white hover:bg-white/10">View all payments</Button>
+              </div>
+            </div>
+
             {/* 🚀 NEW: Membership Management Actions */}
             <div className="border-t border-white/10 pt-4 mt-6">
               <h4 className="text-white font-semibold mb-4">Membership Management</h4>

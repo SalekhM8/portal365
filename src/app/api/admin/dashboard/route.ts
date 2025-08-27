@@ -230,7 +230,8 @@ export async function GET() {
         detail: `${payment.routedEntity?.displayName} • ${new Date(payment.createdAt).toLocaleString()}`,
         timestamp: payment.createdAt,
         amount: `£${payment.amount}`,
-        status: payment.status
+        status: payment.status,
+        userId: payment.userId
       })),
       ...recentSignups.map((user: any) => ({
         type: 'signup',
@@ -240,7 +241,8 @@ export async function GET() {
         detail: `${user.memberships[0]?.membershipType || 'No membership'} • ${new Date(user.createdAt).toLocaleString()}`,
         timestamp: user.createdAt,
         amount: null,
-        status: 'NEW'
+        status: 'NEW',
+        userId: user.id
       })),
       ...recentMembershipChanges.map((membership: any) => ({
         type: 'membership_change',
@@ -250,7 +252,8 @@ export async function GET() {
         detail: `Now: ${membership.membershipType} (£${membership.monthlyPrice}) • ${new Date(membership.updatedAt).toLocaleString()}`,
         timestamp: membership.updatedAt,
         amount: `£${membership.monthlyPrice}`,
-        status: 'UPDATED'
+        status: 'UPDATED',
+        userId: membership.userId
       })),
       ...recentSubscriptionChanges.map((subscription: any) => ({
         type: 'subscription_change',
@@ -261,7 +264,8 @@ export async function GET() {
         detail: `${subscription.membershipType} • ${new Date(subscription.updatedAt).toLocaleString()}`,
         timestamp: subscription.updatedAt,
         amount: null,
-        status: subscription.status
+        status: subscription.status,
+        userId: subscription.userId
       }))
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 15)
 
