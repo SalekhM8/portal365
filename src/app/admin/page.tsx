@@ -75,6 +75,7 @@ interface CustomerDetail {
   totalPaid: number
   routedEntity: string
   nextBilling: string
+  startsOn?: string
   emergencyContact: {
     name: string
     phone: string
@@ -956,6 +957,11 @@ export default function AdminDashboard() {
                           <p className="text-sm text-white/60 mt-1">
                             Joined {new Date(customer.joinDate).toLocaleDateString()}
                           </p>
+                          {customer.startsOn && (
+                            <div className="mt-1">
+                              <Badge variant="secondary" className="text-xs">Starts on {new Date(customer.startsOn).toLocaleDateString()}</Badge>
+                            </div>
+                          )}
                         </td>
                                 <td className="p-4 border-r border-white/5">
           <div className="space-y-1">

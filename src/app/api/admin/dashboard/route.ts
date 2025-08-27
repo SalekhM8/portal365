@@ -404,35 +404,52 @@ export async function GET() {
     }
 
     // Format the data for frontend
-    const formattedCustomers = customers.map((customer: any) => ({
-      id: customer.id,
-      name: `${customer.firstName} ${customer.lastName}`,
-      email: customer.email,
-      phone: customer.phone || 'N/A',
-      membershipType: customer.memberships[0]?.membershipType || 'None',
-      // 🚀 FIX: Show subscription status (PAUSED/CANCELLED) instead of just membership status
-      // Map TRIALING to ACTIVE since trialing customers have full access
-      status: (() => {
-        const subStatus = customer.subscriptions[0]?.status
-        const memStatus = customer.memberships[0]?.status
-        if (subStatus === 'TRIALING') return 'ACTIVE'
-        return subStatus || memStatus || 'INACTIVE'
-      })(),
-      subscriptionStatus: customer.subscriptions[0]?.status || 'NO_SUBSCRIPTION',
-      membershipStatus: customer.memberships[0]?.status || 'NO_MEMBERSHIP',
-      cancelAtPeriodEnd: customer.subscriptions[0]?.cancelAtPeriodEnd || false,
-      joinDate: customer.createdAt.toISOString().split('T')[0],
-      lastPayment: customer.payments[0]?.createdAt.toISOString().split('T')[0] || 'N/A',
-      totalPaid: customer.payments.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0),
-      routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
-      nextBilling: customer.memberships[0]?.nextBillingDate?.toISOString().split('T')[0] || 'N/A',
-      emergencyContact: customer.emergencyContact ? JSON.parse(customer.emergencyContact) : { name: '', phone: '', relationship: '' },
-      accessHistory: {
-        lastAccess: 'N/A', // Would need AccessLog data
-        totalVisits: 0,
-        avgWeeklyVisits: 0
+    const formattedCustomers = customers.map((customer: any) => {
+      const membership = customer.memberships[0]
+      const subscription = customer.subscriptions[0]
+      const confirmedPaymentsCount = customer.payments.filter((p: any) => p.status === 'CONFIRMED').length
+      const nextBillingIso = membership?.nextBillingDate ? membership.nextBillingDate.toISOString().split('T')[0] : 'N/A'
+
+      // Derive clear status with distinctions
+      let derivedStatus = 'INACTIVE'
+      if (subscription) {
+        // Normalize TRIALING → ACTIVE for access
+        derivedStatus = subscription.status === 'TRIALING' ? 'ACTIVE' : subscription.status || 'ACTIVE'
+      } else if (membership && membership.status === 'PENDING_PAYMENT' && confirmedPaymentsCount === 0) {
+        derivedStatus = 'PENDING_PAYMENT'
+      } else if (membership) {
+        derivedStatus = membership.status
       }
-    }))
+
+      // Detect DD migration trials (no upfront payment, starts next billing)
+      const startsOn = subscription && confirmedPaymentsCount === 0 && membership?.nextBillingDate && membership.nextBillingDate > new Date()
+        ? membership.nextBillingDate.toISOString().split('T')[0]
+        : null
+
+      return {
+        id: customer.id,
+        name: `${customer.firstName} ${customer.lastName}`,
+        email: customer.email,
+        phone: customer.phone || 'N/A',
+        membershipType: membership?.membershipType || 'None',
+        status: derivedStatus,
+        subscriptionStatus: subscription?.status || 'NO_SUBSCRIPTION',
+        membershipStatus: membership?.status || 'NO_MEMBERSHIP',
+        cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd || false,
+        joinDate: customer.createdAt.toISOString().split('T')[0],
+        lastPayment: customer.payments[0]?.createdAt.toISOString().split('T')[0] || 'N/A',
+        totalPaid: customer.payments.reduce((sum: number, payment: any) => sum + Number(payment.amount), 0),
+        routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
+        nextBilling: nextBillingIso,
+        startsOn,
+        emergencyContact: customer.emergencyContact ? JSON.parse(customer.emergencyContact) : { name: '', phone: '', relationship: '' },
+        accessHistory: {
+          lastAccess: 'N/A',
+          totalVisits: 0,
+          avgWeeklyVisits: 0
+        }
+      }
+    })
 
     // Build incomplete signup todos for users with a pending membership but no subscription yet
     const membershipIncompleteToDos = [] as Array<{

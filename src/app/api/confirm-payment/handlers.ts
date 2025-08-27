@@ -75,7 +75,8 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
     where: { id: subscription.id }, 
     data: { 
       stripeSubscriptionId: stripeSubscription.id,
-      status: 'PENDING_PAYMENT', // Will be updated to ACTIVE by webhook after payment succeeds
+      // Mark as ACTIVE immediately; Stripe will be TRIALING until first billing, but active for access
+      status: 'ACTIVE',
       nextBillingDate 
     } 
   })
@@ -137,7 +138,7 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
     metadata: { userId: dbSub.userId, membershipType: dbSub.membershipType, routedEntityId: dbSub.routedEntityId, dbSubscriptionId: dbSub.id }
   })
 
-  const subscription = await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'PENDING_PAYMENT' }, include: { user: true } })
+  const subscription = await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' }, include: { user: true } })
   await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
   await prisma.payment.create({ data: { userId: subscription.userId, amount: (paymentIntent.amount as number) / 100, currency: (paymentIntent.currency as string).toUpperCase(), status: 'CONFIRMED', description: 'Initial subscription payment (prorated)', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
 
