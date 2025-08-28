@@ -1591,7 +1591,28 @@ function AdminDashboardContent() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 mt-6 border-t border-white/10 pt-4">
+            <div className="flex justify-between items-center gap-2 mt-6 border-t border-white/10 pt-4">
+              {/* Safe Delete Account: only when no subs/payments/invoices */}
+              {selectedCustomer && (
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (!confirm('Delete this account? Only allowed when no active/trial/paused/past_due subs, no paid invoices, no confirmed payments.')) return
+                    const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/delete`, { method: 'POST' })
+                    const json = await resp.json()
+                    if (resp.ok) {
+                      alert('Account deleted')
+                      setSelectedCustomer(null)
+                      await fetchAdminData()
+                    } else {
+                      alert('Delete blocked: ' + (json.error || 'Unknown reason'))
+                    }
+                  }}
+                  className="border-red-500/20 text-red-400 hover:bg-red-500/10"
+                >
+                  Delete Account
+                </Button>
+              )}
               <Button 
                 variant="outline" 
                 onClick={() => handlePasswordReset(selectedCustomer.id)}
