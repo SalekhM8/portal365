@@ -531,7 +531,7 @@ export async function GET() {
       processingTime: payment.routing?.decisionTimeMs || 0,
       confidence: payment.routing?.confidence || 'MEDIUM',
       membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown'
-    })),
+    })).filter((p: any) => p.status !== 'FAILED' || (p.status === 'FAILED' && payments.find(pp => pp.id === p.id && pp.failureReason !== 'DISMISSED_ADMIN'))),
       ...incompleteToDos,
       ...membershipIncompleteToDos
     ]

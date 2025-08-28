@@ -759,7 +759,7 @@ function AdminDashboardContent() {
                                 <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                                 <div className="mt-1">
                                   <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
-                                    {p.status === 'INCOMPLETE_SIGNUP' ? 'ABANDONED SIGNUP' : 'FAILED'}
+                                    {p.status === 'INCOMPLETE_SIGNUP' ? 'NO PAYMENT METHOD ATTACHED' : 'FAILED'}
                                   </Badge>
                                 </div>
                               </div>
@@ -769,10 +769,18 @@ function AdminDashboardContent() {
                                     <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">Actions ▾</Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent className="bg-black border-white/20">
-                                    <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
+                                    {p.status !== 'INCOMPLETE_SIGNUP' && (
+                                      <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => dismissTodo(p.id)}>Remove</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
+                                    {p.status === 'INCOMPLETE_SIGNUP' ? (
+                                      <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Remove</DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem onClick={async () => { await fetch(`/api/admin/payments/${p.id}/dismiss`, { method: 'POST' }); await fetchAdminData(); }}>Remove</DropdownMenuItem>
+                                    )}
+                                    {p.status !== 'INCOMPLETE_SIGNUP' && (
+                                      <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>
@@ -838,7 +846,7 @@ function AdminDashboardContent() {
                             <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                             <div className="mt-1">
                               <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
-                                {p.status === 'INCOMPLETE_SIGNUP' ? 'ABANDONED SIGNUP' : 'FAILED'}
+                                {p.status === 'INCOMPLETE_SIGNUP' ? 'NO PAYMENT METHOD ATTACHED' : 'FAILED'}
                               </Badge>
                             </div>
                           </div>
@@ -848,10 +856,18 @@ function AdminDashboardContent() {
                                 <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">Actions ▾</Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent className="bg-black border-white/20">
-                                <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
+                                {p.status !== 'INCOMPLETE_SIGNUP' && (
+                                  <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => dismissTodo(p.id)}>Remove</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
+                                {p.status === 'INCOMPLETE_SIGNUP' ? (
+                                  <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Remove</DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem onClick={async () => { await fetch(`/api/admin/payments/${p.id}/dismiss`, { method: 'POST' }); await fetchAdminData(); }}>Remove</DropdownMenuItem>
+                                )}
+                                {p.status !== 'INCOMPLETE_SIGNUP' && (
+                                  <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
+                                )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </div>
