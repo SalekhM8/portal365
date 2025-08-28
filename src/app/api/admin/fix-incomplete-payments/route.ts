@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       select: { id: true, role: true, firstName: true, lastName: true }
     })
 
-    if (!adminUser || !['SUPER_ADMIN'].includes(adminUser.role)) {
+    if (!adminUser || !(['SUPER_ADMIN', 'ADMIN'].includes(adminUser.role))) {
       return NextResponse.json({ 
         success: false, 
         error: 'Insufficient permissions - Admin access required',
