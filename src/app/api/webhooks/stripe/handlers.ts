@@ -104,9 +104,19 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
     
     console.log(`✅ [WEBHOOK] Updated subscription: ${previousStatus} → ${updatedSubscription.status}`)
     
-    // Update membership status to match
-    const membershipStatus = subscriptionStatus === 'PAUSED' ? 'SUSPENDED' : 
-                            subscriptionStatus === 'CANCELLED' ? 'CANCELLED' : 'ACTIVE'
+    // Update membership status to mirror Stripe lifecycle accurately
+    // ACTIVE (incl. TRIALING) -> ACTIVE access
+    // PAST_DUE -> SUSPENDED access
+    // INCOMPLETE/INCOMPLETE_EXPIRED -> PENDING_PAYMENT (never granted access)
+    // PAUSED -> SUSPENDED access
+    // CANCELLED -> CANCELLED
+    const membershipStatus =
+      subscriptionStatus === 'PAUSED' ? 'SUSPENDED' :
+      subscriptionStatus === 'PAST_DUE' ? 'SUSPENDED' :
+      subscriptionStatus === 'INCOMPLETE' ? 'PENDING_PAYMENT' :
+      subscriptionStatus === 'INCOMPLETE_EXPIRED' ? 'PENDING_PAYMENT' :
+      subscriptionStatus === 'CANCELLED' ? 'CANCELLED' :
+      'ACTIVE'
     
     const updatedMemberships = await prisma.membership.updateMany({ 
       where: { userId: subscription.userId }, 

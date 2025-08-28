@@ -22,8 +22,7 @@ export async function POST(
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
-        subscriptions: true,
-        invoices: true,
+        subscriptions: { include: { invoices: true } },
         payments: true,
         memberships: true,
       }
@@ -31,7 +30,9 @@ export async function POST(
     if (!user) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
 
     const hasActiveLike = user.subscriptions.some((s: any) => ['ACTIVE','TRIALING','PAST_DUE','PAUSED'].includes(s.status))
-    const hasPaidInvoice = (user.invoices || []).some((inv: any) => inv.status === 'paid')
+    const hasPaidInvoice = (user.subscriptions || []).some((s: any) =>
+      (s.invoices || []).some((inv: any) => inv.status === 'paid')
+    )
     const hasConfirmedPayment = (user.payments || []).some((p: any) => p.status === 'CONFIRMED')
 
     if (hasActiveLike || hasPaidInvoice || hasConfirmedPayment) {

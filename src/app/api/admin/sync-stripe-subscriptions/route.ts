@@ -98,9 +98,13 @@ export async function POST(request: NextRequest) {
           })
 
           // Update membership status to match
-          const membershipStatus = correctStatus === 'PAUSED' ? 'SUSPENDED' : 
-                                  correctStatus === 'CANCELLED' ? 'CANCELLED' : 
-                                  correctStatus === 'INCOMPLETE' ? 'PENDING_PAYMENT' : 'ACTIVE'
+          const membershipStatus =
+            correctStatus === 'PAUSED' ? 'SUSPENDED' :
+            correctStatus === 'PAST_DUE' ? 'SUSPENDED' :
+            correctStatus === 'INCOMPLETE' ? 'PENDING_PAYMENT' :
+            correctStatus === 'INCOMPLETE_EXPIRED' ? 'PENDING_PAYMENT' :
+            correctStatus === 'CANCELLED' ? 'CANCELLED' :
+            'ACTIVE'
           
           await prisma.membership.updateMany({
             where: { userId: localSub.userId },
