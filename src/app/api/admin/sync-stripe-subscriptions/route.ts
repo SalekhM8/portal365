@@ -85,6 +85,15 @@ export async function POST(request: NextRequest) {
         }
         
         // Check if sync is needed
+        // Compute the membership status we expect given Stripe
+        const expectedMembershipStatus =
+          correctStatus === 'PAUSED' ? 'SUSPENDED' :
+          correctStatus === 'PAST_DUE' ? 'SUSPENDED' :
+          correctStatus === 'INCOMPLETE' ? 'PENDING_PAYMENT' :
+          correctStatus === 'INCOMPLETE_EXPIRED' ? 'PENDING_PAYMENT' :
+          correctStatus === 'CANCELLED' ? 'CANCELLED' :
+          'ACTIVE'
+
         if (localSub.status !== correctStatus) {
           // Update local database to match Stripe
           await prisma.subscription.update({
@@ -98,17 +107,9 @@ export async function POST(request: NextRequest) {
           })
 
           // Update membership status to match
-          const membershipStatus =
-            correctStatus === 'PAUSED' ? 'SUSPENDED' :
-            correctStatus === 'PAST_DUE' ? 'SUSPENDED' :
-            correctStatus === 'INCOMPLETE' ? 'PENDING_PAYMENT' :
-            correctStatus === 'INCOMPLETE_EXPIRED' ? 'PENDING_PAYMENT' :
-            correctStatus === 'CANCELLED' ? 'CANCELLED' :
-            'ACTIVE'
-          
           await prisma.membership.updateMany({
             where: { userId: localSub.userId },
-            data: { status: membershipStatus }
+            data: { status: expectedMembershipStatus }
           })
 
           // 🚨 CRITICAL: Remove fake payment records for incomplete subscriptions
@@ -158,6 +159,11 @@ export async function POST(request: NextRequest) {
           fixedCount++
           console.log(`✅ Fixed: ${localSub.user.email} ${localSub.status} → ${correctStatus}`)
         } else {
+          // Even if subscription status matches, fix membership if it's wrong
+          await prisma.membership.updateMany({
+            where: { userId: localSub.userId, NOT: { status: expectedMembershipStatus } },
+            data: { status: expectedMembershipStatus }
+          })
           syncResults.push({
             localId: localSub.id,
             userEmail: localSub.user.email,
