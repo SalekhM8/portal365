@@ -124,6 +124,12 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
   if (!dbSub) {
     return NextResponse.json({ success: false, error: 'Subscription not found' }, { status: 404 })
   }
+
+  // Idempotency guard: if we've already replaced the placeholder with a real Stripe sub, do nothing
+  if (dbSub.stripeSubscriptionId && dbSub.stripeSubscriptionId.startsWith('sub_')) {
+    const user = await prisma.user.findUnique({ where: { id: dbSub.userId }, select: { id: true, email: true, firstName: true, lastName: true } })
+    return NextResponse.json({ success: true, message: 'Subscription already created', subscription: { id: dbSub.id, status: dbSub.status, userId: dbSub.userId }, user })
+  }
   const membershipDetails = getPlan(dbSub.membershipType)
   const priceId = await getOrCreatePrice(membershipDetails)
   const trialEndTimestamp = Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000)
@@ -136,11 +142,23 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
     proration_behavior: 'none',
     payment_behavior: 'default_incomplete',
     metadata: { userId: dbSub.userId, membershipType: dbSub.membershipType, routedEntityId: dbSub.routedEntityId, dbSubscriptionId: dbSub.id }
-  })
+  }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
 
   const subscription = await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' }, include: { user: true } })
   await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
-  await prisma.payment.create({ data: { userId: subscription.userId, amount: (paymentIntent.amount as number) / 100, currency: (paymentIntent.currency as string).toUpperCase(), status: 'CONFIRMED', description: 'Initial subscription payment (prorated)', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
+  // Idempotency guard for payment row: skip if a matching payment already exists recently
+  const existingPayment = await prisma.payment.findFirst({
+    where: {
+      userId: subscription.userId,
+      status: 'CONFIRMED',
+      amount: (paymentIntent.amount as number) / 100,
+      currency: (paymentIntent.currency as string).toUpperCase(),
+      description: 'Initial subscription payment (prorated)'
+    }
+  })
+  if (!existingPayment) {
+    await prisma.payment.create({ data: { userId: subscription.userId, amount: (paymentIntent.amount as number) / 100, currency: (paymentIntent.currency as string).toUpperCase(), status: 'CONFIRMED', description: 'Initial subscription payment (prorated)', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
+  }
 
   return NextResponse.json({ success: true, message: 'Payment confirmed and subscription activated', subscription: { id: subscription.id, status: subscription.status, userId: subscription.userId }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
 }
