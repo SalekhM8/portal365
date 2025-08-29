@@ -73,7 +73,7 @@ async function performFix(userId: string) {
   return { success: true, updatedPayments, stripeSubStatus, hasPaidInvoice }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions) as any
     if (!session?.user?.email) {
@@ -83,7 +83,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!adminUser || !['ADMIN','SUPER_ADMIN'].includes(adminUser.role)) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
-    const result = await performFix(params.id)
+    const { id } = await context.params
+    const result = await performFix(id)
     if ((result as any).notFound) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
     return NextResponse.json(result)
   } catch (e: any) {
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions) as any
     if (!session?.user?.email) {
@@ -101,7 +102,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!adminUser || !['ADMIN','SUPER_ADMIN'].includes(adminUser.role)) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
-    const result = await performFix(params.id)
+    const { id } = await context.params
+    const result = await performFix(id)
     if ((result as any).notFound) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
     return NextResponse.json(result)
   } catch (e: any) {
