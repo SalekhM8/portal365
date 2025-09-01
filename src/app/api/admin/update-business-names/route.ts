@@ -5,8 +5,8 @@ import { prisma } from '@/lib/prisma'
 
 /**
  * Admin endpoint to rename BusinessEntity display names.
- * Body: { changes: Array<{ match: { id?: string; name?: string }, displayName: string }> }
- * If no body is provided, defaults to renaming 'Aura MMA' -> 'Sporting U'.
+ * Body: { changes: Array<{ match: { id?: string; name?: string; displayName?: string }, displayName: string }> }
+ * If no body is provided, defaults to renaming displayName 'Aura MMA' -> 'Sporting U'.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -18,11 +18,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const changes = Array.isArray(body?.changes) && body.changes.length > 0
       ? body.changes
-      : [{ match: { name: 'Aura MMA' }, displayName: 'Sporting U' }]
+      : [{ match: { displayName: 'Aura MMA' }, displayName: 'Sporting U' }]
 
     const results: any[] = []
     for (const ch of changes) {
-      const where: any = ch.match?.id ? { id: ch.match.id } : ch.match?.name ? { name: ch.match.name } : null
+      const where: any = ch.match?.id
+        ? { id: ch.match.id }
+        : ch.match?.name
+          ? { name: ch.match.name }
+          : ch.match?.displayName
+            ? { displayName: ch.match.displayName }
+            : null
       if (!where) { results.push({ ok:false, error:'invalid_match' }); continue }
 
       const updated = await prisma.businessEntity.updateMany({ where, data: { displayName: ch.displayName } })
