@@ -389,9 +389,18 @@ export async function GET() {
         }
         if (paymentIntentId) {
           const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
+          const latestChargeId = (pi as any)?.latest_charge as string | undefined
+          let declineCode: string | undefined
+          let failureMessage: string | undefined
+          if (latestChargeId) {
+            const charge = await stripe.charges.retrieve(latestChargeId)
+            declineCode = (charge as any)?.decline_code || (charge as any)?.outcome?.reason || (charge as any)?.failure_code
+            failureMessage = (charge as any)?.failure_message || (charge as any)?.outcome?.seller_message
+          }
           const err = (pi as any)?.last_payment_error
-          const code = err?.code as string | undefined
-          const message = err?.message as string | undefined
+          const piCode = err?.decline_code || err?.code
+          const piMsg = err?.message as string | undefined
+          const code = (declineCode || piCode || '').toString()
           const codeMap: Record<string, string> = {
             'insufficient_funds': 'Insufficient funds',
             'card_declined': 'Card declined',
@@ -401,7 +410,7 @@ export async function GET() {
             'authentication_required': 'Authentication required',
             'do_not_honor': 'Card issuer declined'
           }
-          const reason = codeMap[code || ''] || message
+          const reason = codeMap[code] || failureMessage || piMsg
           if (reason) enrichedFailureReasonById[p.id] = reason
         }
       } catch {}

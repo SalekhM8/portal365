@@ -234,14 +234,24 @@ export async function handlePaymentFailed(invoice: any) {
     await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
     await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
 
-    // Try to enrich failure reason from the PaymentIntent last error
+    // Try to enrich failure reason using the charge decline_code (more precise than generic messages)
     let failureReason = 'Payment declined'
     try {
       if (invoice.payment_intent) {
         const pi = await stripe.paymentIntents.retrieve(invoice.payment_intent as string)
+        const latestChargeId = (pi as any)?.latest_charge as string | undefined
+        let declineCode: string | undefined
+        let failureMessage: string | undefined
+        if (latestChargeId) {
+          const charge = await stripe.charges.retrieve(latestChargeId)
+          // Some gateways set decline_code directly on charge; also check outcome.reason
+          declineCode = (charge as any)?.decline_code || (charge as any)?.outcome?.reason || (charge as any)?.failure_code
+          failureMessage = (charge as any)?.failure_message || (charge as any)?.outcome?.seller_message
+        }
         const err = (pi as any)?.last_payment_error
-        const code = err?.code as string | undefined
-        const message = err?.message as string | undefined
+        const piCode = err?.decline_code || err?.code
+        const piMsg = err?.message as string | undefined
+        const code = (declineCode || piCode || '').toString()
         const codeMap: Record<string, string> = {
           'insufficient_funds': 'Insufficient funds',
           'card_declined': 'Card declined',
@@ -251,7 +261,7 @@ export async function handlePaymentFailed(invoice: any) {
           'authentication_required': 'Authentication required',
           'do_not_honor': 'Card issuer declined'
         }
-        failureReason = codeMap[code || ''] || message || failureReason
+        failureReason = codeMap[code] || failureMessage || piMsg || failureReason
       }
     } catch {}
 
