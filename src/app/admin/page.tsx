@@ -276,6 +276,37 @@ function AdminDashboardContent() {
     }
   }
 
+  const handleRefundPayment = async (paymentId: string, defaultAmount: number) => {
+    try {
+      const amountStr = prompt(`Enter refund amount (max £${defaultAmount.toFixed(2)})`, String(defaultAmount))
+      if (!amountStr) return
+      const amount = Number(amountStr)
+      if (!amount || amount <= 0) {
+        alert('Amount must be greater than 0')
+        return
+      }
+      const reason = prompt('Enter refund reason (required)') || ''
+      if (!reason.trim()) {
+        alert('Reason is required')
+        return
+      }
+      const resp = await fetch(`/api/admin/payments/${paymentId}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, reason })
+      })
+      const json = await resp.json()
+      if (!resp.ok) {
+        alert('Refund failed: ' + (json.error || 'Unknown error'))
+        return
+      }
+      alert('Refund created: ' + json.refund?.id)
+      await fetchAdminData()
+    } catch (e: any) {
+      alert('Refund failed: ' + (e?.message || 'Unknown error'))
+    }
+  }
+
   const dismissTodo = (paymentId: string) => {
     setDismissedTodoIds((prev) => {
       const next = Array.from(new Set([...(prev || []), paymentId]))
@@ -1155,16 +1186,30 @@ function AdminDashboardContent() {
                           </div>
                         </td>
                         <td className="p-4 border-r border-white/5">
-                          <div className="space-y-1">
-                            <Badge variant={getStatusBadgeVariant(payment.status)}>
-                              {payment.status}
-                            </Badge>
-                            <div className="text-xs text-white/60">
-                              <p>Processed in {payment.processingTime}s</p>
-                              {payment.retryCount > 0 && (
-                                <p className="text-red-400">Retries: {payment.retryCount}</p>
-                              )}
+                          <div className="space-y-2">
+                            <div>
+                              <Badge variant={getStatusBadgeVariant(payment.status)}>
+                                {payment.status}
+                              </Badge>
+                              <div className="text-xs text-white/60">
+                                <p>Processed in {payment.processingTime}s</p>
+                                {payment.retryCount > 0 && (
+                                  <p className="text-red-400">Retries: {payment.retryCount}</p>
+                                )}
+                              </div>
                             </div>
+                            {payment.status === 'CONFIRMED' && (
+                              <Button
+                                variant="outline"
+                                className="border-white/20 text-white hover:bg-white/10 h-8 px-3 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleRefundPayment(payment.id, payment.amount)
+                                }}
+                              >
+                                Refund
+                              </Button>
+                            )}
                           </div>
                         </td>
                         <td className="p-4 border-r border-white/5">
