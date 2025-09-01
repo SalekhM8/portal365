@@ -157,7 +157,7 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
     }
   })
   if (!existingPayment) {
-    await prisma.payment.create({ data: { userId: subscription.userId, amount: (paymentIntent.amount as number) / 100, currency: (paymentIntent.currency as string).toUpperCase(), status: 'CONFIRMED', description: 'Initial subscription payment (prorated)', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
+    await prisma.payment.create({ data: { userId: subscription.userId, amount: (paymentIntent.amount as number) / 100, currency: (paymentIntent.currency as string).toUpperCase(), status: 'CONFIRMED', description: 'Initial subscription payment (prorated)', routedEntityId: subscription.routedEntityId, processedAt: new Date(), stripePaymentIntentId: paymentIntent.id as string } })
   }
 
   return NextResponse.json({ success: true, message: 'Payment confirmed and subscription activated', subscription: { id: subscription.id, status: subscription.status, userId: subscription.userId }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })

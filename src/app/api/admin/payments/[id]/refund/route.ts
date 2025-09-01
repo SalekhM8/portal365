@@ -22,6 +22,8 @@ export async function POST(
     const body = await request.json().catch(() => ({}))
     const amount: number = Number(body?.amount || 0)
     const reason: string = (body?.reason || '').toString().trim()
+    const overrideInvoiceId: string | undefined = body?.stripeInvoiceId
+    const overrideChargeId: string | undefined = body?.stripeChargeId
 
     if (!amount || amount <= 0) return NextResponse.json({ error: 'Amount must be > 0' }, { status: 400 })
     if (!reason) return NextResponse.json({ error: 'Reason is required' }, { status: 400 })
@@ -39,26 +41,36 @@ export async function POST(
     const refundable = Number(payment.amount) - alreadyRefunded
     if (amount > refundable) return NextResponse.json({ error: `Amount exceeds refundable balance (£${refundable.toFixed(2)})` }, { status: 400 })
 
-    // Map to Stripe charge via customer invoices (best match by time/amount)
-    // Find the user's latest subscription to get stripeCustomerId
-    const subscription = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
-    if (!subscription?.stripeCustomerId) return NextResponse.json({ error: 'Cannot locate Stripe customer for this user' }, { status: 400 })
+    // Determine Stripe charge to refund
+    let chargeId: string | null = payment.stripeChargeId || null
+    if (overrideChargeId) {
+      chargeId = overrideChargeId
+    } else if (overrideInvoiceId) {
+      try {
+        const inv = await stripe.invoices.retrieve(overrideInvoiceId)
+        if (inv && inv.charge) chargeId = inv.charge as string
+      } catch {}
+      if (!chargeId) return NextResponse.json({ error: 'Invalid Stripe invoice id provided' }, { status: 400 })
+    } else if (!chargeId) {
+      // Map to Stripe charge via customer invoices (best-effort match by time/amount)
+      const subscription = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
+      if (!subscription?.stripeCustomerId) return NextResponse.json({ error: 'Cannot locate Stripe customer for this user' }, { status: 400 })
+      const invList: any = await stripe.invoices.list({ customer: subscription.stripeCustomerId, status: 'paid', limit: 50 })
+      const paidInvoices = invList.data.filter((i: any) => Number(i.amount_paid) > 0)
+      const target = paidInvoices
+        .map((i: any) => ({
+          inv: i,
+          score: Math.abs(((payment.processedAt || payment.createdAt).getTime()) - ((i.status_transitions?.paid_at || i.created) * 1000)) + (Math.abs(Number(payment.amount) - (Number(i.amount_paid)/100)) > 0.01 ? 1e12 : 0)
+        }))
+        .sort((a: any, b: any) => a.score - b.score)[0]?.inv
+      if (target?.charge) chargeId = target.charge as string
+    }
 
-    const invList: any = await stripe.invoices.list({ customer: subscription.stripeCustomerId, status: 'paid', limit: 50 })
-    const paidInvoices = invList.data.filter((i: any) => Number(i.amount_paid) > 0)
-    // Score invoices by closeness to processedAt and amount match
-    const target = paidInvoices
-      .map((i: any) => ({
-        inv: i,
-        score: Math.abs(((payment.processedAt || payment.createdAt).getTime()) - ((i.status_transitions?.paid_at || i.created) * 1000)) + (Math.abs(Number(payment.amount) - (Number(i.amount_paid)/100)) > 0.01 ? 1e12 : 0)
-      }))
-      .sort((a: any, b: any) => a.score - b.score)[0]?.inv
-
-    if (!target?.charge) return NextResponse.json({ error: 'Could not determine Stripe charge to refund. Select invoice manually.' }, { status: 409 })
+    if (!chargeId) return NextResponse.json({ error: 'Could not determine Stripe charge to refund. Select invoice manually.' }, { status: 409 })
 
     const idempotencyKey = `refund_${id}_${minorUnits(amount)}`
     const refund = await stripe.refunds.create({
-      charge: target.charge as string,
+      charge: chargeId as string,
       amount: minorUnits(amount),
       reason: 'requested_by_customer',
       metadata: { paymentId: id, userId: payment.userId, adminId: admin.id, app: 'portal365' }
@@ -79,7 +91,7 @@ export async function POST(
 
     // Optional: clean up FAILED todos if any exist and this refund clears balance (no-op for now)
 
-    return NextResponse.json({ success: true, refund: { id: refund.id, status: refund.status }, matchedInvoiceId: target.id })
+    return NextResponse.json({ success: true, refund: { id: refund.id, status: refund.status } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Refund failed' }, { status: 500 })
   }

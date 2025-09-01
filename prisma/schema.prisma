@@ -162,6 +162,11 @@ model Payment {
   currency    String  @default("GBP")
   description String
 
+  // Stripe identifiers (for precise refunds)
+  stripeChargeId        String?
+  stripeInvoiceId       String?
+  stripePaymentIntentId String?
+
   // GoCardless integration
   goCardlessPaymentId String? @unique
   goCardlessMandateId String?
