@@ -774,9 +774,9 @@ function AdminDashboardContent() {
                                     )}
                                     <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
                                     {p.status === 'INCOMPLETE_SIGNUP' ? (
-                                      <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Remove</DropdownMenuItem>
+                                      <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Void</DropdownMenuItem>
                                     ) : (
-                                      <DropdownMenuItem onClick={async () => { await fetch(`/api/admin/payments/${p.id}/dismiss`, { method: 'POST' }); await fetchAdminData(); }}>Remove</DropdownMenuItem>
+                                      <DropdownMenuItem onClick={async () => { await fetch(`/api/admin/payments/${p.id}/dismiss`, { method: 'POST' }); await fetchAdminData(); }}>Void</DropdownMenuItem>
                                     )}
                                     {p.status !== 'INCOMPLETE_SIGNUP' && (
                                       <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
@@ -861,9 +861,9 @@ function AdminDashboardContent() {
                                 )}
                                 <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
                                 {p.status === 'INCOMPLETE_SIGNUP' ? (
-                                  <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Remove</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Void</DropdownMenuItem>
                                 ) : (
-                                  <DropdownMenuItem onClick={async () => { await fetch(`/api/admin/payments/${p.id}/dismiss`, { method: 'POST' }); await fetchAdminData(); }}>Remove</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={async () => { await fetch(`/api/admin/payments/${p.id}/dismiss`, { method: 'POST' }); await fetchAdminData(); }}>Void</DropdownMenuItem>
                                 )}
                                 {p.status !== 'INCOMPLETE_SIGNUP' && (
                                   <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
