@@ -1,21 +1,115 @@
 import { prisma } from '@/lib/prisma'
+import { stripe } from '@/lib/stripe'
 
 export async function handlePaymentSucceeded(invoice: any) {
+  const invoiceId = invoice.id
+  const operationId = `webhook_payment_${invoiceId}_${Date.now()}`
+  
   try {
+    console.log(`🔄 [${operationId}] Processing invoice payment: ${invoiceId}`)
+    
     const subscriptionId = invoice.subscription
     const amountPaid = invoice.amount_paid / 100
+    
+    console.log(`📊 [${operationId}] Invoice details:`, {
+      id: invoiceId,
+      subscription: subscriptionId,
+      customer: invoice.customer,
+      amount: amountPaid,
+      billing_reason: invoice.billing_reason
+    })
 
-    // First try to link by stripe subscription id, if missing (prorated before sub), use our metadata
-    let subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
-    if (!subscription && invoice.metadata?.dbSubscriptionId) {
-      subscription = await prisma.subscription.findUnique({ where: { id: invoice.metadata.dbSubscriptionId }, include: { user: true } })
+    // STEP 1: Try to find subscription by Stripe subscription ID
+    let subscription = null
+    let mappingMethod = 'UNKNOWN'
+    
+    if (subscriptionId) {
+      subscription = await prisma.subscription.findUnique({ 
+        where: { stripeSubscriptionId: subscriptionId }, 
+        include: { user: true } 
+      })
+      
+      if (subscription) {
+        mappingMethod = 'STRIPE_SUBSCRIPTION_ID'
+        console.log(`✅ [${operationId}] Found subscription via Stripe ID: ${subscription.id}`)
+      } else {
+        console.log(`⚠️ [${operationId}] No subscription found with stripeSubscriptionId: ${subscriptionId}`)
+      }
+    } else {
+      console.log(`⚠️ [${operationId}] No subscription ID on invoice`)
     }
-    if (!subscription) return
+    
+    // STEP 2: Try metadata fallback
+    if (!subscription && invoice.metadata?.dbSubscriptionId) {
+      subscription = await prisma.subscription.findUnique({ 
+        where: { id: invoice.metadata.dbSubscriptionId }, 
+        include: { user: true } 
+      })
+      
+      if (subscription) {
+        mappingMethod = 'METADATA_SUBSCRIPTION_ID'
+        console.log(`✅ [${operationId}] Found subscription via metadata: ${subscription.id}`)
+      }
+    }
+    
+    // STEP 3: CUSTOMER FALLBACK - The critical fix
+    if (!subscription && invoice.customer) {
+      console.log(`🔄 [${operationId}] Trying customer metadata fallback...`)
+      
+      try {
+        const stripeCustomer = await stripe.customers.retrieve(invoice.customer as string)
+        const userId = (stripeCustomer as any).metadata?.userId
+        
+        if (userId) {
+          console.log(`🔍 [${operationId}] Found userId in customer metadata: ${userId}`)
+          
+          subscription = await prisma.subscription.findFirst({
+            where: { 
+              userId, 
+              status: { in: ['ACTIVE', 'TRIALING', 'PAUSED'] } 
+            },
+            include: { user: true },
+            orderBy: { createdAt: 'desc' }
+          })
+          
+          if (subscription) {
+            mappingMethod = 'CUSTOMER_METADATA_FALLBACK'
+            console.log(`✅ [${operationId}] Found subscription via customer fallback: ${subscription.id}`)
+          } else {
+            console.log(`❌ [${operationId}] No active subscription found for userId: ${userId}`)
+          }
+        } else {
+          console.log(`❌ [${operationId}] No userId in customer metadata`)
+        }
+      } catch (customerError) {
+        console.error(`❌ [${operationId}] Customer retrieval failed:`, customerError)
+      }
+    }
+    
+    // STEP 4: Final validation
+    if (!subscription) {
+      console.error(`❌ [${operationId}] CRITICAL: Cannot map invoice to subscription after all attempts`)
+      console.error(`❌ [${operationId}] Invoice details:`, {
+        id: invoiceId,
+        subscription: subscriptionId,
+        customer: invoice.customer,
+        hasMetadata: !!invoice.metadata,
+        metadataKeys: invoice.metadata ? Object.keys(invoice.metadata) : []
+      })
+      throw new Error(`Cannot map invoice ${invoiceId} to subscription - manual intervention required`)
+    }
+    
+    console.log(`✅ [${operationId}] Subscription mapped via: ${mappingMethod}`)
 
+    // STEP 5: Check for duplicate processing (idempotency)
     const existingInvoice = await prisma.invoice.findUnique({ where: { stripeInvoiceId: invoice.id } })
-    if (existingInvoice) return
+    if (existingInvoice) {
+      console.log(`ℹ️ [${operationId}] Invoice already processed, skipping: ${existingInvoice.id}`)
+      return
+    }
 
-    await prisma.invoice.create({
+    // STEP 6: Create invoice record
+    const invoiceRecord = await prisma.invoice.create({
       data: {
         subscriptionId: subscription.id,
         stripeInvoiceId: invoice.id,
@@ -28,23 +122,127 @@ export async function handlePaymentSucceeded(invoice: any) {
         paidAt: new Date()
       }
     })
+    
+    console.log(`✅ [${operationId}] Created invoice record: ${invoiceRecord.id}`)
 
-    await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'ACTIVE', currentPeriodStart: new Date(invoice.period_start * 1000), currentPeriodEnd: new Date(invoice.period_end * 1000), nextBillingDate: new Date(invoice.period_end * 1000) } })
-    await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
-    await prisma.payment.create({ data: { userId: subscription.userId, amount: amountPaid, currency: invoice.currency.toUpperCase(), status: 'CONFIRMED', description: invoice.billing_reason === 'subscription_create' ? 'Initial subscription payment (prorated)' : 'Monthly membership payment', routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
-  } catch {}
+    // STEP 7: Update subscription status and billing periods
+    const updatedSubscription = await prisma.subscription.update({ 
+      where: { id: subscription.id }, 
+      data: { 
+        status: 'ACTIVE', 
+        currentPeriodStart: new Date(invoice.period_start * 1000), 
+        currentPeriodEnd: new Date(invoice.period_end * 1000), 
+        nextBillingDate: new Date(invoice.period_end * 1000) 
+      } 
+    })
+    
+    console.log(`✅ [${operationId}] Updated subscription status: ${updatedSubscription.status}`)
+    
+    // STEP 8: Update membership status
+    const updatedMemberships = await prisma.membership.updateMany({ 
+      where: { userId: subscription.userId }, 
+      data: { status: 'ACTIVE' } 
+    })
+    
+    console.log(`✅ [${operationId}] Updated ${updatedMemberships.count} memberships to ACTIVE`)
+    
+    // STEP 9: Create payment record (the critical missing piece)
+    const paymentDescription = invoice.billing_reason === 'subscription_create' 
+      ? 'Initial subscription payment (prorated)' 
+      : 'Monthly membership payment'
+      
+    const paymentRecord = await prisma.payment.create({ 
+      data: { 
+        userId: subscription.userId, 
+        amount: amountPaid, 
+        currency: invoice.currency.toUpperCase(), 
+        status: 'CONFIRMED', 
+        description: paymentDescription, 
+        routedEntityId: subscription.routedEntityId, 
+        processedAt: new Date()
+      } 
+    })
+    
+    console.log(`✅ [${operationId}] Created payment record: ${paymentRecord.id} for £${amountPaid}`)
+    console.log(`✅ [${operationId}] Payment processing completed successfully via ${mappingMethod}`)
+
+  } catch (error) {
+    console.error(`❌ [${operationId || 'unknown'}] Webhook payment processing failed:`, {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      invoiceId: invoice?.id,
+      subscription: invoice?.subscription,
+      customer: invoice?.customer
+    })
+    
+    // Re-throw so webhook returns 500 and Stripe retries
+    throw new Error(`Payment webhook processing failed for invoice ${invoice?.id}: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 export async function handlePaymentFailed(invoice: any) {
+  const invoiceId = invoice.id
+  const operationId = `webhook_failed_${invoiceId}_${Date.now()}`
+  
   try {
+    console.log(`🔄 [${operationId}] Processing failed payment: ${invoiceId}`)
+    
     const subscriptionId = invoice.subscription
     const amountDue = invoice.amount_due / 100
-    const subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
-    if (!subscription) return
+    
+    // Use same robust mapping as handlePaymentSucceeded
+    let subscription = await prisma.subscription.findUnique({ 
+      where: { stripeSubscriptionId: subscriptionId }, 
+      include: { user: true } 
+    })
+    
+    // Customer fallback for failed payments too
+    if (!subscription && invoice.customer) {
+      try {
+        const stripeCustomer = await stripe.customers.retrieve(invoice.customer as string)
+        const userId = (stripeCustomer as any).metadata?.userId
+        
+        if (userId) {
+          subscription = await prisma.subscription.findFirst({
+            where: { 
+              userId, 
+              status: { in: ['ACTIVE', 'TRIALING', 'PAUSED', 'PAST_DUE'] } 
+            },
+            include: { user: true },
+            orderBy: { createdAt: 'desc' }
+          })
+        }
+      } catch (customerError) {
+        console.error(`❌ [${operationId}] Customer fallback failed:`, customerError)
+      }
+    }
+    
+    if (!subscription) {
+      console.error(`❌ [${operationId}] Cannot map failed invoice to subscription`)
+      throw new Error(`Cannot map failed invoice ${invoiceId} to subscription`)
+    }
+    
     await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
     await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
-    await prisma.payment.create({ data: { userId: subscription.userId, amount: amountDue, currency: invoice.currency.toUpperCase(), status: 'FAILED', description: 'Failed monthly membership payment', routedEntityId: subscription.routedEntityId, failureReason: 'Payment declined', processedAt: new Date() } })
-  } catch {}
+    await prisma.payment.create({ 
+      data: { 
+        userId: subscription.userId, 
+        amount: amountDue, 
+        currency: invoice.currency.toUpperCase(), 
+        status: 'FAILED', 
+        description: 'Failed monthly membership payment', 
+        routedEntityId: subscription.routedEntityId, 
+        failureReason: 'Payment declined', 
+        processedAt: new Date() 
+      } 
+    })
+    
+    console.log(`✅ [${operationId}] Processed failed payment for ${subscription.user.email}`)
+    
+  } catch (error) {
+    console.error(`❌ [${operationId || 'unknown'}] Failed payment webhook processing failed:`, error)
+    throw error
+  }
 }
 
 export async function handleSubscriptionUpdated(stripeSubscription: any) {
@@ -130,10 +328,35 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
 }
 
 export async function handleSubscriptionCancelled(stripeSubscription: any) {
+  const operationId = `webhook_cancelled_${stripeSubscription.id}_${Date.now()}`
+  
   try {
-    const subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: stripeSubscription.id }, include: { user: true } })
-    if (!subscription) return
-    await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED' } })
-    await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'CANCELLED' } })
-  } catch {}
+    console.log(`🔄 [${operationId}] Processing subscription cancellation: ${stripeSubscription.id}`)
+    
+    const subscription = await prisma.subscription.findUnique({ 
+      where: { stripeSubscriptionId: stripeSubscription.id }, 
+      include: { user: true } 
+    })
+    
+    if (!subscription) {
+      console.error(`❌ [${operationId}] Subscription not found for cancellation`)
+      throw new Error(`Subscription not found: ${stripeSubscription.id}`)
+    }
+    
+    await prisma.subscription.update({ 
+      where: { id: subscription.id }, 
+      data: { status: 'CANCELLED' } 
+    })
+    
+    await prisma.membership.updateMany({ 
+      where: { userId: subscription.userId }, 
+      data: { status: 'CANCELLED' } 
+    })
+    
+    console.log(`✅ [${operationId}] Cancelled subscription for ${subscription.user.email}`)
+    
+  } catch (error) {
+    console.error(`❌ [${operationId || 'unknown'}] Subscription cancellation webhook failed:`, error)
+    throw error
+  }
 } 
