@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
         invoiceId: invoice.id,
         amount: invoice.amount_paid / 100,
         customer: invoice.customer,
-        subscription: invoice.subscription,
+        subscription: (invoice as any).subscription,
         billing_reason: invoice.billing_reason,
         created: new Date(invoice.created * 1000).toISOString(),
         status: 'UNKNOWN'
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 🔍 TEST 2: Can we find subscription using webhook logic?
-        const subscriptionId = invoice.subscription
+        const subscriptionId = (invoice as any).subscription
         let subscription = null
         
         if (subscriptionId) {
