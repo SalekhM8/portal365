@@ -165,9 +165,7 @@ export async function handlePaymentSucceeded(invoice: any) {
         status: 'CONFIRMED', 
         description: paymentDescription, 
         routedEntityId: subscription.routedEntityId, 
-        processedAt: new Date(),
-        stripeInvoiceId: invoice.id,
-        stripeChargeId: (invoice as any).charge || undefined
+        processedAt: new Date()
       } 
     })
     
