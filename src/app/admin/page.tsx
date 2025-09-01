@@ -586,6 +586,7 @@ function AdminDashboardContent() {
       case 'PENDING_PAYMENT': return 'destructive'
       case 'SUSPENDED': return 'secondary'
       case 'CONFIRMED': return 'default'
+      case 'REFUNDED': return 'destructive'
       case 'FAILED': return 'destructive'
       case 'PROCESSING': return 'outline'
       default: return 'secondary'
@@ -1115,7 +1116,7 @@ function AdminDashboardContent() {
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Amount & Type</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Routed To</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Status & Processing</th>
-                      <th className="text-left p-4 font-medium text-white">Routing Details</th>
+                      <th className="text-left p-4 font-medium text-white">Refund</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1168,13 +1169,29 @@ function AdminDashboardContent() {
                           </div>
                         </td>
                         <td className="p-4 border-r border-white/5">
-                          <div className="text-sm space-y-1">
-                            <Badge variant={payment.confidence === 'HIGH' ? 'default' : 'secondary'} className="text-xs">
-                              {payment.confidence} confidence
-                            </Badge>
-                            <p className="text-white/60 text-xs">
-                              {payment.routingReason}
-                            </p>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              disabled={payment.status === 'REFUNDED'}
+                              onClick={async (e) => {
+                                e.stopPropagation()
+                                const full = confirm(`Refund £${payment.amount} in full? Click Cancel to enter a partial amount.`)
+                                let amount = payment.amount
+                                if (!full) {
+                                  const input = prompt('Enter partial refund amount (e.g., 5.50):', '')
+                                  if (!input) return
+                                  const val = Number(input)
+                                  if (Number.isNaN(val) || val <= 0) { alert('Invalid amount'); return }
+                                  amount = val
+                                }
+                                const resp = await fetch(`/api/admin/payments/${payment.id}/refund`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amountPounds: full ? undefined : amount }) })
+                                const json = await resp.json()
+                                if (resp.ok) { alert('Refund processed'); await fetchAdminData() } else { alert('Refund failed: ' + (json.error || 'Unknown error')) }
+                              }}
+                              className="text-xs"
+                            >
+                              {payment.status === 'REFUNDED' ? 'Refunded' : 'Refund'}
+                            </Button>
                           </div>
                         </td>
                       </tr>

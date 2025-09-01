@@ -157,13 +157,16 @@ export async function handlePaymentSucceeded(invoice: any) {
       ? 'Initial subscription payment (prorated)' 
       : 'Monthly membership payment'
       
+    // Tag description with Stripe identifiers so future admin refunds can reference them without schema changes
+    const taggedDescription = `${paymentDescription} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''}`
+
     const paymentRecord = await prisma.payment.create({ 
       data: { 
         userId: subscription.userId, 
         amount: amountPaid, 
         currency: invoice.currency.toUpperCase(), 
         status: 'CONFIRMED', 
-        description: paymentDescription, 
+        description: taggedDescription, 
         routedEntityId: subscription.routedEntityId, 
         processedAt: new Date()
       } 
