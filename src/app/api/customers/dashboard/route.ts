@@ -36,7 +36,11 @@ export async function GET(request: NextRequest) {
           take: 1
         },
         payments: {
-          orderBy: { createdAt: 'desc' },
+          where: { amount: { gt: 0 } },
+          orderBy: [
+            { processedAt: 'desc' },
+            { createdAt: 'desc' }
+          ],
           take: 10,
           include: {
             routedEntity: { select: { displayName: true } },
