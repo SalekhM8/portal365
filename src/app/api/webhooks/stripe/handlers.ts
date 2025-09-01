@@ -9,7 +9,7 @@ export async function handlePaymentSucceeded(invoice: any) {
     console.log(`🔄 [${operationId}] Processing invoice payment: ${invoiceId}`)
     
     const subscriptionId = invoice.subscription
-    const amountPaid = invoice.amount_paid / 100
+    const amountPaid = Number(invoice.amount_paid || 0) / 100
     
     console.log(`📊 [${operationId}] Invoice details:`, {
       id: invoiceId,
@@ -18,6 +18,12 @@ export async function handlePaymentSucceeded(invoice: any) {
       amount: amountPaid,
       billing_reason: invoice.billing_reason
     })
+
+    // QUICK GUARD: ignore zero-amount invoices (trials/void/fully-discounted)
+    if (!amountPaid || amountPaid <= 0) {
+      console.log(`ℹ️ [${operationId}] Skipping zero-amount invoice ${invoiceId} (amount_paid=${invoice.amount_paid})`)
+      return
+    }
 
     // STEP 1: Try to find subscription by Stripe subscription ID
     let subscription = null
