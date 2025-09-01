@@ -317,7 +317,11 @@ export async function GET() {
           take: 1
         },
         payments: {
-          orderBy: { createdAt: 'desc' },
+          where: { amount: { gt: 0 } },
+          orderBy: [
+            { processedAt: 'desc' },
+            { createdAt: 'desc' }
+          ],
           take: 5,
           include: {
             routedEntity: { select: { displayName: true } }
@@ -341,7 +345,11 @@ export async function GET() {
 
     // Get recent payments with detailed info
     const payments = await prisma.payment.findMany({
-      orderBy: { createdAt: 'desc' },
+      where: { amount: { gt: 0 } },
+      orderBy: [
+        { processedAt: 'desc' },
+        { createdAt: 'desc' }
+      ],
       take: 50,
       include: {
         user: { select: { firstName: true, lastName: true, email: true } },
