@@ -43,7 +43,8 @@ export async function POST(
       const invoiceId = extractTag(payment.description || undefined, 'inv')
       if (invoiceId) {
         const inv = await stripe.invoices.retrieve(invoiceId)
-        paymentIntentId = (inv.payment_intent as string) || null
+        // Cast to any to avoid Stripe TS helper Response<T> property access issue during build
+        paymentIntentId = ((inv as any).payment_intent as string) || null
       }
     }
     if (!paymentIntentId) {
