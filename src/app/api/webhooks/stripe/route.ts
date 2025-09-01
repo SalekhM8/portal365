@@ -26,6 +26,10 @@ export async function POST(request: NextRequest) {
       case 'invoice.payment_succeeded':
         await handlePaymentSucceeded(event.data.object)
         break
+      case 'invoice.paid':
+        // When invoices are paid manually via API (retry) Stripe may emit invoice.paid
+        await handlePaymentSucceeded(event.data.object)
+        break
       case 'invoice.payment_failed':
         await handlePaymentFailed(event.data.object)
         break
