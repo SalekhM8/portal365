@@ -54,19 +54,6 @@ export async function POST(
     // Determine refund amount (in pence)
     const amountInPence = amountPounds !== undefined ? Math.round(amountPounds * 100) : undefined
 
-    // Check refundable remaining
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
-    const chargeId = (pi.charges?.data?.[0]?.id as string) || undefined
-    if (!chargeId) {
-      return NextResponse.json({ error: 'No charge found on payment intent' }, { status: 400 })
-    }
-    const refunds = await stripe.refunds.list({ charge: chargeId, limit: 100 })
-    const alreadyRefunded = refunds.data.reduce((sum, r) => sum + (r.amount || 0), 0)
-    const refundableRemaining = (pi.amount_received || 0) - alreadyRefunded
-    if (amountInPence !== undefined && amountInPence > refundableRemaining) {
-      return NextResponse.json({ error: 'Amount exceeds refundable remaining' }, { status: 400 })
-    }
-
     // Execute refund
     const refund = await stripe.refunds.create({
       payment_intent: paymentIntentId,
@@ -77,7 +64,7 @@ export async function POST(
     })
 
     // DB updates: full → mark payment REFUNDED; partial → insert negative row
-    if (!amountInPence || amountInPence === refundableRemaining) {
+    if (!amountInPence) {
       await prisma.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED', failureReason: reason || null, processedAt: new Date() } })
     } else {
       await prisma.payment.create({
