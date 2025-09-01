@@ -233,15 +233,39 @@ export async function handlePaymentFailed(invoice: any) {
     
     await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
     await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
+
+    // Try to enrich failure reason from the PaymentIntent last error
+    let failureReason = 'Payment declined'
+    try {
+      if (invoice.payment_intent) {
+        const pi = await stripe.paymentIntents.retrieve(invoice.payment_intent as string)
+        const err = (pi as any)?.last_payment_error
+        const code = err?.code as string | undefined
+        const message = err?.message as string | undefined
+        const codeMap: Record<string, string> = {
+          'insufficient_funds': 'Insufficient funds',
+          'card_declined': 'Card declined',
+          'expired_card': 'Card expired',
+          'incorrect_cvc': 'Incorrect CVC',
+          'incorrect_number': 'Incorrect card number',
+          'authentication_required': 'Authentication required',
+          'do_not_honor': 'Card issuer declined'
+        }
+        failureReason = codeMap[code || ''] || message || failureReason
+      }
+    } catch {}
+
+    const failedDescription = `Failed monthly membership payment [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''}`
+
     await prisma.payment.create({ 
       data: { 
         userId: subscription.userId, 
         amount: amountDue, 
         currency: invoice.currency.toUpperCase(), 
         status: 'FAILED', 
-        description: 'Failed monthly membership payment', 
+        description: failedDescription, 
         routedEntityId: subscription.routedEntityId, 
-        failureReason: 'Payment declined', 
+        failureReason, 
         processedAt: new Date() 
       } 
     })

@@ -1158,7 +1158,7 @@ function AdminDashboardContent() {
                         <td className="p-4 border-r border-white/5">
                           <div className="space-y-1">
                             <Badge variant={getStatusBadgeVariant(payment.status)}>
-                              {payment.status}
+                              {payment.status}{payment.status === 'FAILED' && (payment as any).failureReason ? ` (${(payment as any).failureReason})` : ''}
                             </Badge>
                             <div className="text-xs text-white/60">
                               <p>Processed in {payment.processingTime}s</p>

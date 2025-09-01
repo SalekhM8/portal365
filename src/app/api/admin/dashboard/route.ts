@@ -365,6 +365,48 @@ export async function GET() {
       }
     })
 
+    // Best-effort enrichment of failure reasons for recent failed payments lacking a reason
+    const enrichedFailureReasonById: Record<string, string> = {}
+    const failedNeedingReason = payments.filter((p: any) => p.status === 'FAILED' && !p.failureReason).slice(0, 10)
+    for (const p of failedNeedingReason) {
+      try {
+        const desc: string = p.description || ''
+        const piMatch = desc.match(/\[pi:([^\]]+)\]/)
+        const invMatch = desc.match(/\[inv:([^\]]+)\]/)
+        let paymentIntentId: string | null = piMatch?.[1] || null
+        if (!paymentIntentId && invMatch?.[1]) {
+          const inv = await stripe.invoices.retrieve(invMatch[1])
+          paymentIntentId = (inv as any)?.payment_intent || null
+        }
+        if (!paymentIntentId) {
+          // Fallback via Stripe customer: try to find a matching invoice around the payment time
+          const sub = await prisma.subscription.findFirst({ where: { userId: p.userId }, orderBy: { createdAt: 'desc' } })
+          if (sub?.stripeCustomerId) {
+            const list = await stripe.invoices.list({ customer: sub.stripeCustomerId, limit: 5 })
+            const candidate = list.data.find(i => (i.amount_due || 0) === Math.round(Number(p.amount) * 100))
+            if (candidate) paymentIntentId = (candidate as any)?.payment_intent || null
+          }
+        }
+        if (paymentIntentId) {
+          const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
+          const err = (pi as any)?.last_payment_error
+          const code = err?.code as string | undefined
+          const message = err?.message as string | undefined
+          const codeMap: Record<string, string> = {
+            'insufficient_funds': 'Insufficient funds',
+            'card_declined': 'Card declined',
+            'expired_card': 'Card expired',
+            'incorrect_cvc': 'Incorrect CVC',
+            'incorrect_number': 'Incorrect card number',
+            'authentication_required': 'Authentication required',
+            'do_not_honor': 'Card issuer declined'
+          }
+          const reason = codeMap[code || ''] || message
+          if (reason) enrichedFailureReasonById[p.id] = reason
+        }
+      } catch {}
+    }
+
     // Identify incomplete signups (proration now, but initial payment not completed)
     // Criteria: subscription status in PENDING_PAYMENT/INCOMPLETE/INCOMPLETE_EXPIRED
     // and latest invoice not paid; no confirmed payments since subscription creation
@@ -534,6 +576,7 @@ export async function GET() {
       routingReason: payment.routing?.routingReason || 'Standard routing',
       timestamp: payment.createdAt.toISOString(),
       status: payment.status,
+      failureReason: payment.failureReason || enrichedFailureReasonById[payment.id],
       goCardlessId: payment.goCardlessPaymentId || 'N/A',
       retryCount: payment.retryCount,
       processingTime: payment.routing?.decisionTimeMs || 0,
