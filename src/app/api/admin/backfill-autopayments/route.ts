@@ -34,12 +34,12 @@ export async function POST(request: NextRequest) {
     
     // Fetch all paid invoices from Stripe
     console.log('📡 Fetching paid invoices from Stripe...')
-    let allStripeInvoices = []
+    let allStripeInvoices: any[] = []
     let hasMore = true
-    let startingAfter = undefined
+    let startingAfter: string | undefined = undefined
 
     while (hasMore) {
-      const batch = await stripe.invoices.list({
+      const batch: any = await stripe.invoices.list({
         status: 'paid',
         created: { gte: ninetyDaysAgo },
         limit: 100,
