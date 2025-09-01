@@ -48,7 +48,8 @@ export async function POST(
     } else if (overrideInvoiceId) {
       try {
         const inv = await stripe.invoices.retrieve(overrideInvoiceId)
-        if (inv && inv.charge) chargeId = inv.charge as string
+        const ch = (inv as any)?.charge
+        if (ch) chargeId = ch as string
       } catch {}
       if (!chargeId) return NextResponse.json({ error: 'Invalid Stripe invoice id provided' }, { status: 400 })
     } else if (!chargeId) {
