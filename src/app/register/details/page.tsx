@@ -68,6 +68,8 @@ function RegisterDetailsContent() {
     password: '',
     confirmPassword: '',
     phone: '',
+    address: '',
+    postcode: '',
     dateOfBirth: '',
     emergencyContact: {
       name: '',
@@ -325,6 +327,26 @@ function RegisterDetailsContent() {
                           onChange={(e) => handleInputChange('phone', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
                           placeholder="Enter phone number"
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="address" className="text-white/90">Address</Label>
+                        <Input
+                          id="address"
+                          value={formData.address}
+                          onChange={(e) => handleInputChange('address', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="House/Flat, Street, City"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="postcode" className="text-white/90">Post Code</Label>
+                        <Input
+                          id="postcode"
+                          value={formData.postcode}
+                          onChange={(e) => handleInputChange('postcode', e.target.value)}
+                          className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          placeholder="e.g., UB1 1AA"
                         />
                       </div>
                     </div>

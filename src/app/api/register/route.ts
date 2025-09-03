@@ -11,6 +11,8 @@ const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   phone: z.string().optional(),
+  address: z.string().optional(),
+  postcode: z.string().optional(),
   dateOfBirth: z.string().optional(),
   emergencyContact: z.object({
     name: z.string(),
@@ -96,8 +98,14 @@ export async function POST(request: NextRequest) {
       email: validatedData.email,
       password: hashedPassword,
       phone: validatedData.phone,
+      // Store address data in emergencyContact blob for now (no schema change)
+      emergencyContact: (() => {
+        const base = emergencyContactPayload ? { ...(emergencyContactPayload || {}) } : {}
+        const addressBlock = (validatedData.address || validatedData.postcode) ? { address: validatedData.address || '', postcode: validatedData.postcode || '' } : {}
+        const merged = { ...base, ...(Object.keys(addressBlock).length ? { addressInfo: addressBlock } : {}) }
+        return Object.keys(merged).length ? JSON.stringify(merged) : null
+      })(),
       dateOfBirth: validatedData.dateOfBirth ? new Date(validatedData.dateOfBirth) : null,
-      emergencyContact: emergencyContactPayload ? JSON.stringify(emergencyContactPayload) : null,
       role: 'CUSTOMER',
       status: 'ACTIVE'
     }

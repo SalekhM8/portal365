@@ -1429,6 +1429,17 @@ function AdminDashboardContent() {
                   <p className="text-white"><strong className="text-white/90">Name:</strong> {selectedCustomer.name}</p>
                   <p className="text-white"><strong className="text-white/90">Email:</strong> {selectedCustomer.email}</p>
                   <p className="text-white"><strong className="text-white/90">Phone:</strong> {selectedCustomer.phone}</p>
+                  {(() => {
+                    // Address injected into emergencyContact.addressInfo without schema changes
+                    const addr = (selectedCustomer as any)?.emergencyContact?.addressInfo
+                    if (!addr) return null
+                    return (
+                      <>
+                        <p className="text-white"><strong className="text-white/90">Address:</strong> {addr.address || '—'}</p>
+                        <p className="text-white"><strong className="text-white/90">Post Code:</strong> {addr.postcode || '—'}</p>
+                      </>
+                    )
+                  })()}
                   {selectedCustomer.phone && (
                     <div className="flex gap-2 mt-2">
                       <Button variant="outline" asChild>
