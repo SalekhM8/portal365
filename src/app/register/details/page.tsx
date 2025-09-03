@@ -787,6 +787,31 @@ function RegisterDetailsContent() {
                   <h3 className="text-xl font-bold text-white">Legal Acknowledgment</h3>
                 </div>
 
+                {/* Payment Authorization & Mandate */}
+                <div className="bg-purple-500/10 border border-purple-500/30 p-6 rounded-lg">
+                  <h4 className="font-semibold text-purple-300 mb-3">Payment Authorization & Mandate</h4>
+                  <ul className="text-sm leading-relaxed space-y-2 list-disc pl-5">
+                    <li>
+                      By submitting this form and completing payment setup, I authorize Aura MMA ("the Gym") to charge the payment method I provide for the membership selected, including recurring monthly charges on or after the 1st of each month, and any prorated or adjusted amounts disclosed during sign‑up.
+                    </li>
+                    <li>
+                      I consent to off‑session charges using my saved payment method for ongoing membership fees. Strong Customer Authentication (e.g., 3‑D Secure) may be requested when required by my bank or card issuer.
+                    </li>
+                    <li>
+                      I confirm I am the authorized holder of the payment method and have authority to grant this authorization. This authorization remains in effect until I cancel my membership in accordance with the Cancellation section below.
+                    </li>
+                    <li>
+                      The Gym will provide at least 30 days’ notice by email/SMS before any change to recurring membership fees. Continued membership after the notice period constitutes acceptance of the new fee.
+                    </li>
+                    <li>
+                      If a payment is declined, the Gym may attempt retries. Repeated failures may result in suspension of access and an administrative fee as stated in these Terms.
+                    </li>
+                    <li>
+                      Direct Debit (if used in the future): Where a bank account is used (e.g., UK Bacs Direct Debit), I will be shown a Direct Debit mandate during setup. By accepting the mandate I authorize payments per that mandate and applicable scheme rules (including the Direct Debit Guarantee). My mandate reference will be provided in my confirmation.
+                    </li>
+                  </ul>
+                </div>
+
                 <div className="bg-amber-500/10 border border-amber-500/30 p-6 rounded-lg">
                   <h4 className="font-semibold text-amber-300 mb-3 flex items-center gap-2">
                     <Scale className="h-5 w-5" />
