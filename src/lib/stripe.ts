@@ -135,7 +135,8 @@ export class SubscriptionProcessor {
             membershipType: request.membershipType,
             routedEntityId: routing.selectedEntityId,
             nextBillingDate: startDate.toISOString().split('T')[0],
-            reason: 'admin_created_setup'
+            reason: 'admin_created_setup',
+            dbSubscriptionId: dbSubscription.id
           }
         })
 
@@ -212,6 +213,22 @@ export class SubscriptionProcessor {
           nextBillingDate: startDate
         }
       })
+
+      // Add dbSubscriptionId to PaymentIntent metadata for webhook activation (e.g., Klarna async success)
+      try {
+        await stripe.paymentIntents.update(paymentIntent.id, {
+          metadata: {
+            userId: request.userId,
+            membershipType: request.membershipType,
+            routedEntityId: routing.selectedEntityId,
+            nextBillingDate: startDate.toISOString().split('T')[0],
+            reason: 'prorated_first_period',
+            dbSubscriptionId: dbSubscription.id
+          }
+        })
+      } catch (e) {
+        console.warn('Unable to update PaymentIntent metadata with dbSubscriptionId', e)
+      }
 
       await prisma.subscriptionRouting.create({
         data: {

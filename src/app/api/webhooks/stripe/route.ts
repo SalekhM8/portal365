@@ -47,6 +47,20 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.deleted':
         await handleSubscriptionCancelled(event.data.object)
         break
+      case 'payment_intent.succeeded':
+        // Handle async success (e.g., Klarna) to activate pending signups
+        try {
+          const pi: any = event.data.object
+          const metadata = pi.metadata || {}
+          if (metadata?.reason === 'prorated_first_period' && metadata?.dbSubscriptionId) {
+            // Reuse our confirm-payment logic server-side
+            const { activateFromPaymentIntent } = await import('./handlers') as any
+            if (activateFromPaymentIntent) {
+              await activateFromPaymentIntent(pi)
+            }
+          }
+        } catch {}
+        break
       default:
         // ignore
         break

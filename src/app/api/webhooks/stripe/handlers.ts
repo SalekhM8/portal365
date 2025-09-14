@@ -403,3 +403,44 @@ export async function handleSubscriptionCancelled(stripeSubscription: any) {
     throw error
   }
 } 
+
+// Activate placeholder subscription from a succeeded PaymentIntent (e.g., Klarna)
+export async function activateFromPaymentIntent(pi: any) {
+  const dbSubId = (pi?.metadata && (pi.metadata as any).dbSubscriptionId) || undefined
+  const userId = (pi?.metadata && (pi.metadata as any).userId) || undefined
+  if (!dbSubId && !userId) return
+
+  let dbSub = null as any
+  if (dbSubId) {
+    dbSub = await prisma.subscription.findUnique({ where: { id: dbSubId } })
+  }
+  if (!dbSub && userId) {
+    dbSub = await prisma.subscription.findFirst({ where: { userId, status: 'PENDING_PAYMENT' }, orderBy: { createdAt: 'desc' } })
+  }
+  if (!dbSub) return
+
+  // Idempotency: if already has a real Stripe sub, skip
+  if (dbSub.stripeSubscriptionId && (dbSub.stripeSubscriptionId as string).startsWith('sub_')) return
+
+  // Build price and create Stripe subscription starting next billing
+  const membershipType = dbSub.membershipType
+  const nextBilling = new Date(dbSub.nextBillingDate)
+  const trialEndTimestamp = Math.floor(nextBilling.getTime() / 1000)
+
+  // Get price via lightweight helper from confirm-payment handler
+  const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any
+  const priceId = await getOrCreatePrice({ monthlyPrice: Number(dbSub.monthlyPrice), name: membershipType })
+
+  const stripeSubscription = await stripe.subscriptions.create({
+    customer: pi.customer as string,
+    items: [{ price: priceId }],
+    collection_method: 'charge_automatically',
+    trial_end: trialEndTimestamp,
+    proration_behavior: 'none',
+    payment_behavior: 'default_incomplete',
+    metadata: { userId: dbSub.userId, membershipType: dbSub.membershipType, routedEntityId: dbSub.routedEntityId, dbSubscriptionId: dbSub.id }
+  }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
+
+  await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
+  await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+}
