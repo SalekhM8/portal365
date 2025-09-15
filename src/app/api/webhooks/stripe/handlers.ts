@@ -443,4 +443,40 @@ export async function activateFromPaymentIntent(pi: any) {
 
   await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
   await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+
+  // Write initial prorated payment row if missing (idempotent)
+  try {
+    const amountReceived = (pi?.amount_received ?? pi?.amount ?? 0) as number
+    const currency = ((pi?.currency as string) || 'gbp').toUpperCase()
+    const amountPounds = amountReceived / 100
+
+    if (amountPounds > 0) {
+      const existingPayment = await prisma.payment.findFirst({
+        where: {
+          userId: dbSub.userId,
+          status: 'CONFIRMED',
+          amount: amountPounds,
+          currency,
+          description: { contains: 'Initial subscription payment (prorated)' }
+        },
+        orderBy: { createdAt: 'desc' }
+      })
+
+      if (!existingPayment) {
+        await prisma.payment.create({
+          data: {
+            userId: dbSub.userId,
+            amount: amountPounds,
+            currency,
+            status: 'CONFIRMED',
+            description: `Initial subscription payment (prorated) [pi:${pi?.id}]`,
+            routedEntityId: dbSub.routedEntityId,
+            processedAt: new Date()
+          }
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('activateFromPaymentIntent: unable to write prorated payment row', e)
+  }
 }
