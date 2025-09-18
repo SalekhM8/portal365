@@ -196,14 +196,21 @@ export async function handlePaymentFailed(invoice: any) {
   try {
     console.log(`🔄 [${operationId}] Processing failed payment: ${invoiceId}`)
     
-    const subscriptionId = invoice.subscription
+    // Be tolerant to payload shapes where the subscription id is not at the top level
+    const subscriptionIdTop = invoice.subscription
+    const subscriptionIdFromLines = invoice?.lines?.data?.[0]?.parent?.subscription_details?.subscription
+    const subscriptionIdFromParent = invoice?.parent?.subscription_details?.subscription
+    const subscriptionId = subscriptionIdTop || subscriptionIdFromLines || subscriptionIdFromParent
     const amountDue = invoice.amount_due / 100
     
     // Use same robust mapping as handlePaymentSucceeded
-    let subscription = await prisma.subscription.findUnique({ 
-      where: { stripeSubscriptionId: subscriptionId }, 
-      include: { user: true } 
-    })
+    let subscription = null
+    if (subscriptionId) {
+      subscription = await prisma.subscription.findUnique({ 
+        where: { stripeSubscriptionId: subscriptionId }, 
+        include: { user: true } 
+      })
+    }
     
     // Customer fallback for failed payments too
     if (!subscription && invoice.customer) {
