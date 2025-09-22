@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const emails: string[] = body?.emails || []
     const sinceIso: string | undefined = body?.sinceIso
+    const forceCustomerLookup: boolean = body?.forceCustomerLookup === true
     const since = sinceIso ? new Date(sinceIso) : new Date(Date.now() - 7*24*60*60*1000)
 
     if (!Array.isArray(emails) || emails.length === 0) {
@@ -37,9 +38,11 @@ export async function POST(request: NextRequest) {
 
       let imported = 0
       let examined = 0
+      const processedCustomerIds = new Set<string>()
 
       for (const sub of subs) {
         if (!sub.stripeCustomerId) continue
+        processedCustomerIds.add(sub.stripeCustomerId)
         const invs: any = await stripe.invoices.list({ customer: sub.stripeCustomerId, status: 'paid', created: { gte: Math.floor(since.getTime()/1000) }, limit: 100 })
         for (const inv of invs.data) {
           examined++
@@ -121,6 +124,88 @@ export async function POST(request: NextRequest) {
 
           imported++
         }
+      }
+
+      // Optional fallback: also fetch by Stripe customer via email (covers legacy users where local customerId is missing/mismatched)
+      if (forceCustomerLookup || processedCustomerIds.size === 0) {
+        try {
+          const customerList = await stripe.customers.list({ email, limit: 5 })
+          for (const cust of customerList.data) {
+            if (!cust.id || processedCustomerIds.has(cust.id)) continue
+            processedCustomerIds.add(cust.id)
+            const invs: any = await stripe.invoices.list({ customer: cust.id, status: 'paid', created: { gte: Math.floor(since.getTime()/1000) }, limit: 100 })
+            for (const inv of invs.data) {
+              examined++
+              const amountPaid = Number(inv.amount_paid || 0) / 100
+              if (!amountPaid || amountPaid <= 0) continue
+
+              const exists = await prisma.invoice.findUnique({ where: { stripeInvoiceId: inv.id } })
+              if (exists) {
+                // Ensure payment exists
+                const paidAtMs = (inv.status_transitions?.paid_at || inv.created) * 1000
+                const paidAt = new Date(paidAtMs)
+                const existingPayment = await prisma.payment.findFirst({
+                  where: {
+                    userId: user.id,
+                    status: 'CONFIRMED',
+                    OR: [
+                      { description: { contains: `[inv:${inv.id}]` } },
+                      { amount: amountPaid }
+                    ]
+                  }
+                })
+                if (!existingPayment) {
+                  // Attach to latest subscription for this user
+                  const targetSub = subs[0]
+                  await prisma.payment.create({
+                    data: {
+                      userId: user.id,
+                      amount: amountPaid,
+                      currency: (inv.currency || 'gbp').toUpperCase(),
+                      status: 'CONFIRMED',
+                      description: `Monthly membership payment (imported) [inv:${inv.id}]`,
+                      routedEntityId: targetSub?.routedEntityId || subs[0]?.routedEntityId,
+                      processedAt: paidAt
+                    }
+                  })
+                  imported++
+                }
+                continue
+              }
+
+              // Create invoice + payment linked to latest subscription
+              const targetSub = subs[0]
+              if (!targetSub) continue
+              await prisma.invoice.create({
+                data: {
+                  subscriptionId: targetSub.id,
+                  stripeInvoiceId: inv.id,
+                  amount: amountPaid,
+                  currency: (inv.currency || 'gbp').toUpperCase(),
+                  status: inv.status,
+                  billingPeriodStart: new Date((inv.period_start || inv.lines?.data?.[0]?.period?.start || inv.created) * 1000),
+                  billingPeriodEnd: new Date((inv.period_end || inv.lines?.data?.[0]?.period?.end || inv.created) * 1000),
+                  dueDate: new Date((inv.status_transitions?.paid_at || inv.created) * 1000),
+                  paidAt: new Date((inv.status_transitions?.paid_at || inv.created) * 1000)
+                }
+              })
+              await prisma.payment.create({
+                data: {
+                  userId: user.id,
+                  amount: amountPaid,
+                  currency: (inv.currency || 'gbp').toUpperCase(),
+                  status: 'CONFIRMED',
+                  description: `Monthly membership payment (imported) [inv:${inv.id}]`,
+                  routedEntityId: targetSub.routedEntityId,
+                  processedAt: new Date((inv.status_transitions?.paid_at || inv.created) * 1000)
+                }
+              })
+              await prisma.subscription.update({ where: { id: targetSub.id }, data: { status: 'ACTIVE' } })
+              await prisma.membership.updateMany({ where: { userId: user.id }, data: { status: 'ACTIVE' } })
+              imported++
+            }
+          }
+        } catch {}
       }
 
       results.push({ email, examined, imported })
