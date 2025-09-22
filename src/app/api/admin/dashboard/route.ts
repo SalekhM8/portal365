@@ -350,7 +350,7 @@ export async function GET() {
         { processedAt: 'desc' },
         { createdAt: 'desc' }
       ],
-      take: 50,
+      take: 500,
       include: {
         user: { select: { firstName: true, lastName: true, email: true } },
         routedEntity: { select: { displayName: true } },

@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     const emails: string[] = body?.emails || []
     const sinceIso: string | undefined = body?.sinceIso
     const forceCustomerLookup: boolean = body?.forceCustomerLookup === true
+    const reassignAcrossUsers: boolean = body?.reassignAcrossUsers === true
     const since = sinceIso ? new Date(sinceIso) : new Date(Date.now() - 7*24*60*60*1000)
 
     if (!Array.isArray(emails) || emails.length === 0) {
@@ -49,31 +50,20 @@ export async function POST(request: NextRequest) {
           const amountPaid = Number(inv.amount_paid || 0) / 100
           if (!amountPaid || amountPaid <= 0) continue
           const exists = await prisma.invoice.findUnique({ where: { stripeInvoiceId: inv.id } })
-          // If invoice already exists, ensure a matching CONFIRMED payment row also exists; if not, create it (idempotent backfill)
+          // If invoice already exists, ensure a matching CONFIRMED payment row exists for this user;
+          // if a payment exists for another user and reassignAcrossUsers=true, reassign it.
           if (exists) {
             const paidAtMs = (inv.status_transitions?.paid_at || inv.created) * 1000
             const paidAt = new Date(paidAtMs)
-            const existingPayment = await prisma.payment.findFirst({
-              where: {
-                userId: user.id,
-                status: 'CONFIRMED',
-                OR: [
-                  { description: { contains: `[inv:${inv.id}]` } },
-                  {
-                    AND: [
-                      { amount: amountPaid },
-                      {
-                        processedAt: {
-                          gte: new Date(paidAtMs - 7 * 24 * 60 * 60 * 1000),
-                          lte: new Date(paidAtMs + 7 * 24 * 60 * 60 * 1000)
-                        }
-                      }
-                    ]
-                  }
-                ]
+            // Any payment with this invoice tag, regardless of user
+            const paymentAnyUser = await prisma.payment.findFirst({ where: { description: { contains: `[inv:${inv.id}]` } } })
+            if (paymentAnyUser) {
+              if (paymentAnyUser.userId !== user.id && reassignAcrossUsers) {
+                await prisma.payment.update({ where: { id: paymentAnyUser.id }, data: { userId: user.id } })
+                imported++
               }
-            })
-            if (!existingPayment) {
+            } else {
+              // No payment anywhere → create for this user
               await prisma.payment.create({
                 data: {
                   userId: user.id,
@@ -141,20 +131,16 @@ export async function POST(request: NextRequest) {
 
               const exists = await prisma.invoice.findUnique({ where: { stripeInvoiceId: inv.id } })
               if (exists) {
-                // Ensure payment exists
+                // Ensure payment exists; if it exists under a different user, optionally reassign
                 const paidAtMs = (inv.status_transitions?.paid_at || inv.created) * 1000
                 const paidAt = new Date(paidAtMs)
-                const existingPayment = await prisma.payment.findFirst({
-                  where: {
-                    userId: user.id,
-                    status: 'CONFIRMED',
-                    OR: [
-                      { description: { contains: `[inv:${inv.id}]` } },
-                      { amount: amountPaid }
-                    ]
+                const paymentAnyUser = await prisma.payment.findFirst({ where: { description: { contains: `[inv:${inv.id}]` } } })
+                if (paymentAnyUser) {
+                  if (paymentAnyUser.userId !== user.id && reassignAcrossUsers) {
+                    await prisma.payment.update({ where: { id: paymentAnyUser.id }, data: { userId: user.id } })
+                    imported++
                   }
-                })
-                if (!existingPayment) {
+                } else {
                   // Attach to latest subscription for this user
                   const targetSub = subs[0]
                   await prisma.payment.create({
