@@ -13,6 +13,8 @@
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:setup": "prisma generate && prisma db push && npx tsx prisma/seed.ts",
+    "db:clone:prod": "bash scripts/clone_prod_to_local.sh",
+    "db:clone:prod:prisma": "node -e \"console.error('Set PROD_PRISMA_DATABASE_URL to prisma+postgres URL and ensure DATABASE_URL points to your local DB.');\" && npx tsx scripts/clone_from_prod_via_prisma.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -48,7 +50,6 @@
     "gocardless-nodejs": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
     "lightningcss": "^1.26.0",
-    "lightningcss-linux-x64-gnu": "^1.26.0",
     "lucide-react": "^0.525.0",
     "next": "15.4.1",
     "next-auth": "^4.24.11",

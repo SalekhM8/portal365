@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import "tw-animate-css";
+/* Removed tw-animate-css import to fix local build parsing error */
 
 /* Premium Black/White Theme Design Tokens */
 :root {
@@ -78,7 +78,11 @@
 @layer components {
   /* Enhanced glass morphism effect */
   .glass-card {
-    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl;
+    @apply border rounded-xl shadow-2xl;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.10);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
   }
   
   /* Premium gradient text */
@@ -92,17 +96,22 @@
   }
   
   .btn-premium::before {
-    @apply absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] transition-transform duration-700;
+    @apply absolute inset-0 transition-transform duration-700;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
+    transform: translateX(-100%);
     content: '';
   }
   
   .btn-premium:hover::before {
-    @apply translate-x-[100%];
+    transform: translateX(100%);
   }
   
   /* Premium focus styles */
   .focus-premium {
-    @apply focus:outline-none focus:ring-2 focus:ring-white/30 focus:ring-offset-2 focus:ring-offset-black;
+    @apply focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black;
+  }
+  .focus-premium:focus {
+    --tw-ring-opacity: 0.3;
   }
   
   /* Mobile optimizations */

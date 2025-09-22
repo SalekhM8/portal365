@@ -46,7 +46,46 @@ export async function POST(request: NextRequest) {
           const amountPaid = Number(inv.amount_paid || 0) / 100
           if (!amountPaid || amountPaid <= 0) continue
           const exists = await prisma.invoice.findUnique({ where: { stripeInvoiceId: inv.id } })
-          if (exists) continue
+          // If invoice already exists, ensure a matching CONFIRMED payment row also exists; if not, create it (idempotent backfill)
+          if (exists) {
+            const paidAtMs = (inv.status_transitions?.paid_at || inv.created) * 1000
+            const paidAt = new Date(paidAtMs)
+            const existingPayment = await prisma.payment.findFirst({
+              where: {
+                userId: user.id,
+                status: 'CONFIRMED',
+                OR: [
+                  { description: { contains: `[inv:${inv.id}]` } },
+                  {
+                    AND: [
+                      { amount: amountPaid },
+                      {
+                        processedAt: {
+                          gte: new Date(paidAtMs - 7 * 24 * 60 * 60 * 1000),
+                          lte: new Date(paidAtMs + 7 * 24 * 60 * 60 * 1000)
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            })
+            if (!existingPayment) {
+              await prisma.payment.create({
+                data: {
+                  userId: user.id,
+                  amount: amountPaid,
+                  currency: (inv.currency || 'gbp').toUpperCase(),
+                  status: 'CONFIRMED',
+                  description: `Monthly membership payment (imported) [inv:${inv.id}]`,
+                  routedEntityId: sub.routedEntityId,
+                  processedAt: paidAt
+                }
+              })
+              imported++
+            }
+            continue
+          }
 
           // Create invoice
           const invoiceRecord = await prisma.invoice.create({
@@ -74,7 +113,7 @@ export async function POST(request: NextRequest) {
               amount: amountPaid,
               currency: (inv.currency || 'gbp').toUpperCase(),
               status: 'CONFIRMED',
-              description: 'Monthly membership payment (imported)',
+              description: `Monthly membership payment (imported) [inv:${inv.id}]`,
               routedEntityId: sub.routedEntityId,
               processedAt: new Date((inv.status_transitions?.paid_at || inv.created) * 1000)
             }
