@@ -156,7 +156,15 @@ async function main() {
   }
 
   console.log('👤 Upserting local admin (admin@portal365.com / admin123)')
-  await (await import('./upsert_admin')).default?.catch?.(() => {})
+  try {
+    const mod = await import('./upsert_admin')
+    const fn = (mod as any).default
+    if (typeof fn === 'function') {
+      await fn()
+    }
+  } catch {
+    // no-op in build environments where this script isn't executed
+  }
 
   await prod.$disconnect()
   await local.$disconnect()
