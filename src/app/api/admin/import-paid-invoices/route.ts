@@ -63,18 +63,37 @@ export async function POST(request: NextRequest) {
                 imported++
               }
             } else {
-              // No payment anywhere → create for this user
-              await prisma.payment.create({
-                data: {
+              // No payment with this invoice id anywhere → prefer tagging an existing same-day payment, else create
+              const dayStart = new Date(paidAt)
+              dayStart.setHours(0,0,0,0)
+              const dayEnd = new Date(paidAt)
+              dayEnd.setHours(23,59,59,999)
+              const sameDay = await prisma.payment.findFirst({
+                where: {
                   userId: user.id,
-                  amount: amountPaid,
-                  currency: (inv.currency || 'gbp').toUpperCase(),
                   status: 'CONFIRMED',
-                  description: `Monthly membership payment (imported) [inv:${inv.id}]`,
-                  routedEntityId: sub.routedEntityId,
-                  processedAt: paidAt
+                  amount: amountPaid,
+                  processedAt: { gte: dayStart, lte: dayEnd }
                 }
               })
+              if (sameDay) {
+                const desc = sameDay.description || 'Monthly membership payment'
+                if (!desc.includes(`[inv:${inv.id}]`)) {
+                  await prisma.payment.update({ where: { id: sameDay.id }, data: { description: `${desc} [inv:${inv.id}]` } })
+                }
+              } else {
+                await prisma.payment.create({
+                  data: {
+                    userId: user.id,
+                    amount: amountPaid,
+                    currency: (inv.currency || 'gbp').toUpperCase(),
+                    status: 'CONFIRMED',
+                    description: `Monthly membership payment (imported) [inv:${inv.id}]`,
+                    routedEntityId: sub.routedEntityId,
+                    processedAt: paidAt
+                  }
+                })
+              }
               imported++
             }
             continue
@@ -99,18 +118,32 @@ export async function POST(request: NextRequest) {
           await prisma.subscription.update({ where: { id: sub.id }, data: { status: 'ACTIVE', currentPeriodStart: new Date(sub.currentPeriodStart), currentPeriodEnd: new Date(sub.currentPeriodEnd) } })
           await prisma.membership.updateMany({ where: { userId: user.id }, data: { status: 'ACTIVE' } })
 
-          // Create payment
-          await prisma.payment.create({
-            data: {
-              userId: user.id,
-              amount: amountPaid,
-              currency: (inv.currency || 'gbp').toUpperCase(),
-              status: 'CONFIRMED',
-              description: `Monthly membership payment (imported) [inv:${inv.id}]`,
-              routedEntityId: sub.routedEntityId,
-              processedAt: new Date((inv.status_transitions?.paid_at || inv.created) * 1000)
-            }
+          // Create/Tag payment idempotently (same-day, same-amount)
+          const paidAtMsCreate = (inv.status_transitions?.paid_at || inv.created) * 1000
+          const paidAtCreate = new Date(paidAtMsCreate)
+          const dayStartCreate = new Date(paidAtCreate); dayStartCreate.setHours(0,0,0,0)
+          const dayEndCreate = new Date(paidAtCreate); dayEndCreate.setHours(23,59,59,999)
+          const sameDayExistingCreate = await prisma.payment.findFirst({
+            where: { userId: user.id, status: 'CONFIRMED', amount: amountPaid, processedAt: { gte: dayStartCreate, lte: dayEndCreate } }
           })
+          if (sameDayExistingCreate) {
+            const desc = sameDayExistingCreate.description || 'Monthly membership payment'
+            if (!desc.includes(`[inv:${inv.id}]`)) {
+              await prisma.payment.update({ where: { id: sameDayExistingCreate.id }, data: { description: `${desc} [inv:${inv.id}]` } })
+            }
+          } else {
+            await prisma.payment.create({
+              data: {
+                userId: user.id,
+                amount: amountPaid,
+                currency: (inv.currency || 'gbp').toUpperCase(),
+                status: 'CONFIRMED',
+                description: `Monthly membership payment (imported) [inv:${inv.id}]`,
+                routedEntityId: sub.routedEntityId,
+                processedAt: paidAtCreate
+              }
+            })
+          }
 
           imported++
         }
@@ -141,19 +174,31 @@ export async function POST(request: NextRequest) {
                     imported++
                   }
                 } else {
-                  // Attach to latest subscription for this user
+                  // Attach or tag latest subscription for this user idempotently
                   const targetSub = subs[0]
-                  await prisma.payment.create({
-                    data: {
-                      userId: user.id,
-                      amount: amountPaid,
-                      currency: (inv.currency || 'gbp').toUpperCase(),
-                      status: 'CONFIRMED',
-                      description: `Monthly membership payment (imported) [inv:${inv.id}]`,
-                      routedEntityId: targetSub?.routedEntityId || subs[0]?.routedEntityId,
-                      processedAt: paidAt
-                    }
+                  const dayStart = new Date(paidAt); dayStart.setHours(0,0,0,0)
+                  const dayEnd = new Date(paidAt); dayEnd.setHours(23,59,59,999)
+                  const sameDay = await prisma.payment.findFirst({
+                    where: { userId: user.id, status: 'CONFIRMED', amount: amountPaid, processedAt: { gte: dayStart, lte: dayEnd } }
                   })
+                  if (sameDay) {
+                    const desc = sameDay.description || 'Monthly membership payment'
+                    if (!desc.includes(`[inv:${inv.id}]`)) {
+                      await prisma.payment.update({ where: { id: sameDay.id }, data: { description: `${desc} [inv:${inv.id}]` } })
+                    }
+                  } else {
+                    await prisma.payment.create({
+                      data: {
+                        userId: user.id,
+                        amount: amountPaid,
+                        currency: (inv.currency || 'gbp').toUpperCase(),
+                        status: 'CONFIRMED',
+                        description: `Monthly membership payment (imported) [inv:${inv.id}]`,
+                        routedEntityId: targetSub?.routedEntityId || subs[0]?.routedEntityId,
+                        processedAt: paidAt
+                      }
+                    })
+                  }
                   imported++
                 }
                 continue
@@ -175,17 +220,32 @@ export async function POST(request: NextRequest) {
                   paidAt: new Date((inv.status_transitions?.paid_at || inv.created) * 1000)
                 }
               })
-              await prisma.payment.create({
-                data: {
-                  userId: user.id,
-                  amount: amountPaid,
-                  currency: (inv.currency || 'gbp').toUpperCase(),
-                  status: 'CONFIRMED',
-                  description: `Monthly membership payment (imported) [inv:${inv.id}]`,
-                  routedEntityId: targetSub.routedEntityId,
-                  processedAt: new Date((inv.status_transitions?.paid_at || inv.created) * 1000)
-                }
+              // Create/Tag payment idempotently
+              const paidAtMs2 = (inv.status_transitions?.paid_at || inv.created) * 1000
+              const paidAt2 = new Date(paidAtMs2)
+              const dayStart2 = new Date(paidAt2); dayStart2.setHours(0,0,0,0)
+              const dayEnd2 = new Date(paidAt2); dayEnd2.setHours(23,59,59,999)
+              const sameDay2 = await prisma.payment.findFirst({
+                where: { userId: user.id, status: 'CONFIRMED', amount: amountPaid, processedAt: { gte: dayStart2, lte: dayEnd2 } }
               })
+              if (sameDay2) {
+                const desc = sameDay2.description || 'Monthly membership payment'
+                if (!desc.includes(`[inv:${inv.id}]`)) {
+                  await prisma.payment.update({ where: { id: sameDay2.id }, data: { description: `${desc} [inv:${inv.id}]` } })
+                }
+              } else {
+                await prisma.payment.create({
+                  data: {
+                    userId: user.id,
+                    amount: amountPaid,
+                    currency: (inv.currency || 'gbp').toUpperCase(),
+                    status: 'CONFIRMED',
+                    description: `Monthly membership payment (imported) [inv:${inv.id}]`,
+                    routedEntityId: targetSub.routedEntityId,
+                    processedAt: paidAt2
+                  }
+                })
+              }
               await prisma.subscription.update({ where: { id: targetSub.id }, data: { status: 'ACTIVE' } })
               await prisma.membership.updateMany({ where: { userId: user.id }, data: { status: 'ACTIVE' } })
               imported++

@@ -146,20 +146,8 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
 
   const subscription = await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' }, include: { user: true } })
   await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
-  // Idempotency guard for payment row: skip if a matching payment already exists recently
-  const existingPayment = await prisma.payment.findFirst({
-    where: {
-      userId: subscription.userId,
-      status: 'CONFIRMED',
-      amount: (paymentIntent.amount as number) / 100,
-      currency: (paymentIntent.currency as string).toUpperCase(),
-      description: 'Initial subscription payment (prorated)'
-    }
-  })
-  if (!existingPayment) {
-    const taggedDescription = `Initial subscription payment (prorated) [pi:${paymentIntent.id}]`
-    await prisma.payment.create({ data: { userId: subscription.userId, amount: (paymentIntent.amount as number) / 100, currency: (paymentIntent.currency as string).toUpperCase(), status: 'CONFIRMED', description: taggedDescription, routedEntityId: subscription.routedEntityId, processedAt: new Date() } })
-  }
+  // Do not write a Payment here. The webhook (payment_intent.succeeded) is the single source of truth
+  // and will create the initial prorated payment row exactly once, idempotently.
 
   return NextResponse.json({ success: true, message: 'Payment confirmed and subscription activated', subscription: { id: subscription.id, status: subscription.status, userId: subscription.userId }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
 }
