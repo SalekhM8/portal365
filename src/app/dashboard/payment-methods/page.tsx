@@ -30,6 +30,9 @@ function PaymentMethodsInner() {
     // Handle redirect return from Stripe if present
     const setupIntentId = searchParams.get('setup_intent')
     const redirectStatus = searchParams.get('redirect_status')
+    const familySub = searchParams.get('family_sub')
+    const genericSub = searchParams.get('sub')
+    const clientSecretFromLink = searchParams.get('client_secret')
     if (setupIntentId && redirectStatus === 'succeeded') {
       // finalize by informing backend to set default payment method
       finalizePaymentMethod(setupIntentId)
@@ -39,8 +42,49 @@ function PaymentMethodsInner() {
           const url = new URL(window.location.href)
           url.searchParams.delete('setup_intent')
           url.searchParams.delete('redirect_status')
+          // For family activation: also finalize the child's subscription now that PM is saved
+          if (familySub) {
+            // Use confirm-payment with setupIntent path to create child subscription
+            fetch('/api/confirm-payment', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ setupIntentId, subscriptionId: familySub })
+            }).finally(() => {})
+            url.searchParams.delete('family_sub')
+          } else if (genericSub) {
+            // Generic resume path for main user subscriptions
+            fetch('/api/confirm-payment', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ setupIntentId, subscriptionId: genericSub })
+            }).finally(() => {})
+            url.searchParams.delete('sub')
+          }
           window.history.replaceState({}, '', url.toString())
         })
+    } else if (clientSecretFromLink && (familySub || genericSub)) {
+      // Family prorate SCA: confirm PaymentIntent and then finalize
+      (async () => {
+        try {
+          const stripeJs = await stripePromise
+          if (!stripeJs) return
+          const result = await stripeJs.confirmCardPayment(clientSecretFromLink)
+          if (result.error) {
+            setError(result.error.message || 'Payment confirmation failed')
+          } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+            await fetch('/api/confirm-payment', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paymentIntentId: result.paymentIntent.id, subscriptionId: familySub || genericSub })
+            })
+          }
+        } catch (e) {
+          // swallow
+        } finally {
+          const url = new URL(window.location.href)
+          url.searchParams.delete('client_secret')
+          if (familySub) url.searchParams.delete('family_sub')
+          if (genericSub) url.searchParams.delete('sub')
+          window.history.replaceState({}, '', url.toString())
+        }
+      })()
     } else if (session?.user?.email) {
       fetchPaymentMethods()
     }

@@ -23,6 +23,7 @@ interface PaymentData {
   date: string
   status: string
   description: string
+  memberId?: string
 }
 
 interface ClassData {
@@ -43,6 +44,8 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true)
   const [membershipData, setMembershipData] = useState<MembershipData | null>(null)
   const [paymentHistory, setPaymentHistory] = useState<PaymentData[]>([])
+  const [members, setMembers] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('ALL')
   const [upcomingClasses, setUpcomingClasses] = useState<ClassData[]>([])
   const [userData, setUserData] = useState<any>(null)
 
@@ -78,11 +81,25 @@ function DashboardContent() {
       }
       
       const data = await response.json()
-      
+
       // ✅ Set all data including user information
       setUserData(data.user)
       setMembershipData(data.membership)
-      setPaymentHistory(data.paymentHistory)
+      // Backwards compatibility: if new shape exists, remap; else use legacy paymentHistory
+      if (Array.isArray(data.paymentsWithMember) && Array.isArray(data.members)) {
+        setMembers([{ id: 'ALL', name: 'All' }, ...data.members])
+        const mapped: PaymentData[] = data.paymentsWithMember.map((p: any) => ({
+          id: p.id,
+          amount: p.amount,
+          date: p.date,
+          status: p.status,
+          description: `${p.description || 'Payment'} — ${p.memberName}`,
+          memberId: p.memberId
+        }))
+        setPaymentHistory(mapped)
+      } else {
+        setPaymentHistory(data.paymentHistory)
+      }
       setUpcomingClasses(data.classSchedule)
       
       console.log(`✅ Real customer data loaded for: ${data.user.firstName} ${data.user.lastName}`)
@@ -132,6 +149,40 @@ function DashboardContent() {
 
   return (
     <div className="container mx-auto p-4 lg:p-6 space-y-6 lg:space-y-8">
+      {/* Pending payment CTA */}
+      {membershipData?.status === 'PENDING_PAYMENT' && (
+        <div className="border border-yellow-500/30 bg-yellow-500/10 rounded-lg p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-yellow-200">Payment required to activate your membership</p>
+              <p className="text-yellow-200/80 text-sm">Complete your initial payment to unlock access. You won’t be charged again until the 1st of next month.</p>
+            </div>
+            <Button
+              onClick={async () => {
+                try {
+                  const resp = await fetch('/api/customers/membership/resume', { method: 'POST' })
+                  const json = await resp.json()
+                  if (!resp.ok || !json?.clientSecret) {
+                    alert(json?.error || 'Unable to resume payment, please try again.')
+                    return
+                  }
+                  if (json.mode === 'payment_intent') {
+                    router.push(`/register/payment?subscription_id=${encodeURIComponent(json.subscriptionId)}&client_secret=${encodeURIComponent(json.clientSecret)}`)
+                  } else if (json.mode === 'setup_intent') {
+                    router.push(`/dashboard/payment-methods?sub=${encodeURIComponent(json.subscriptionId)}&client_secret=${encodeURIComponent(json.clientSecret)}`)
+                  } else {
+                    alert('Unsupported resume mode')
+                  }
+                } catch (e) {
+                  alert('Network error. Please try again.')
+                }
+              }}
+            >
+              Complete setup
+            </Button>
+          </div>
+        </div>
+      )}
       {/* Header with Navigation */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
@@ -240,7 +291,7 @@ function DashboardContent() {
       </Card>
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="classes" className="space-y-6">
+        <Tabs defaultValue="classes" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 h-auto">
           <TabsTrigger value="classes" className="text-xs lg:text-sm">Timetable</TabsTrigger>
           <TabsTrigger value="payments" className="text-xs lg:text-sm">Payments</TabsTrigger>
@@ -298,6 +349,19 @@ function DashboardContent() {
 
         {/* Payment History Tab */}
         <TabsContent value="payments" className="space-y-6">
+          {members.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {members.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setSelectedMemberId(m.id)}
+                  className={`px-3 py-1 rounded-full border ${selectedMemberId === m.id ? 'bg-white text-black' : 'border-white/20 text-white'}`}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          )}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -310,7 +374,15 @@ function DashboardContent() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {paymentHistory.map((payment) => (
+                {paymentHistory
+                  .filter(p => {
+                    if (selectedMemberId === 'ALL') return true
+                    const tagged = (p.description || '').match(/\[member:([^\]]+)\]/)
+                    const taggedId = tagged?.[1]
+                    const effectiveId = p.memberId || taggedId
+                    return effectiveId === selectedMemberId
+                  })
+                  .map((payment) => (
                   <div
                     key={payment.id}
                     className="flex items-center justify-between p-4 border rounded-lg"
@@ -319,6 +391,9 @@ function DashboardContent() {
                       <p className="font-medium">{payment.description}</p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(payment.date).toLocaleDateString()}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/70">
+                        DEBUG: memberId={<>{payment.memberId || ((payment.description || '').match(/\[member:([^\]]+)\]/)?.[1] || 'none')}</>} selected={selectedMemberId}
                       </p>
                     </div>
                     <div className="text-right space-y-1">

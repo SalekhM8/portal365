@@ -157,6 +157,8 @@ function AdminDashboardContent() {
   const [planFilter, setPlanFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null)
+  const [memberMemberships, setMemberMemberships] = useState<Array<{ userId: string; memberName: string; membershipType: string; status: string; nextBilling: string | null; subscriptionId: string | null; cancelAtPeriodEnd: boolean }>>([])
+  const [membershipsLoading, setMembershipsLoading] = useState(false)
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [addCustomerData, setAddCustomerData] = useState({
     firstName: '',
@@ -543,6 +545,23 @@ function AdminDashboardContent() {
     setMembershipAction(action)
     setMembershipActionReason('')
     setShowMembershipActionModal(true)
+  }
+
+  const fetchCustomerMemberships = async (customerId: string) => {
+    try {
+      setMembershipsLoading(true)
+      const resp = await fetch(`/api/admin/customers/${customerId}/memberships`)
+      const json = await resp.json()
+      if (resp.ok && json?.members) {
+        setMemberMemberships(json.members)
+      } else {
+        setMemberMemberships([])
+      }
+    } catch {
+      setMemberMemberships([])
+    } finally {
+      setMembershipsLoading(false)
+    }
   }
 
   // Filter functions
@@ -1124,10 +1143,11 @@ function AdminDashboardContent() {
                       <tr
                         key={payment.id}
                         className="border-b border-white/10 hover:bg-white/5 cursor-pointer"
-                        onClick={() => {
+                        onClick={async () => {
                           const cust = customers.find(c => c.id === payment.customerId)
                           if (cust) {
                             setSelectedCustomer(cust)
+                            await fetchCustomerMemberships(cust.id)
                           } else {
                             alert('Customer details not available for this payment.')
                           }
@@ -1511,6 +1531,79 @@ function AdminDashboardContent() {
                 <div className="border-b border-white/10 pb-2">
                   <p className="text-white"><strong className="text-white/90">Routed Entity:</strong> {selectedCustomer.routedEntity}</p>
                 </div>
+                {/* 🚀 NEW: Memberships on this account */}
+                <div className="border-b border-white/10 pb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-white font-semibold">Memberships on this account</h4>
+                    <Button variant="outline" size="sm" onClick={() => fetchCustomerMemberships(selectedCustomer.id)} className="border-white/20 text-white hover:bg-white/10">
+                      Refresh
+                    </Button>
+                  </div>
+                  {membershipsLoading ? (
+                    <p className="text-white/60 text-sm">Loading memberships…</p>
+                  ) : memberMemberships.length === 0 ? (
+                    <p className="text-white/60 text-sm">No linked memberships</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {memberMemberships.map(m => (
+                        <div key={m.userId} className="bg-white/5 border border-white/10 rounded p-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-white font-medium">{m.memberName}</p>
+                              <p className="text-xs text-white/60">{m.membershipType} • Next billing: {m.nextBilling ? new Date(m.nextBilling).toLocaleDateString() : '—'}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={m.status === 'ACTIVE' ? 'default' : m.status === 'SUSPENDED' ? 'secondary' : m.status === 'CANCELLED' ? 'destructive' : 'outline'}>
+                                {m.status}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {(m.status === 'ACTIVE') && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedCustomer({ ...selectedCustomer, id: m.userId })
+                                    openMembershipActionModal('pause')
+                                  }}
+                                  className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10"
+                                >
+                                  Pause
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedCustomer({ ...selectedCustomer, id: m.userId })
+                                    openMembershipActionModal('cancel')
+                                  }}
+                                  className="border-red-500/20 text-red-400 hover:bg-red-500/10"
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            )}
+                            {m.status === 'SUSPENDED' && (
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedCustomer({ ...selectedCustomer, id: m.userId })
+                                  openMembershipActionModal('resume')
+                                }}
+                                className="border-green-500/20 text-green-400 hover:bg-green-500/10"
+                              >
+                                Resume
+                              </Button>
+                            )}
+                            {m.cancelAtPeriodEnd && (
+                              <span className="text-xs text-orange-400">Scheduled to cancel at period end</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div>
                   <p className="text-white"><strong className="text-white/90">Emergency Contact:</strong> {selectedCustomer.emergencyContact?.name} ({selectedCustomer.emergencyContact?.relationship})</p>
                   {/* Guardian details if captured during U16 registration */}
@@ -1532,6 +1625,7 @@ function AdminDashboardContent() {
                       <th className="text-left p-2">Amount</th>
                       <th className="text-left p-2">Status</th>
                       <th className="text-left p-2">Entity</th>
+                      <th className="text-left p-2">Member / Payer</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1541,11 +1635,15 @@ function AdminDashboardContent() {
                         <td className="p-2">£{p.amount}</td>
                         <td className="p-2"><Badge variant={getStatusBadgeVariant(p.status)}>{p.status}</Badge></td>
                         <td className="p-2">{p.routedToEntity}</td>
+                        <td className="p-2 text-white/80 text-xs">
+                          {/* Label: Member and Payer (best-effort; using selectedCustomer for payer email) */}
+                          Member: {selectedCustomer.name} • Payer: {selectedCustomer.email}
+                        </td>
                       </tr>
                     ))}
                     {payments.filter(p => p.customerId === selectedCustomer.id).length === 0 && (
                       <tr>
-                        <td className="p-3 text-white/60" colSpan={4}>No payments yet.</td>
+                        <td className="p-3 text-white/60" colSpan={5}>No payments yet.</td>
                       </tr>
                     )}
                   </tbody>

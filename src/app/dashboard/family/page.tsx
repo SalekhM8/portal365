@@ -18,6 +18,9 @@ export default function FamilyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [children, setChildren] = useState<any[]>([])
+  const [parentHasDefaultPm, setParentHasDefaultPm] = useState<boolean>(false)
+  const [activatingId, setActivatingId] = useState<string | null>(null)
+  const [showSuccess, setShowSuccess] = useState<{ name: string; amount?: number } | null>(null)
 
   // Add child form
   const [addOpen, setAddOpen] = useState(false)
@@ -45,6 +48,7 @@ export default function FamilyPage() {
       const data = await res.json()
       if (res.ok && data.success) {
         setChildren(data.children || [])
+        setParentHasDefaultPm(!!data.parentHasDefaultPm)
       } else {
         setError(data.error || 'Failed to load family')
       }
@@ -83,7 +87,7 @@ export default function FamilyPage() {
   }
 
   const activateChild = async (childId: string) => {
-    if (!confirm('Activate this child membership using your saved payment method?')) return
+    setActivatingId(childId)
     try {
       const res = await fetch('/api/customers/family/activate', {
         method: 'POST',
@@ -92,20 +96,23 @@ export default function FamilyPage() {
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        // If no PM exists, backend may still return a SetupIntent depending on payer state
-        if (data.clientSecret) {
-          // Redirect to payment methods to collect PM, then retry activate
-          alert('Please add a payment method first, then retry activation.')
-          window.location.href = '/dashboard/payment-methods'
+        if (data.clientSecret && data.subscription?.id) {
+          // Send user to Payment Methods to confirm SetupIntent, then finalize
+          router.push(`/dashboard/payment-methods?client_secret=${encodeURIComponent(data.clientSecret)}&family_sub=${encodeURIComponent(data.subscription.id)}`)
           return
         }
-        alert('Activation started. Complete any required payment authentication if prompted.')
-        await fetchChildren()
+        setShowSuccess({ name: (children.find(c => c.childId === childId)?.childName) || 'Child' })
+        setTimeout(async () => {
+          await fetchChildren()
+          router.push('/dashboard')
+        }, 1200)
       } else {
         alert('Activation failed: ' + (data.error || 'Unknown error'))
       }
     } catch {
       alert('Network error during activation')
+    } finally {
+      setActivatingId(null)
     }
   }
 
@@ -232,8 +239,16 @@ export default function FamilyPage() {
                     </div>
                     <div className="flex gap-2">
                       {c.status === 'PENDING_PAYMENT' ? (
-                        <Button onClick={() => activateChild(c.childId)}>
-                          <Crown className="h-4 w-4 mr-2" /> Activate
+                        <Button onClick={() => activateChild(c.childId)} disabled={activatingId === c.childId}>
+                          {activatingId === c.childId ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing…
+                            </>
+                          ) : (
+                            <>
+                              <Crown className="h-4 w-4 mr-2" /> Activate
+                            </>
+                          )}
                         </Button>
                       ) : (
                         <Button variant="outline" disabled>
@@ -280,6 +295,17 @@ export default function FamilyPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Success modal */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-background border p-6 rounded-lg w-full max-w-sm text-center">
+            <CheckCircle2 className="h-10 w-10 mx-auto text-green-500 mb-2" />
+            <p className="font-semibold mb-1">Activated {showSuccess.name}</p>
+            <p className="text-sm text-muted-foreground">Redirecting to your dashboard…</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

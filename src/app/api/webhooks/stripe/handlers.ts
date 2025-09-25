@@ -8,7 +8,10 @@ export async function handlePaymentSucceeded(invoice: any) {
   try {
     console.log(`🔄 [${operationId}] Processing invoice payment: ${invoiceId}`)
     
+    // Be tolerant to payload shapes: pull subscription id from multiple locations
     const subscriptionId = invoice.subscription
+      || (invoice?.lines?.data?.[0]?.subscription as string | undefined)
+      || (invoice?.lines?.data?.[0]?.parent?.subscription_details?.subscription as string | undefined)
     const amountPaid = Number(invoice.amount_paid || 0) / 100
     
     console.log(`📊 [${operationId}] Invoice details:`, {
@@ -25,30 +28,19 @@ export async function handlePaymentSucceeded(invoice: any) {
       return
     }
 
-    // STEP 1: Try to find subscription by Stripe subscription ID
+    // Normalize metadata from invoice or first line item
+    const line0 = Array.isArray(invoice?.lines?.data) ? invoice.lines.data[0] : undefined
+    const meta = {
+      ...(invoice?.metadata || {}),
+      ...(line0?.metadata || {})
+    } as Record<string, any>
+
+    // STEP 1: Strongest signal: our DB subscription id embedded in invoice/line metadata
     let subscription = null
     let mappingMethod = 'UNKNOWN'
-    
-    if (subscriptionId) {
+    if (meta?.dbSubscriptionId) {
       subscription = await prisma.subscription.findUnique({ 
-        where: { stripeSubscriptionId: subscriptionId }, 
-        include: { user: true } 
-      })
-      
-      if (subscription) {
-        mappingMethod = 'STRIPE_SUBSCRIPTION_ID'
-        console.log(`✅ [${operationId}] Found subscription via Stripe ID: ${subscription.id}`)
-      } else {
-        console.log(`⚠️ [${operationId}] No subscription found with stripeSubscriptionId: ${subscriptionId}`)
-      }
-    } else {
-      console.log(`⚠️ [${operationId}] No subscription ID on invoice`)
-    }
-    
-    // STEP 2: Try metadata fallback
-    if (!subscription && invoice.metadata?.dbSubscriptionId) {
-      subscription = await prisma.subscription.findUnique({ 
-        where: { id: invoice.metadata.dbSubscriptionId }, 
+        where: { id: meta.dbSubscriptionId }, 
         include: { user: true } 
       })
       
@@ -57,8 +49,39 @@ export async function handlePaymentSucceeded(invoice: any) {
         console.log(`✅ [${operationId}] Found subscription via metadata: ${subscription.id}`)
       }
     }
+
+    // STEP 2: Direct Stripe subscription id if present
+    if (!subscription) {
+      if (subscriptionId) {
+        const byStripe = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
+        if (byStripe) {
+          subscription = byStripe
+          mappingMethod = 'STRIPE_SUBSCRIPTION_ID'
+          console.log(`✅ [${operationId}] Found subscription via Stripe ID: ${subscription.id}`)
+        } else {
+          console.log(`⚠️ [${operationId}] No subscription found with stripeSubscriptionId: ${subscriptionId}`)
+        }
+      } else {
+        console.log(`⚠️ [${operationId}] No subscription ID on invoice`)
+      }
+    }
+
+    // STEP 3: Member user id embedded in invoice metadata (child attribution) – prefer before customer fallback
+    if (!subscription && meta?.memberUserId) {
+      const memberUserId = meta.memberUserId as string
+      const subForMember = await prisma.subscription.findFirst({
+        where: { userId: memberUserId },
+        orderBy: { createdAt: 'desc' },
+        include: { user: true }
+      })
+      if (subForMember) {
+        subscription = subForMember
+        mappingMethod = 'INVOICE_METADATA_MEMBER_USER_ID'
+        console.log(`✅ [${operationId}] Found subscription via memberUserId: ${subscription.id}`)
+      }
+    }
     
-    // STEP 3: CUSTOMER FALLBACK - The critical fix
+    // STEP 4: CUSTOMER FALLBACK - last resort; only if nothing else mapped
     if (!subscription && invoice.customer) {
       console.log(`🔄 [${operationId}] Trying customer metadata fallback...`)
       
@@ -91,8 +114,8 @@ export async function handlePaymentSucceeded(invoice: any) {
         console.error(`❌ [${operationId}] Customer retrieval failed:`, customerError)
       }
     }
-    
-    // STEP 4: Final validation
+
+    // STEP 5: Final validation
     if (!subscription) {
       console.error(`❌ [${operationId}] CRITICAL: Cannot map invoice to subscription after all attempts`)
       console.error(`❌ [${operationId}] Invoice details:`, {
@@ -107,14 +130,43 @@ export async function handlePaymentSucceeded(invoice: any) {
     
     console.log(`✅ [${operationId}] Subscription mapped via: ${mappingMethod}`)
 
-    // STEP 5: Check for duplicate processing (idempotency)
+    // STEP 6: Check for duplicate processing (idempotency)
     const existingInvoice = await prisma.invoice.findUnique({ where: { stripeInvoiceId: invoice.id } })
     if (existingInvoice) {
-      console.log(`ℹ️ [${operationId}] Invoice already processed, skipping: ${existingInvoice.id}`)
+      // Previously processed invoice. Ensure a matching CONFIRMED payment exists; if not, create it now.
+      const existingPayment = await prisma.payment.findFirst({
+        where: {
+          userId: subscription.userId,
+          status: 'CONFIRMED',
+          description: { contains: `[inv:${invoice.id}]` }
+        }
+      })
+      if (existingPayment) {
+        console.log(`ℹ️ [${operationId}] Invoice already processed with payment ${existingPayment.id}, skipping`)
+        return
+      }
+      // Backfill missing payment for already-recorded invoice
+      const userIdForBackfill = meta?.memberUserId || subscription.userId
+      const paymentDescriptionBackfill = invoice.billing_reason === 'subscription_create' 
+        ? 'Initial subscription payment (prorated)'
+        : 'Monthly membership payment'
+      const taggedBackfill = `${paymentDescriptionBackfill} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForBackfill}]`
+      const created = await prisma.payment.create({
+        data: {
+          userId: userIdForBackfill,
+          amount: amountPaid,
+          currency: invoice.currency.toUpperCase(),
+          status: 'CONFIRMED',
+          description: taggedBackfill,
+          routedEntityId: subscription.routedEntityId,
+          processedAt: new Date()
+        }
+      })
+      console.log(`✅ [${operationId}] Backfilled missing payment ${created.id} for existing invoice ${existingInvoice.id}`)
       return
     }
 
-    // STEP 6: Create invoice record
+    // STEP 7: Create invoice record
     const invoiceRecord = await prisma.invoice.create({
       data: {
         subscriptionId: subscription.id,
@@ -131,7 +183,7 @@ export async function handlePaymentSucceeded(invoice: any) {
     
     console.log(`✅ [${operationId}] Created invoice record: ${invoiceRecord.id}`)
 
-    // STEP 7: Update subscription status and billing periods
+    // STEP 8: Update subscription status and billing periods
     const updatedSubscription = await prisma.subscription.update({ 
       where: { id: subscription.id }, 
       data: { 
@@ -144,7 +196,7 @@ export async function handlePaymentSucceeded(invoice: any) {
     
     console.log(`✅ [${operationId}] Updated subscription status: ${updatedSubscription.status}`)
     
-    // STEP 8: Update membership status
+    // STEP 9: Update membership status
     const updatedMemberships = await prisma.membership.updateMany({ 
       where: { userId: subscription.userId }, 
       data: { status: 'ACTIVE' } 
@@ -152,17 +204,20 @@ export async function handlePaymentSucceeded(invoice: any) {
     
     console.log(`✅ [${operationId}] Updated ${updatedMemberships.count} memberships to ACTIVE`)
     
-    // STEP 9: Create payment record (the critical missing piece)
+    // STEP 10: Create payment record with explicit member tag to aid admin/customer UI
     const paymentDescription = invoice.billing_reason === 'subscription_create' 
       ? 'Initial subscription payment (prorated)' 
       : 'Monthly membership payment'
       
-    // Tag description with Stripe identifiers so future admin refunds can reference them without schema changes
-    const taggedDescription = `${paymentDescription} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''}`
+    // Decide the correct member to attribute this payment to
+    const userIdForPayment = (invoice.metadata && (invoice.metadata as any).memberUserId) || subscription.userId
+
+    // Tag description with identifiers including member id for precise attribution display
+    const taggedDescription = `${paymentDescription} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForPayment}]`
 
     const paymentRecord = await prisma.payment.create({ 
       data: { 
-        userId: subscription.userId, 
+        userId: userIdForPayment, 
         amount: amountPaid, 
         currency: invoice.currency.toUpperCase(), 
         status: 'CONFIRMED', 

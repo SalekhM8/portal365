@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     
     const userId = user.id
 
-    // Get user data
+    // Get user data (parent)
     const userData = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -34,18 +34,6 @@ export async function GET(request: NextRequest) {
           where: { status: { in: ['ACTIVE', 'PENDING_PAYMENT'] } },
           orderBy: { createdAt: 'desc' },
           take: 1
-        },
-        payments: {
-          where: { amount: { gt: 0 } },
-          orderBy: [
-            { processedAt: 'desc' },
-            { createdAt: 'desc' }
-          ],
-          take: 10,
-          include: {
-            routedEntity: { select: { displayName: true } },
-            routing: { select: { routingReason: true, confidence: true } }
-          }
         }
       }
     })
@@ -53,6 +41,53 @@ export async function GET(request: NextRequest) {
     if (!userData) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
+
+    // Family: fetch children memberships to surface their payments too
+    const childrenMemberships = await prisma.membership.findMany({
+      where: { familyGroupId: userId },
+      include: { user: true }
+    })
+
+    // Gather payments for parent and children (member-aware)
+    const memberIds = [userId, ...childrenMemberships.map((m: any) => m.userId)]
+    // Only payments for these members; do not include parent placeholder users
+    const paymentsRaw = await prisma.payment.findMany({
+      where: { userId: { in: memberIds }, amount: { gt: 0 } },
+      orderBy: [ { processedAt: 'desc' }, { createdAt: 'desc' } ],
+      take: 50,
+      include: {
+        routedEntity: { select: { displayName: true } },
+        routing: { select: { routingReason: true, confidence: true } }
+      }
+    })
+
+    const idToMember = new Map<string, { id: string; name: string }>()
+    idToMember.set(userId, { id: userId, name: `${userData.firstName} ${userData.lastName}` })
+    for (const cm of childrenMemberships) {
+      idToMember.set(cm.userId, { id: cm.userId, name: `${cm.user.firstName} ${cm.user.lastName}` })
+    }
+
+    const paymentsWithMember = paymentsRaw.map((p: any) => {
+      const desc: string = p.description || ''
+      const memberTagMatch = desc.match(/\[member:([^\]]+)\]/)
+      const taggedMemberId = memberTagMatch?.[1]
+      const effectiveMemberId = (taggedMemberId && idToMember.has(taggedMemberId)) ? taggedMemberId : p.userId
+      return {
+        id: p.id,
+        memberId: effectiveMemberId,
+        memberName: (idToMember.get(effectiveMemberId)?.name) || 'Member',
+        amount: p.amount,
+        date: (p.processedAt || p.createdAt).toISOString().split('T')[0],
+        status: p.status,
+        description: p.description,
+        entity: p.routedEntity?.displayName || 'N/A'
+      }
+    })
+
+    const membersList = [
+      { id: userId, name: `${userData.firstName} ${userData.lastName}` },
+      ...childrenMemberships.map((cm: any) => ({ id: cm.userId, name: `${cm.user.firstName} ${cm.user.lastName}` }))
+    ]
 
     // Get real class schedule from database
     const classes = await prisma.class.findMany({
@@ -91,17 +126,8 @@ export async function GET(request: NextRequest) {
         memberSince: userData.memberships[0]?.startDate.toISOString().split('T')[0] || userData.createdAt.toISOString().split('T')[0]
       },
       membership: membershipData,
-      paymentHistory: userData.payments.map((payment: any) => ({
-        id: payment.id,
-        amount: payment.amount,
-        date: payment.createdAt.toISOString().split('T')[0],
-        status: payment.status,
-        description: payment.description,
-        routedTo: payment.routedEntity.displayName,
-        routingReason: payment.routing?.routingReason || 'Standard routing',
-        confidence: payment.routing?.confidence || 'MEDIUM',
-        vatOptimized: true
-      })),
+      members: membersList,
+      paymentsWithMember,
       classSchedule: upcomingClasses
     })
 

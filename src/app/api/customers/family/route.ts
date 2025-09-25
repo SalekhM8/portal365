@@ -17,6 +17,16 @@ export async function GET() {
       where: { familyGroupId: parent.id },
       include: { user: true }
     })
+    // Include a flag if parent has a default payment method to improve UI decisions
+    let parentHasDefaultPm = false
+    try {
+      const latestParentSub = await prisma.subscription.findFirst({ where: { userId: parent.id }, orderBy: { createdAt: 'desc' } })
+      if (latestParentSub?.stripeCustomerId) {
+        const sc = await (await import('@/lib/stripe')).stripe.customers.retrieve(latestParentSub.stripeCustomerId)
+        parentHasDefaultPm = !!(!("deleted" in sc) && (sc as any)?.invoice_settings?.default_payment_method)
+      }
+    } catch {}
+
     const children = familyMemberships.map(m => ({
       childId: m.userId,
       childName: `${m.user.firstName} ${m.user.lastName}`,
@@ -25,7 +35,7 @@ export async function GET() {
       nextBilling: m.nextBillingDate
     }))
 
-    return NextResponse.json({ success: true, parentId: parent.id, children })
+    return NextResponse.json({ success: true, parentId: parent.id, parentHasDefaultPm, children })
   } catch (e) {
     return NextResponse.json({ error: 'Failed to fetch family' }, { status: 500 })
   }
