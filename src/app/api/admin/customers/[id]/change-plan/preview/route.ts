@@ -54,17 +54,21 @@ export async function POST(
       return NextResponse.json({ success: true, preview: result })
     }
 
-    // Active: use Upcoming Invoice preview for exact proration
+    // Active: try Stripe Upcoming Invoice preview (guarded for SDKs without types), else null
     try {
-      const upcoming = await stripe.invoices.retrieveUpcoming({
-        customer: (stripeSub as any).customer as string,
-        subscription: stripeSub.id,
-        subscription_items: [{ id: currentItem.id, price: currentItem.price.id }, { price: currentItem.price.id, deleted: true }],
-      })
-      const total = (upcoming.amount_due || 0) / 100
-      result.upcomingPreviewTotal = total
+      const api: any = stripe as any
+      if (api?.invoices?.retrieveUpcoming) {
+        const upcoming = await api.invoices.retrieveUpcoming({
+          customer: (stripeSub as any).customer as string,
+          subscription: stripeSub.id,
+          subscription_items: [{ id: currentItem.id, price: currentItem.price.id }, { price: currentItem.price.id, deleted: true }],
+        })
+        const total = (upcoming.amount_due || 0) / 100
+        result.upcomingPreviewTotal = total
+      } else {
+        result.upcomingPreviewTotal = null
+      }
     } catch {
-      // Fallback when upcoming cannot compute
       result.upcomingPreviewTotal = null
     }
 
