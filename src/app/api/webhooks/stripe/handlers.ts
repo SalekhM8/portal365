@@ -427,6 +427,27 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
     })
     
     console.log(`✅ [WEBHOOK] Updated ${updatedMemberships.count} memberships to ${membershipStatus}`)
+
+    // Apply pending plan switch exactly at rollover when present
+    try {
+      const pendingPlan = (stripeSubscription.metadata && (stripeSubscription.metadata as any).pending_plan) || undefined
+      const pendingTsStr = (stripeSubscription.metadata && (stripeSubscription.metadata as any).pending_apply_ts) || undefined
+      if (pendingPlan && pendingTsStr) {
+        const pendingTs = Number(pendingTsStr)
+        const nowSec = Math.floor(Date.now() / 1000)
+        // If we have crossed or are at the scheduled timestamp, flip membership to the pending plan
+        if (!isNaN(pendingTs) && nowSec >= pendingTs) {
+          await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { membershipType: pendingPlan } })
+          // Clear metadata to avoid repeat
+          try {
+            await stripe.subscriptions.update(stripeSubscription.id, { metadata: { ...stripeSubscription.metadata, pending_plan: '', pending_apply_ts: '' } })
+          } catch {}
+          console.log(`✅ [WEBHOOK] Applied pending plan ${pendingPlan} for user ${subscription.userId}`)
+        }
+      }
+    } catch (e) {
+      console.warn('Pending plan apply failed', e)
+    }
   } catch (error) {
     console.error(`❌ [WEBHOOK] Failed to handle subscription update:`, error)
   }

@@ -44,6 +44,7 @@ import {
   Key
 } from 'lucide-react'
 import { loadStripe } from '@stripe/stripe-js'
+import { MEMBERSHIP_PLANS } from '@/config/memberships'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
@@ -197,6 +198,14 @@ function AdminDashboardContent() {
   const [showMembershipActionModal, setShowMembershipActionModal] = useState(false)
   // Dismissed To-Do items (client-side only)
   const [dismissedTodoIds, setDismissedTodoIds] = useState<string[]>([])
+  // NEW: Change Plan modal state
+  const [showChangePlanModal, setShowChangePlanModal] = useState(false)
+  const [newPlanKey, setNewPlanKey] = useState<string>('FULL_ADULT')
+  const [effectiveMode, setEffectiveMode] = useState<'now' | 'period_end'>('now')
+  const [settlementMode, setSettlementMode] = useState<'defer' | 'charge_now'>('defer')
+  const [preview, setPreview] = useState<any>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [changeLoading, setChangeLoading] = useState(false)
 
   useEffect(() => {
     // ✅ ADD authentication check
@@ -1575,6 +1584,16 @@ function AdminDashboardContent() {
                                   variant="outline"
                                   onClick={() => {
                                     setSelectedCustomer({ ...selectedCustomer, id: m.userId })
+                                    setShowChangePlanModal(true)
+                                  }}
+                                  className="border-white/20 text-white hover:bg-white/10"
+                                >
+                                  Change Plan (Admin)
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedCustomer({ ...selectedCustomer, id: m.userId })
                                     openMembershipActionModal('cancel')
                                   }}
                                   className="border-red-500/20 text-red-400 hover:bg-red-500/10"
@@ -1737,6 +1756,15 @@ function AdminDashboardContent() {
                   className="border-red-500/20 text-red-400 hover:bg-red-500/10"
                 >
                   Delete Account
+                </Button>
+              )}
+              {selectedCustomer && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowChangePlanModal(true)}
+                  className="border-white/20 text-white hover:bg-white/10"
+                >
+                  Change Plan (Admin)
                 </Button>
               )}
               <Button 
@@ -2165,6 +2193,110 @@ function AdminDashboardContent() {
                   </>
                 )}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 NEW: Change Plan (Admin) Modal */}
+      {showChangePlanModal && selectedCustomer && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-lg w-full mx-4">
+            <h3 className="text-xl font-bold mb-4 text-white">Change Customer Plan</h3>
+            <div className="space-y-4">
+              <div className="bg-white/5 border border-white/10 p-3 rounded">
+                <p className="text-sm text-white/80"><strong>Customer:</strong> {selectedCustomer.name}</p>
+                <p className="text-sm text-white/80"><strong>Current Plan:</strong> {selectedCustomer.membershipType}</p>
+                <p className="text-sm text-white/80"><strong>Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
+              </div>
+              <div>
+                <Label className="text-white mb-2 block">New Plan</Label>
+                <Select value={newPlanKey} onValueChange={setNewPlanKey}>
+                  <SelectTrigger className="bg-white/5 border-white/20 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black border-white/20">
+                    {Object.entries(MEMBERSHIP_PLANS).map(([key, plan]) => (
+                      <SelectItem key={key} value={key} className="text-white hover:bg-white/10">
+                        {plan.displayName} (£{plan.monthlyPrice}/mo)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-white mb-2 block">Effective</Label>
+                <div className="flex gap-2">
+                  <Button variant={effectiveMode==='now'?'default':'outline'} className={effectiveMode==='now'?'':'border-white/20 text-white'} onClick={() => setEffectiveMode('now')}>Start now</Button>
+                  <Button variant={effectiveMode==='period_end'?'default':'outline'} className={effectiveMode==='period_end'?'':'border-white/20 text-white'} onClick={() => setEffectiveMode('period_end')}>Start on next billing date</Button>
+                </div>
+                <p className="text-xs text-white/60 mt-1">Start now flips access immediately; period-end switches access on the 1st.</p>
+              </div>
+              {effectiveMode === 'now' && (
+                <div>
+                  <Label className="text-white mb-2 block">Settlement</Label>
+                  <div className="flex gap-2">
+                    <Button variant={settlementMode==='defer'?'default':'outline'} className={settlementMode==='defer'?'':'border-white/20 text-white'} onClick={() => setSettlementMode('defer')}>Defer to next invoice</Button>
+                    <Button variant={settlementMode==='charge_now'?'default':'outline'} className={settlementMode==='charge_now'?'':'border-white/20 text-white'} onClick={() => setSettlementMode('charge_now')}>Charge now</Button>
+                  </div>
+                  <p className="text-xs text-white/60 mt-1">If the user is in trial, we will charge/refund the exact delta now.</p>
+                </div>
+              )}
+              <div>
+                <Button
+                  variant="outline"
+                  className="border-white/20 text-white"
+                  onClick={async () => {
+                    if (!selectedCustomer) return
+                    setPreviewLoading(true)
+                    try {
+                      const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/change-plan/preview`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ newMembershipType: newPlanKey })
+                      })
+                      const json = await resp.json()
+                      setPreview(json.preview || null)
+                    } finally { setPreviewLoading(false) }
+                  }}
+                >
+                  {previewLoading ? 'Calculating…' : 'Preview change'}
+                </Button>
+              </div>
+              {preview && (
+                <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded">
+                  <p className="text-sm text-white/80"><strong>Stripe status:</strong> {preview.stripeStatus}</p>
+                  <p className="text-sm text-white/80"><strong>Next billing:</strong> {preview.nextBillingDate}</p>
+                  <p className="text-sm text-white/80"><strong>Current → New:</strong> £{preview.currentMonthly} → £{preview.newMonthly}</p>
+                  {preview.deltaNow !== undefined && (
+                    <p className="text-sm text-white/80"><strong>Delta now (trial):</strong> £{Number(preview.deltaNow).toFixed(2)}</p>
+                  )}
+                  {preview.upcomingPreviewTotal !== undefined && preview.upcomingPreviewTotal !== null && (
+                    <p className="text-sm text-white/80"><strong>Upcoming preview total (active):</strong> £{Number(preview.upcomingPreviewTotal).toFixed(2)}</p>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1 border-white/20 text-white" onClick={() => setShowChangePlanModal(false)}>Cancel</Button>
+                <Button className="flex-1" onClick={async () => {
+                  if (!selectedCustomer) return
+                  setChangeLoading(true)
+                  try {
+                    const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/change-plan`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ newMembershipType: newPlanKey, effective: effectiveMode, settlement: settlementMode })
+                    })
+                    const json = await resp.json()
+                    if (resp.ok && json.success) {
+                      alert('Plan changed successfully')
+                      setShowChangePlanModal(false)
+                      fetchAdminData()
+                    } else {
+                      alert('Plan change failed: ' + (json.error || 'Unknown error'))
+                    }
+                  } finally { setChangeLoading(false) }
+                }} disabled={changeLoading}>
+                  {changeLoading ? 'Applying…' : 'Apply change'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
