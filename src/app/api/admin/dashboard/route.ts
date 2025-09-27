@@ -329,7 +329,7 @@ export async function GET() {
         }
       },
       orderBy: { createdAt: 'desc' },
-      take: 100
+      take: 500
     })
 
     // Lifetime total paid per customer (all confirmed payments)
