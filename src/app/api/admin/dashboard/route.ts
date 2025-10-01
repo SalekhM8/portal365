@@ -575,23 +575,51 @@ export async function GET() {
       })
     }
 
+    // Build payment items with a stable key per billing artifact to dedupe and auto-hide on success
+    const paymentItemsRaw = payments.map((payment: any) => {
+      const desc: string = payment.description || ''
+      const invMatch = desc.match(/\[inv:([^\]]+)\]/)
+      const key = invMatch?.[1] || `${payment.userId}:${payment.createdAt.toISOString().slice(0,7)}` // fallback: user-month
+      return {
+        id: payment.id,
+        customerName: `${payment.user.firstName} ${payment.user.lastName}`,
+        customerId: payment.userId,
+        amount: Number(payment.amount),
+        routedToEntity: payment.routedEntity?.displayName || 'Not Routed',
+        routingReason: payment.routing?.routingReason || 'Standard routing',
+        timestamp: payment.createdAt.toISOString(),
+        status: payment.status,
+        failureReason: payment.failureReason || enrichedFailureReasonById[payment.id],
+        goCardlessId: payment.goCardlessPaymentId || 'N/A',
+        retryCount: payment.retryCount,
+        processingTime: payment.routing?.decisionTimeMs || 0,
+        confidence: payment.routing?.confidence || 'MEDIUM',
+        membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown',
+        _key: key,
+        _ts: payment.createdAt.getTime()
+      }
+    })
+
+    // Determine the latest status per key
+    const latestByKey: Record<string, { status: string; ts: number; idx: number }> = {}
+    for (let i = 0; i < paymentItemsRaw.length; i++) {
+      const it = paymentItemsRaw[i]
+      const prev = latestByKey[it._key]
+      if (!prev || it._ts > prev.ts) {
+        latestByKey[it._key] = { status: it.status, ts: it._ts, idx: i }
+      }
+    }
+
+    // Keep only the latest item per key if still not successful; auto-hide if a later success exists
+    const paymentTodos = paymentItemsRaw.filter((it, idx) => {
+      const latest = latestByKey[it._key]
+      if (!latest) return false
+      if (latest.status === 'CONFIRMED') return false
+      return latest.idx === idx && it.status === latest.status && it.status === 'FAILED'
+    }).map(({ _key, _ts, ...rest }) => rest)
+
     const formattedPayments = [
-      ...payments.map((payment: any) => ({
-      id: payment.id,
-      customerName: `${payment.user.firstName} ${payment.user.lastName}`,
-      customerId: payment.userId,
-      amount: Number(payment.amount),
-      routedToEntity: payment.routedEntity?.displayName || 'Not Routed',
-      routingReason: payment.routing?.routingReason || 'Standard routing',
-      timestamp: payment.createdAt.toISOString(),
-      status: payment.status,
-      failureReason: payment.failureReason || enrichedFailureReasonById[payment.id],
-      goCardlessId: payment.goCardlessPaymentId || 'N/A',
-      retryCount: payment.retryCount,
-      processingTime: payment.routing?.decisionTimeMs || 0,
-      confidence: payment.routing?.confidence || 'MEDIUM',
-      membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown'
-    })).filter((p: any) => p.status !== 'FAILED' || (p.status === 'FAILED' && payments.find(pp => pp.id === p.id && pp.failureReason !== 'DISMISSED_ADMIN'))),
+      ...paymentTodos,
       ...incompleteToDos,
       ...membershipIncompleteToDos
     ]
