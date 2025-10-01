@@ -1516,7 +1516,7 @@ function AdminDashboardContent() {
                         <a href={`sms:${selectedCustomer.phone}`}>SMS</a>
                       </Button>
                       <Button variant="outline" asChild>
-                        <a href={`https://wa.me/${normalizeForWhatsApp(selectedCustomer.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+                        <a href={`https://api.whatsapp.com/send?phone=${normalizeForWhatsApp(selectedCustomer.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
                       </Button>
                       <Button variant="outline" asChild>
                         <a href={`mailto:${selectedCustomer.email}`}>Email</a>
