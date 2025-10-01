@@ -49,6 +49,15 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
+function normalizeForWhatsApp(raw: string): string {
+  if (!raw) return ''
+  const digits = String(raw).replace(/\D/g, '')
+  if (digits.startsWith('00')) return digits.slice(2)
+  if (digits.startsWith('44')) return digits
+  if (digits.startsWith('0')) return `44${digits.slice(1)}`
+  return digits
+}
+
 interface VATStatus {
   entityId: string
   entityName: string
@@ -1507,7 +1516,7 @@ function AdminDashboardContent() {
                         <a href={`sms:${selectedCustomer.phone}`}>SMS</a>
                       </Button>
                       <Button variant="outline" asChild>
-                        <a href={`https://wa.me/${selectedCustomer.phone.replace(/\D/g,'')}`} target="_blank">WhatsApp</a>
+                        <a href={`https://wa.me/${normalizeForWhatsApp(selectedCustomer.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
                       </Button>
                       <Button variant="outline" asChild>
                         <a href={`mailto:${selectedCustomer.email}`}>Email</a>

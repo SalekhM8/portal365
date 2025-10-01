@@ -56,7 +56,6 @@ function RegisterDetailsContent() {
   const searchParams = useSearchParams()
   const [selectedBusiness, setSelectedBusiness] = useState<string>('')
   const [selectedPlan, setSelectedPlan] = useState<string>('')
-  const [planDetails, setPlanDetails] = useState<any | null>(null)
   const [specialPrice, setSpecialPrice] = useState<number | null>(null)
   const [startOnFirst, setStartOnFirst] = useState<boolean>(false)
   const [loading, setLoading] = useState(false)
@@ -84,6 +83,7 @@ function RegisterDetailsContent() {
     },
     guardianConsent: false
   })
+  const [planDetails, setPlanDetails] = useState<any | null>(null)
 
   useEffect(() => {
     const businessParam = searchParams.get('business')
@@ -105,7 +105,6 @@ function RegisterDetailsContent() {
     }
   }, [searchParams])
 
-  const currentBusiness = selectedBusiness ? (businessConfigs as any)[selectedBusiness] : null
   useEffect(() => {
     ;(async () => {
       if (!selectedPlan) return
@@ -118,6 +117,7 @@ function RegisterDetailsContent() {
     })()
   }, [selectedPlan])
 
+  const currentBusiness = selectedBusiness ? (businessConfigs as any)[selectedBusiness] : null
   const currentPlan = planDetails
 
   const handleInputChange = (field: string, value: string) => {
@@ -539,7 +539,7 @@ function RegisterDetailsContent() {
                     )}
                   </div>
 
-                                    <Button
+                  <Button
                     type="submit"
                     className="w-full bg-white text-black hover:bg-white/90 font-semibold py-6 text-base"
                     disabled={loading || !acceptedWaiver || formData.password !== formData.confirmPassword || formData.password.length < 6}
@@ -582,7 +582,7 @@ function RegisterDetailsContent() {
 
                 <div className="space-y-3">
                   <h4 className="font-medium text-white/90">Included Features:</h4>
-                  {currentPlan.features.map((feature, index) => (
+                  {(Array.isArray(currentPlan.features) ? currentPlan.features : []).map((feature: string, index: number) => (
                     <div key={index} className="flex items-start gap-2 text-sm text-white/80">
                       <div className="w-1.5 h-1.5 bg-green-400 rounded-full flex-shrink-0 mt-2"></div>
                       <span>{feature}</span>
