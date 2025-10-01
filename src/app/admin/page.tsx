@@ -191,6 +191,7 @@ function AdminDashboardContent() {
   const [paymentClientSecret, setPaymentClientSecret] = useState('')
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState('')
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
+  const [paymentsTodo, setPaymentsTodo] = useState<any[]>([])
   const [showResetSuccess, setShowResetSuccess] = useState(false)
   const [todoLimitMobile, setTodoLimitMobile] = useState(10)
   const [todoLimitDesktop, setTodoLimitDesktop] = useState(10)
@@ -284,6 +285,7 @@ function AdminDashboardContent() {
       setCustomers(data.customers)
       // Use full payments for Payments tab
       setPayments(Array.isArray(data.payments) ? data.payments : [])
+      setPaymentsTodo(Array.isArray(data.payments_todo) ? data.payments_todo : [])
       setBusinessMetrics(data.metrics)
       setRecentActivity(data.recentActivity)
       setAnalytics(data.analytics) // 🚀 NEW: Real analytics data
@@ -791,8 +793,7 @@ function AdminDashboardContent() {
                   <TabsContent value="todo" className="mt-4">
                     <div className="space-y-4">
                       {(() => {
-                        const failed = [...payments]
-                          .filter(p => p.status === 'FAILED' || p.status === 'INCOMPLETE_SIGNUP')
+                        const failed = [...paymentsTodo]
                           .filter(p => !dismissedTodoIds.includes(p.id))
                           .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                           .slice(0, todoLimitMobile)
@@ -887,9 +888,8 @@ function AdminDashboardContent() {
               <CardContent>
                 <div className="space-y-4">
                   {(() => {
-                  const failed = [...payments]
-                      .filter(p => p.status === 'FAILED' || p.status === 'INCOMPLETE_SIGNUP')
-                      .filter(p => !dismissedTodoIds.includes(p.id))
+                    const failed = [...paymentsTodo]
+                    .filter(p => !dismissedTodoIds.includes(p.id))
                       .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                     .slice(0, todoLimitDesktop)
                     if (failed.length === 0) {
