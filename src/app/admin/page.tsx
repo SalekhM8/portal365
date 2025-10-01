@@ -282,12 +282,13 @@ function AdminDashboardContent() {
       // ✅ KEEP your existing state setters (no changes to UI logic)
       setVatStatus(data.vatStatus)
       setCustomers(data.customers)
-      setPayments(data.payments)
+      // Use full payments for Payments tab
+      setPayments(Array.isArray(data.payments) ? data.payments : [])
       setBusinessMetrics(data.metrics)
       setRecentActivity(data.recentActivity)
       setAnalytics(data.analytics) // 🚀 NEW: Real analytics data
       
-      console.log(`✅ Real admin data loaded: ${data.customers.length} customers, ${data.payments.length} payments`)
+      console.log(`✅ Real admin data loaded: ${data.customers.length} customers, ${(data.payments||[]).length} payments`)
       
     } catch (error) {
       console.error('❌ Error fetching real admin data:', error)

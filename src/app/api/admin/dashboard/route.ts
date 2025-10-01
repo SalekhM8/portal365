@@ -618,7 +618,24 @@ export async function GET() {
       return latest.idx === idx && it.status === latest.status && it.status === 'FAILED'
     }).map(({ _key, _ts, ...rest }) => rest)
 
-    const formattedPayments = [
+    const payments_full = payments.map((payment: any) => ({
+      id: payment.id,
+      customerName: `${payment.user.firstName} ${payment.user.lastName}`,
+      customerId: payment.userId,
+      amount: Number(payment.amount),
+      routedToEntity: payment.routedEntity?.displayName || 'Not Routed',
+      routingReason: payment.routing?.routingReason || 'Standard routing',
+      timestamp: payment.createdAt.toISOString(),
+      status: payment.status,
+      failureReason: payment.failureReason || enrichedFailureReasonById[payment.id],
+      goCardlessId: payment.goCardlessPaymentId || 'N/A',
+      retryCount: payment.retryCount,
+      processingTime: payment.routing?.decisionTimeMs || 0,
+      confidence: payment.routing?.confidence || 'MEDIUM',
+      membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown'
+    }))
+
+    const payments_todo = [
       ...paymentTodos,
       ...incompleteToDos,
       ...membershipIncompleteToDos
@@ -667,7 +684,8 @@ export async function GET() {
       recentActivity: activities,
       vatStatus: vatPositions,
       customers: formattedCustomers,
-      payments: formattedPayments,
+      payments: payments_full,
+      payments_todo,
       metrics: {
         totalRevenue: Number(totalRevenue._sum.amount) || 0,
         monthlyRecurring: Number(monthlyRevenue._sum.amount) || 0,
