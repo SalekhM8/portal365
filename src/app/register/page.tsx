@@ -168,13 +168,13 @@ function RegisterContent() {
               })
               .map((plan: any, index: number) => {
               return (
-                <Link key={index} href={`/register/details?business=${selectedBusiness}&plan=${membership.type}`}>
+                <Link key={index} href={`/register/details?business=${selectedBusiness}&plan=${plan.key}`}>
                   <Card 
                     className={`group bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-500 cursor-pointer backdrop-blur-sm h-full ${
-                      membership.popular ? 'ring-2 ring-red-500/50 relative' : ''
+                      (plan as any).popular ? 'ring-2 ring-red-500/50 relative' : ''
                     }`}
                   >
-                    {membership.popular && (
+                    {(plan as any).popular && (
                       <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                         <Badge className="bg-gradient-to-r from-red-500 to-red-700 text-white border-0 px-4 py-1">
                           <Crown className="h-3 w-3 mr-1" />
