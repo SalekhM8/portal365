@@ -64,9 +64,9 @@ export async function getPlanDbFirst(key: string): Promise<DbPlan> {
   return cfg
 }
 
-function safeParseArray(value: string | null | undefined): string[] | undefined {
-  if (!value) return undefined
-  try { return JSON.parse(value) as string[] } catch { return undefined }
+function safeParseArray(value: string | null | undefined): string[] {
+  if (!value) return []
+  try { return (JSON.parse(value) as string[]) || [] } catch { return [] }
 }
 
 function safeParseJson<T>(value: string | undefined): T | undefined {
