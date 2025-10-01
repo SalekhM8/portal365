@@ -1,7 +1,7 @@
 import Stripe from 'stripe'
 import { prisma } from './prisma'
 import { IntelligentVATRouter, RoutingOptions } from './vat-routing'
-import { getPlan } from '@/config/memberships'
+import { getPlanDbFirst } from '@/lib/plans'
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('STRIPE_SECRET_KEY is not set in environment variables')
@@ -48,8 +48,8 @@ export class SubscriptionProcessor {
     try {
       console.log('🔄 Creating subscription with 1st of month billing...')
       
-      // 1. Get membership pricing details
-      const membershipDetails = getPlan(request.membershipType)
+      // 1. Get membership pricing details (DB-first)
+      const membershipDetails = await getPlanDbFirst(request.membershipType)
       
       // Admin price override (doesn't affect existing flow)
       if (request.customPrice) {
@@ -98,7 +98,7 @@ export class SubscriptionProcessor {
       }
 
       // 4. Get or create Stripe price for this membership type
-      const priceId = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name })
+      const priceId = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name || membershipDetails.displayName })
 
       // 5. Calculate billing details (with admin date override)
       const now = new Date()

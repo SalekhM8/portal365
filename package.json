@@ -11,7 +11,7 @@
     "lint": "next lint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "npx tsx prisma/seed.ts",
+    "db:seed": "npx tsx prisma/seed.ts && npx tsx scripts/seed_membership_plans.ts",
     "db:setup": "prisma generate && prisma db push && npx tsx prisma/seed.ts",
     "db:clone:prod": "bash scripts/clone_prod_to_local.sh",
     "db:clone:prod:prisma": "node -e \"console.error('Set PROD_PRISMA_DATABASE_URL to prisma+postgres URL and ensure DATABASE_URL points to your local DB.');\" && npx tsx scripts/clone_from_prod_via_prisma.ts",

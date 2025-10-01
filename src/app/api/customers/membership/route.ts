@@ -47,6 +47,13 @@ export async function GET(request: NextRequest) {
         nextBilling: membership.nextBillingDate.toISOString().split('T')[0],
         startDate: membership.startDate.toISOString().split('T')[0],
         accessPermissions: JSON.parse(membership.accessPermissions),
+        scheduleAccess: (() => {
+          try {
+            return membership.scheduleAccess ? JSON.parse(membership.scheduleAccess) : null
+          } catch {
+            return null
+          }
+        })(),
         subscriptionId: subscription?.id || null
       }
     })

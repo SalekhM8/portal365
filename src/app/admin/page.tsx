@@ -183,6 +183,8 @@ function AdminDashboardContent() {
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState('')
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
   const [showResetSuccess, setShowResetSuccess] = useState(false)
+  const [todoLimitMobile, setTodoLimitMobile] = useState(10)
+  const [todoLimitDesktop, setTodoLimitDesktop] = useState(10)
   const [resetPasswordResult, setResetPasswordResult] = useState<{
     tempPassword: string;
     customerEmail: string;
@@ -659,6 +661,15 @@ function AdminDashboardContent() {
             <span className="hidden sm:inline">Manage Classes</span>
             <span className="sm:hidden">Classes</span>
           </Button>
+          <Button 
+            onClick={() => window.location.href = '/admin/packages'}
+            variant="outline"
+            className="flex items-center gap-2 text-xs lg:text-sm"
+          >
+            <Settings className="h-4 w-4" />
+            <span className="hidden sm:inline">Package Management</span>
+            <span className="sm:hidden">Packages</span>
+          </Button>
           <Button onClick={() => signOut()} variant="outline" className="flex items-center gap-2 text-xs lg:text-sm">
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Log Out</span>
@@ -774,13 +785,15 @@ function AdminDashboardContent() {
                           .filter(p => p.status === 'FAILED' || p.status === 'INCOMPLETE_SIGNUP')
                           .filter(p => !dismissedTodoIds.includes(p.id))
                           .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                          .slice(0, 10)
+                          .slice(0, todoLimitMobile)
                         if (failed.length === 0) {
                           return (
                             <div className="text-sm text-muted-foreground">No failed payments. You're all set.</div>
                           )
                         }
-                        return failed.map((p) => (
+                        return (
+                          <>
+                          {failed.map((p) => (
                           <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
                             <div className="flex items-start justify-between gap-3">
                               <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
@@ -815,7 +828,14 @@ function AdminDashboardContent() {
                               </div>
                             </div>
                           </div>
-                        ))
+                          ))}
+                          {failed.length >= todoLimitMobile && (
+                            <div className="flex justify-center">
+                              <Button variant="outline" className="border-white/20 text-white hover:bg-white/10" onClick={() => setTodoLimitMobile(l => l + 10)}>Show more</Button>
+                            </div>
+                          )}
+                          </>
+                        )
                       })()}
                     </div>
                   </TabsContent>
@@ -857,17 +877,19 @@ function AdminDashboardContent() {
               <CardContent>
                 <div className="space-y-4">
                   {(() => {
-                    const failed = [...payments]
+                  const failed = [...payments]
                       .filter(p => p.status === 'FAILED' || p.status === 'INCOMPLETE_SIGNUP')
                       .filter(p => !dismissedTodoIds.includes(p.id))
                       .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                      .slice(0, 10)
+                    .slice(0, todoLimitDesktop)
                     if (failed.length === 0) {
                       return (
                         <div className="text-sm text-muted-foreground">No failed payments. You're all set.</div>
                       )
                     }
-                    return failed.map((p) => (
+                  return (
+                    <>
+                    {failed.map((p) => (
                       <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
                         <div className="flex items-start justify-between gap-3">
                           <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
@@ -901,8 +923,15 @@ function AdminDashboardContent() {
                             </DropdownMenu>
                           </div>
                         </div>
-                      </div>
-                    ))
+                    </div>
+                  ))}
+                  {failed.length >= todoLimitDesktop && (
+                    <div className="flex justify-center">
+                      <Button variant="outline" className="border-white/20 text-white hover:bg-white/10" onClick={() => setTodoLimitDesktop(l => l + 10)}>Show more</Button>
+                    </div>
+                  )}
+                  </>
+                  )
                   })()}
                 </div>
               </CardContent>

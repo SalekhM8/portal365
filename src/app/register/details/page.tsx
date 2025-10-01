@@ -34,6 +34,7 @@ import {
 import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
+import { getPlanDbFirst } from '@/lib/plans'
 
 const businessConfigs = {
   aura_mma: {
@@ -55,6 +56,7 @@ function RegisterDetailsContent() {
   const searchParams = useSearchParams()
   const [selectedBusiness, setSelectedBusiness] = useState<string>('')
   const [selectedPlan, setSelectedPlan] = useState<string>('')
+  const [planDetails, setPlanDetails] = useState<any | null>(null)
   const [specialPrice, setSpecialPrice] = useState<number | null>(null)
   const [startOnFirst, setStartOnFirst] = useState<boolean>(false)
   const [loading, setLoading] = useState(false)
@@ -104,7 +106,19 @@ function RegisterDetailsContent() {
   }, [searchParams])
 
   const currentBusiness = selectedBusiness ? (businessConfigs as any)[selectedBusiness] : null
-  const currentPlan = selectedPlan ? MEMBERSHIP_PLANS[selectedPlan as keyof typeof MEMBERSHIP_PLANS] : null
+  useEffect(() => {
+    ;(async () => {
+      if (!selectedPlan) return
+      try {
+        const p = await getPlanDbFirst(selectedPlan)
+        setPlanDetails(p)
+      } catch {
+        setPlanDetails(MEMBERSHIP_PLANS[selectedPlan as keyof typeof MEMBERSHIP_PLANS])
+      }
+    })()
+  }, [selectedPlan])
+
+  const currentPlan = planDetails
 
   const handleInputChange = (field: string, value: string) => {
     if (field.startsWith('emergencyContact.')) {

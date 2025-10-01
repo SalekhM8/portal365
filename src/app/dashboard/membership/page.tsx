@@ -131,15 +131,28 @@ export default function MembershipPage() {
                 <CheckCircle2 className="h-4 w-4 text-blue-400" />
                 <h3 className="font-semibold text-blue-300">Current Plan Benefits</h3>
               </div>
-              <div className="space-y-2">
-                {currentMembership.type && MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.features?.map((feature: string, index: number) => (
-                  <div key={index} className="flex items-center gap-2 text-sm text-white/80">
-                    <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
-                    <span>{feature}</span>
+              <div className="space-y-4">
+                <div>
+                  <div className="text-white/60 text-xs uppercase mb-2">Features</div>
+                  {currentMembership.type && MEMBERSHIP_PLANS[currentMembership.type as keyof typeof MEMBERSHIP_PLANS]?.features?.map((feature: string, index: number) => (
+                    <div key={index} className="flex items-center gap-2 text-sm text-white/80">
+                      <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
+                      <span>{feature}</span>
+                    </div>
+                  )) || (
+                    <p className="text-white/60 text-sm">No features available for this membership type.</p>
+                  )}
+                </div>
+                {currentMembership.scheduleAccess?.allowedWindows?.length ? (
+                  <div>
+                    <div className="text-white/60 text-xs uppercase mb-2">Your Access Times</div>
+                    <ul className="text-sm text-white/80 space-y-1">
+                      {currentMembership.scheduleAccess.allowedWindows.map((w: any, idx: number) => (
+                        <li key={idx}>{formatDays(w.days)} {w.start}–{w.end}</li>
+                      ))}
+                    </ul>
                   </div>
-                )) || (
-                  <p className="text-white/60 text-sm">No features available for this membership type.</p>
-                )}
+                ) : null}
               </div>
             </div>
           )}
@@ -217,3 +230,9 @@ export default function MembershipPage() {
     </div>
   )
 } 
+
+function formatDays(days: string[] = []) {
+  if (!Array.isArray(days) || days.length === 0) return 'Any day'
+  const map: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' }
+  return days.map(d => map[d] || d).join(', ')
+}

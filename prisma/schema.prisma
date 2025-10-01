@@ -497,3 +497,32 @@ model SubscriptionAuditLog {
   @@index([createdAt])
   @@map("subscription_audit_logs")
 }
+
+// ============================================================================
+// MEMBERSHIP PLAN CATALOG (DB-DRIVEN, BACKWARD-COMPATIBLE)
+// ============================================================================
+
+model MembershipPlan {
+  id                   String   @id @default(cuid())
+  key                  String   @unique // e.g., FULL_ADULT, WEEKEND_ADULT
+  name                 String
+  displayName          String
+  description          String
+  monthlyPrice         Decimal  @db.Decimal(10, 2)
+  features             String   // JSON array of strings
+  schedulePolicy       String?  // JSON: timezone, allowedWindows[{days,start,end,zones?}], exceptions?
+  preferredEntities    String?  // JSON array of entity names
+  active               Boolean  @default(true)
+
+  // Stripe mapping (for new signups). Existing subs remain on old prices unless migrated explicitly
+  stripeProductId      String?
+  stripePriceIdActive  String?
+
+  validFrom            DateTime? // Optional go-live
+  validTo              DateTime? // Optional sunset
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("membership_plans")
+}

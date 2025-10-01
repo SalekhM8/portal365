@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
-import { getPlan } from '@/config/memberships'
+import { getPlanDbFirst } from '@/lib/plans'
 
 export async function handleSetupIntentConfirmation(body: { setupIntentId: string, subscriptionId: string }) {
   const { setupIntentId, subscriptionId } = body
@@ -57,7 +57,7 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
     }
   }
 
-  const membershipDetails = getPlan(subscription.membershipType)
+  const membershipDetails = await getPlanDbFirst(subscription.membershipType)
   const priceId = await getOrCreatePrice(membershipDetails)
   const trialEndTimestamp = Math.floor(nextBillingDate.getTime() / 1000)
 
@@ -130,7 +130,7 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
     const user = await prisma.user.findUnique({ where: { id: dbSub.userId }, select: { id: true, email: true, firstName: true, lastName: true } })
     return NextResponse.json({ success: true, message: 'Subscription already created', subscription: { id: dbSub.id, status: dbSub.status, userId: dbSub.userId }, user })
   }
-  const membershipDetails = getPlan(dbSub.membershipType)
+  const membershipDetails = await getPlanDbFirst(dbSub.membershipType)
   const priceId = await getOrCreatePrice(membershipDetails)
   const trialEndTimestamp = Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000)
 

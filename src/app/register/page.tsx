@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Crown, ArrowLeft, Dumbbell, Heart, ArrowRight, Star, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
+import { listPlansDbFirst } from '@/lib/plans'
 
 // Business configurations referencing central plan data
 const businessConfigs = {
@@ -39,12 +40,22 @@ function RegisterContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [selectedBusiness, setSelectedBusiness] = useState<string>('')
+  const [plans, setPlans] = useState<any[]>([])
 
   useEffect(() => {
     const businessParam = searchParams.get('business')
     if (businessParam && (businessParam in businessConfigs)) {
       setSelectedBusiness(businessParam)
     }
+    // Load plans DB-first (fallback to config handled in service)
+    ;(async () => {
+      try {
+        const dbPlans = await listPlansDbFirst()
+        setPlans(dbPlans as any[])
+      } catch {
+        setPlans(Object.values(MEMBERSHIP_PLANS) as any[])
+      }
+    })()
   }, [searchParams])
 
   const currentBusiness = selectedBusiness ? (businessConfigs as any)[selectedBusiness] : null
@@ -147,8 +158,15 @@ function RegisterContent() {
           </div>
           
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-            {currentBusiness?.memberships.map((membership: any, index: number) => {
-              const plan = MEMBERSHIP_PLANS[membership.type as keyof typeof MEMBERSHIP_PLANS]
+            {(plans as any[])
+              .filter(p => {
+                if (!selectedBusiness) return false
+                const vis = Array.isArray((p as any).preferredEntities) ? (p as any).preferredEntities : []
+                // default legacy behavior: if no visibility, keep original mapping
+                if (vis.length === 0) return (businessConfigs as any)[selectedBusiness]?.memberships.some((m: any) => m.type === p.key)
+                return vis.includes(selectedBusiness)
+              })
+              .map((plan: any, index: number) => {
               return (
                 <Link key={index} href={`/register/details?business=${selectedBusiness}&plan=${membership.type}`}>
                   <Card 
