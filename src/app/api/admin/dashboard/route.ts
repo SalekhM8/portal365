@@ -600,23 +600,24 @@ export async function GET() {
       }
     })
 
-    // Determine the latest status per key
-    const latestByKey: Record<string, { status: string; ts: number; idx: number }> = {}
-    for (let i = 0; i < paymentItemsRaw.length; i++) {
-      const it = paymentItemsRaw[i]
-      const prev = latestByKey[it._key]
-      if (!prev || it._ts > prev.ts) {
-        latestByKey[it._key] = { status: it.status, ts: it._ts, idx: i }
-      }
+    // Group by key (newest first)
+    const grouped: Record<string, Array<typeof paymentItemsRaw[number]>> = {}
+    for (const it of paymentItemsRaw.sort((a,b) => b._ts - a._ts)) {
+      grouped[it._key] = grouped[it._key] || []
+      grouped[it._key].push(it)
     }
 
-    // Keep only the latest item per key if still not successful; auto-hide if a later success exists
-    const paymentTodos = paymentItemsRaw.filter((it, idx) => {
-      const latest = latestByKey[it._key]
-      if (!latest) return false
-      if (latest.status === 'CONFIRMED') return false
-      return latest.idx === idx && it.status === latest.status && it.status === 'FAILED'
-    }).map(({ _key, _ts, ...rest }) => rest)
+    // For each key: if any CONFIRMED exists, hide entire key; else take first FAILED that isn't dismissed
+    const picked: Array<typeof paymentItemsRaw[number]> = []
+    for (const key of Object.keys(grouped)) {
+      const list = grouped[key]
+      const hasConfirmed = list.some(i => i.status === 'CONFIRMED')
+      if (hasConfirmed) continue
+      const candidate = list.find(i => i.status === 'FAILED' && i.failureReason !== 'DISMISSED_ADMIN')
+      if (candidate) picked.push(candidate)
+    }
+
+    const paymentTodos = picked.map(({ _key, _ts, ...rest }) => rest)
 
     const payments_full = payments.map((payment: any) => ({
       id: payment.id,
