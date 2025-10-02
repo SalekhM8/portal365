@@ -16,12 +16,13 @@ export async function GET(request: NextRequest) {
       where: { email: session.user.email },
       include: {
         memberships: {
-          where: { status: 'ACTIVE' },
+          where: { status: { in: ['ACTIVE','PENDING_PAYMENT','SUSPENDED','PAST_DUE'] } },
           orderBy: { createdAt: 'desc' },
           take: 1
         },
         subscriptions: {
-          where: { status: 'ACTIVE' },
+          where: { status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE','INCOMPLETE','INCOMPLETE_EXPIRED'] } },
+          orderBy: { createdAt: 'desc' },
           take: 1
         }
       }
@@ -54,7 +55,8 @@ export async function GET(request: NextRequest) {
             return null
           }
         })(),
-        subscriptionId: subscription?.id || null
+        subscriptionId: subscription?.id || null,
+        subscriptionStatus: subscription ? (subscription.status === 'TRIALING' ? 'ACTIVE' : subscription.status) : null
       }
     })
 

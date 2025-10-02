@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
       where: { email: session.user.email },
       include: {
         subscriptions: {
-          where: { status: 'ACTIVE' },
+          where: { status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE','INCOMPLETE','INCOMPLETE_EXPIRED'] } },
+          orderBy: { updatedAt: 'desc' },
           take: 1
         }
       }
@@ -53,6 +54,7 @@ export async function GET(request: NextRequest) {
     const setupIntent = await stripe.setupIntents.create({
       customer: subscription.stripeCustomerId,
       usage: 'off_session', // For future payments
+      payment_method_types: ['card'],
       metadata: {
         userId: user.id,
         subscriptionId: subscription.id
