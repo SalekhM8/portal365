@@ -24,7 +24,8 @@ const registerSchema = z.object({
     phone: z.string().min(1)
   }).optional(),
   guardianConsent: z.boolean().optional(),
-  membershipType: z.enum(['WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14', 'FULL_ADULT', 'KIDS_UNLIMITED_UNDER14', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
+  // Accept dynamic plan keys (DB-backed) as well as legacy keys
+  membershipType: z.string().min(1),
   businessId: z.string(),
   // Optional overrides for special flows (self-serve, no proration)
   customPrice: z.number().positive().optional(),
@@ -116,8 +117,23 @@ export async function POST(request: NextRequest) {
     
     console.log('✅ User created:', user.id)
     
-    // Get membership details
-    const membershipDetails = getMembershipDetails(validatedData.membershipType)
+    // Get membership details (DB-first for new plans; fallback to legacy map)
+    let membershipDetails: any
+    try {
+      const dbPlan = await prisma.membershipPlan.findUnique({ where: { key: validatedData.membershipType } })
+      if (dbPlan) {
+        membershipDetails = {
+          monthlyPrice: Number(dbPlan.monthlyPrice),
+          setupFee: 0,
+          accessPermissions: {},
+          scheduleAccess: dbPlan.schedulePolicy ? JSON.parse(dbPlan.schedulePolicy) : { timezone: 'Europe/London', allowedWindows: [] }
+        }
+      } else {
+        membershipDetails = getMembershipDetails(validatedData.membershipType)
+      }
+    } catch {
+      membershipDetails = getMembershipDetails(validatedData.membershipType)
+    }
     
     // Create membership record
     const membership = await prisma.membership.create({
