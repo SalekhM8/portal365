@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge'
 import { Crown, ArrowLeft, Dumbbell, Heart, ArrowRight, Star, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
-import { listPlansDbFirst } from '@/lib/plans'
 
 // Business configurations referencing central plan data
 const businessConfigs = {
@@ -47,14 +46,27 @@ function RegisterContent() {
     if (businessParam && (businessParam in businessConfigs)) {
       setSelectedBusiness(businessParam)
     }
-    // Load plans DB-first (fallback to config handled in service)
+    // Load plans from API filtered by business; fallback to config if API not available
     ;(async () => {
       try {
-        const dbPlans = await listPlansDbFirst()
-        setPlans(dbPlans as any[])
-      } catch {
-        setPlans(Object.values(MEMBERSHIP_PLANS) as any[])
-      }
+        if (businessParam) {
+          const res = await fetch(`/api/plans?business=${businessParam}`, { cache: 'no-store' })
+          const data = await res.json()
+          if (Array.isArray(data?.plans)) {
+            setPlans(data.plans)
+            return
+          }
+        }
+      } catch {}
+      // Fallback: static config mapped to business
+      const legacy = ((businessConfigs as any)[businessParam || '']?.memberships || []).map((m: any) => ({
+        key: m.type,
+        displayName: (MEMBERSHIP_PLANS as any)[m.type]?.displayName || m.type,
+        description: (MEMBERSHIP_PLANS as any)[m.type]?.description || '',
+        monthlyPrice: (MEMBERSHIP_PLANS as any)[m.type]?.monthlyPrice || 0,
+        features: (MEMBERSHIP_PLANS as any)[m.type]?.features || []
+      }))
+      setPlans(legacy)
     })()
   }, [searchParams])
 
@@ -159,13 +171,6 @@ function RegisterContent() {
           
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
             {(plans as any[])
-              .filter(p => {
-                if (!selectedBusiness) return false
-                const vis = Array.isArray((p as any).preferredEntities) ? (p as any).preferredEntities : []
-                // default legacy behavior: if no visibility, keep original mapping
-                if (vis.length === 0) return (businessConfigs as any)[selectedBusiness]?.memberships.some((m: any) => m.type === p.key)
-                return vis.includes(selectedBusiness)
-              })
               .map((plan: any, index: number) => {
               return (
                 <Link key={index} href={`/register/details?business=${selectedBusiness}&plan=${plan.key}`}>

@@ -94,7 +94,7 @@ function RegisterDetailsContent() {
     if (businessParam && (businessParam in businessConfigs)) {
       setSelectedBusiness(businessParam)
     }
-    if (planParam && (planParam in MEMBERSHIP_PLANS)) {
+    if (planParam) {
       setSelectedPlan(planParam)
     }
     if (priceParam && !Number.isNaN(Number(priceParam))) {
@@ -108,6 +108,14 @@ function RegisterDetailsContent() {
   useEffect(() => {
     ;(async () => {
       if (!selectedPlan) return
+      try {
+        const res = await fetch(`/api/plans/${selectedPlan}`, { cache: 'no-store' })
+        const json = await res.json()
+        if (json?.success && json.plan) {
+          setPlanDetails(json.plan)
+          return
+        }
+      } catch {}
       try {
         const p = await getPlanDbFirst(selectedPlan)
         setPlanDetails(p)

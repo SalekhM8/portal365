@@ -22,6 +22,7 @@ function PackagesContent() {
   const [newWindows, setNewWindows] = useState<Array<{ days: string[]; start: string; end: string }>>([])
   const [newVisibility, setNewVisibility] = useState<string[]>([])
   const DAY_OPTIONS = ['mon','tue','wed','thu','fri','sat','sun']
+  const [newFeatures, setNewFeatures] = useState<string[]>([])
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<any | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
@@ -146,6 +147,18 @@ function PackagesContent() {
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setNewWindows(arr => [...arr, { days: ['mon'], start: '00:00', end: '24:00' }])}>Add Window</Button>
             </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label className="text-white/80">Features</Label>
+              <div className="space-y-2">
+                {newFeatures.map((f, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <Input value={f} onChange={e => setNewFeatures(arr => { const copy = [...arr]; copy[idx] = e.target.value; return copy })} className="bg-white/5 border-white/10 text-white" placeholder="e.g., 7 days/week access" />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setNewFeatures(arr => arr.filter((_,i) => i!==idx))}>Remove</Button>
+                  </div>
+                ))}
+              </div>
+              <Button type="button" size="sm" variant="outline" onClick={() => setNewFeatures(arr => [...arr, ''])}>Add Feature</Button>
+            </div>
             <div className="md:col-span-2 flex gap-2">
               <Button disabled={creating} onClick={async () => {
                 try {
@@ -159,7 +172,7 @@ function PackagesContent() {
                       displayName: newPlan.displayName.trim(),
                       description: newPlan.description.trim(),
                       monthlyPrice: Number(newPlan.monthlyPrice),
-                      features: [],
+                      features: newFeatures.filter(Boolean),
                       schedulePolicy: { timezone: 'Europe/London', allowedWindows: (newWindows.length ? newWindows : [{ days: ['mon','tue','wed','thu','fri','sat','sun'], start: '00:00', end: '24:00' }]) },
                       preferredEntities: newVisibility,
                       active: true
@@ -167,10 +180,11 @@ function PackagesContent() {
                   })
                   const data = await res.json()
                   if (data?.success) {
-                    setPlans(prev => [...prev, { ...data.plan, monthlyPrice: Number(data.plan.monthlyPrice), features: [], schedulePolicy: { timezone: 'Europe/London', allowedWindows: (newWindows.length ? newWindows : [{ days: ['mon','tue','wed','thu','fri','sat','sun'], start: '00:00', end: '24:00' }]) }, preferredEntities: newVisibility }])
+                    setPlans(prev => [...prev, { ...data.plan, monthlyPrice: Number(data.plan.monthlyPrice), features: newFeatures.filter(Boolean), schedulePolicy: { timezone: 'Europe/London', allowedWindows: (newWindows.length ? newWindows : [{ days: ['mon','tue','wed','thu','fri','sat','sun'], start: '00:00', end: '24:00' }]) }, preferredEntities: newVisibility }])
                     setNewPlan({ key: '', name: '', displayName: '', description: '', monthlyPrice: '' })
                     setNewWindows([])
                     setNewVisibility([])
+                    setNewFeatures([])
                   }
                 } finally {
                   setCreating(false)
@@ -242,6 +256,18 @@ function PackagesContent() {
                       </div>
                     </div>
                     <div>
+                      <Label className="text-white/80">Features</Label>
+                      <div className="space-y-2">
+                        {(editDraft.features || []).map((f: string, idx: number) => (
+                          <div key={idx} className="flex gap-2">
+                            <Input value={f} onChange={e => setEditDraft((d: any) => { const arr = [...(d.features || [])]; arr[idx] = e.target.value; return { ...d, features: arr } })} className="bg-white/5 border-white/10 text-white" placeholder="Feature text" />
+                            <Button size="sm" variant="outline" onClick={() => setEditDraft((d: any) => ({ ...d, features: (d.features || []).filter((_: any, i: number) => i !== idx) }))}>Remove</Button>
+                          </div>
+                        ))}
+                        <Button size="sm" variant="outline" onClick={() => setEditDraft((d: any) => ({ ...d, features: [...(d.features || []), ''] }))}>Add Feature</Button>
+                      </div>
+                    </div>
+                    <div>
                       <Label className="text-white/80">Description</Label>
                       <Input value={editDraft.description} onChange={e => setEditDraft((d: any) => ({ ...d, description: e.target.value }))} className="bg-white/5 border-white/10 text-white" />
                     </div>
@@ -302,12 +328,13 @@ function PackagesContent() {
                               description: editDraft.description,
                               monthlyPrice: Number(editDraft.monthlyPrice),
                               schedulePolicy,
-                              preferredEntities: editDraft.preferredEntities
+                              preferredEntities: editDraft.preferredEntities,
+                              features: (editDraft.features || []).filter((s: string) => !!s)
                             } })
                           })
                           const data = await res.json()
                           if (data?.success) {
-                            setPlans(prev => prev.map(p => p.key === plan.key ? { ...p, displayName: editDraft.displayName, description: editDraft.description, monthlyPrice: Number(editDraft.monthlyPrice), schedulePolicy, preferredEntities: editDraft.preferredEntities } : p))
+                            setPlans(prev => prev.map(p => p.key === plan.key ? { ...p, displayName: editDraft.displayName, description: editDraft.description, monthlyPrice: Number(editDraft.monthlyPrice), schedulePolicy, preferredEntities: editDraft.preferredEntities, features: (editDraft.features || []).filter((s: string) => !!s) } : p))
                             setEditingKey(null)
                             setEditDraft(null)
                           }

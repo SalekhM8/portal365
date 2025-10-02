@@ -35,13 +35,7 @@ const businesses = [
     icon: Dumbbell,
     color: 'bg-gradient-to-br from-red-500 to-red-600',
     offerings: ['World class grappling', 'Elite level striking coaching', 'Professional MMA fighters and coaches', 'National Champions Wrestling coach', 'World class Strength and Conditioning Facility'],
-    membershipTypes: [
-      { name: 'Full Access', price: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice, popular: true, key: 'FULL_ADULT' },
-      { name: 'Weekend Only', price: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice, popular: false, key: 'WEEKEND_ADULT' },
-      { name: 'Kids Unlimited (Under 14s)', price: MEMBERSHIP_PLANS.KIDS_UNLIMITED_UNDER14.monthlyPrice, popular: false, key: 'KIDS_UNLIMITED_UNDER14' },
-      { name: 'Kids Weekend (Under 14s)', price: MEMBERSHIP_PLANS.KIDS_WEEKEND_UNDER14.monthlyPrice, popular: false, key: 'KIDS_WEEKEND_UNDER14' },
-      { name: 'Masters Program (30+)', price: MEMBERSHIP_PLANS.MASTERS.monthlyPrice, popular: false, key: 'MASTERS' }
-    ]
+    membershipTypes: []
   },
   {
     id: 'aura_womens',
@@ -50,9 +44,7 @@ const businesses = [
     icon: Heart,
     color: 'bg-gradient-to-br from-pink-500 to-pink-600',
     offerings: ['Muay Thai Only', 'Women-Only Classes', 'Qualified Female Instructor', 'Technique-Focused Training'],
-    membershipTypes: [
-      { name: "Women's Program", price: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice, popular: true, key: 'WOMENS_CLASSES' }
-    ]
+    membershipTypes: []
   }
 ];
 
@@ -62,6 +54,7 @@ export default function Home() {
   const [specialOpen, setSpecialOpen] = useState(false);
   const [classes, setClasses] = useState<Array<any>>([]);
   const [loadingClasses, setLoadingClasses] = useState(false);
+  const [plansByBusiness, setPlansByBusiness] = useState<Record<string, any[]>>({})
 
   useEffect(() => {
     if (!timetableOpen || classes.length) return;
@@ -77,6 +70,25 @@ export default function Home() {
       })
       .finally(() => setLoadingClasses(false));
   }, [timetableOpen, classes.length]);
+
+  useEffect(() => {
+    // Load DB plans for each business so landing reflects newly created packages
+    const load = async () => {
+      try {
+        const ids = ['aura_mma','aura_womens']
+        const entries = await Promise.all(ids.map(async id => {
+          const res = await fetch(`/api/plans?business=${id}`, { cache: 'no-store' })
+          const json = await res.json()
+          const arr = Array.isArray(json?.plans) ? json.plans : []
+          return [id, arr] as const
+        }))
+        const map: Record<string, any[]> = {}
+        for (const [id, arr] of entries) map[id] = arr
+        setPlansByBusiness(map)
+      } catch {}
+    }
+    load()
+  }, [])
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -271,17 +283,17 @@ export default function Home() {
                     <div className="space-y-4">
                       <h4 className="font-semibold text-white/90 text-sm uppercase tracking-wider">Membership Options:</h4>
                       <div className="space-y-3">
-                        {business.membershipTypes.map((membership, index) => (
-                          <Link key={index} href={`/register/details?business=${business.id}&plan=${membership.key}`}>
+                        {(plansByBusiness[business.id] || []).map((p: any, index: number) => (
+                          <Link key={index} href={`/register/details?business=${business.id}&plan=${p.key}`}>
                             <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer group">
                               <span className="flex items-center gap-2 text-white">
-                                {membership.name}
-                                {membership.popular && (
+                                {p.displayName}
+                                {false && (
                                   <Badge className="bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs border-0">Popular</Badge>
                                 )}
                               </span>
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-white">£{membership.price}<span className="text-sm text-white/60">/mo</span></span>
+                                <span className="font-bold text-white">£{p.monthlyPrice}<span className="text-sm text-white/60">/mo</span></span>
                                 <ArrowRight className="h-4 w-4 text-white/60 group-hover:text-white group-hover:translate-x-1 transition-all duration-300" />
                               </div>
                             </div>
