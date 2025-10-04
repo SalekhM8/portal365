@@ -133,16 +133,23 @@ export async function handlePaymentSucceeded(invoice: any) {
     // STEP 6: Check for duplicate processing (idempotency)
     const existingInvoice = await prisma.invoice.findUnique({ where: { stripeInvoiceId: invoice.id } })
     if (existingInvoice) {
-      // Previously processed invoice. Ensure a matching CONFIRMED payment exists; if not, create it now.
-      const existingPayment = await prisma.payment.findFirst({
+      // Invoice already recorded – ensure a CONFIRMED payment exists for this invoice id regardless of user attribution
+      const existingPaymentAnyUser = await prisma.payment.findFirst({
         where: {
-          userId: subscription.userId,
           status: 'CONFIRMED',
           description: { contains: `[inv:${invoice.id}]` }
         }
       })
-      if (existingPayment) {
-        console.log(`ℹ️ [${operationId}] Invoice already processed with payment ${existingPayment.id}, skipping`)
+      if (existingPaymentAnyUser) {
+        // Optional attribution correction: if metadata has memberUserId and differs, reattribute
+        try {
+          const preferredUserId = (meta?.memberUserId as string | undefined) || subscription.userId
+          if (preferredUserId && existingPaymentAnyUser.userId !== preferredUserId) {
+            await prisma.payment.update({ where: { id: existingPaymentAnyUser.id }, data: { userId: preferredUserId } })
+            console.log(`♻️ [${operationId}] Reattributed existing payment ${existingPaymentAnyUser.id} to user ${preferredUserId}`)
+          }
+        } catch {}
+        console.log(`ℹ️ [${operationId}] Invoice already processed with payment ${existingPaymentAnyUser.id}, skipping`)
         return
       }
       // Backfill missing payment for already-recorded invoice
@@ -151,6 +158,12 @@ export async function handlePaymentSucceeded(invoice: any) {
         ? 'Initial subscription payment (prorated)'
         : 'Monthly membership payment'
       const taggedBackfill = `${paymentDescriptionBackfill} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForBackfill}]`
+      // Final guard before creating
+      const dupGuard = await prisma.payment.findFirst({ where: { status: 'CONFIRMED', description: { contains: `[inv:${invoice.id}]` } } })
+      if (dupGuard) {
+        console.log(`ℹ️ [${operationId}] Detected duplicate just before backfill, skipping`)
+        return
+      }
       const created = await prisma.payment.create({
         data: {
           userId: userIdForBackfill,
@@ -214,6 +227,22 @@ export async function handlePaymentSucceeded(invoice: any) {
 
     // Tag description with identifiers including member id for precise attribution display
     const taggedDescription = `${paymentDescription} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForPayment}]`
+
+    // Idempotency guard (invoice-scoped) before creating normal payment
+    const alreadyByInvoice = await prisma.payment.findFirst({
+      where: { status: 'CONFIRMED', description: { contains: `[inv:${invoice.id}]` } }
+    })
+    if (alreadyByInvoice) {
+      // Optional attribution correction
+      try {
+        if (alreadyByInvoice.userId !== userIdForPayment) {
+          await prisma.payment.update({ where: { id: alreadyByInvoice.id }, data: { userId: userIdForPayment } })
+          console.log(`♻️ [${operationId}] Reattributed existing payment ${alreadyByInvoice.id} to user ${userIdForPayment}`)
+        }
+      } catch {}
+      console.log(`ℹ️ [${operationId}] Payment already exists for invoice ${invoice.id}, skipping create`)
+      return
+    }
 
     const paymentRecord = await prisma.payment.create({ 
       data: { 
