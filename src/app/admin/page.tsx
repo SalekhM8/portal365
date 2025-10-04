@@ -118,6 +118,8 @@ interface PaymentDetail {
 interface BusinessMetrics {
   totalRevenue: number
   monthlyRecurring: number
+  monthlyRecurringLastMonth?: number
+  monthlyRecurringPrevMonth?: number
   churnRate: number
   acquisitionRate: number
   avgLifetimeValue: number
@@ -720,13 +722,19 @@ function AdminDashboardContent() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Monthly Recurring</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Last Month Revenue</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl sm:text-2xl font-bold">£{businessMetrics?.monthlyRecurring.toLocaleString()}</div>
+            <div className="text-xl sm:text-2xl font-bold">
+              £{(
+                (businessMetrics?.monthlyRecurringLastMonth ?? null) !== null
+                  ? (businessMetrics?.monthlyRecurringLastMonth || 0)
+                  : (businessMetrics?.monthlyRecurring || 0)
+              ).toLocaleString()}
+            </div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
-              <span className="text-green-600">+8.7%</span> MRR growth
+              MTD: £{(businessMetrics?.monthlyRecurring || 0).toLocaleString()}
             </p>
           </CardContent>
         </Card>

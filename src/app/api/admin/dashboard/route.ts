@@ -72,11 +72,41 @@ export async function GET() {
       ? (cancelledThisMonth / totalActiveAtMonthStart) * 100 
       : 0
 
-    // Get total revenue this month
+    // Get total revenue this month (month-to-date)
     const monthlyRevenue = await prisma.payment.aggregate({
       where: {
         status: 'CONFIRMED',
         createdAt: { gte: thisMonthStart }
+      },
+      _sum: { amount: true }
+    })
+
+    // Calculate last calendar month boundaries in UTC for precise month windows
+    const nowUtc = new Date()
+    const thisMonthStartUtc = new Date(Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth(), 1))
+    const lastMonthStartUtc = new Date(Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth() - 1, 1))
+    const prevMonthStartUtc = new Date(Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth() - 2, 1))
+
+    // Last calendar month revenue using processedAt to reflect when a payment actually completed
+    const lastMonthRevenue = await prisma.payment.aggregate({
+      where: {
+        status: 'CONFIRMED',
+        processedAt: {
+          gte: lastMonthStartUtc,
+          lt: thisMonthStartUtc
+        }
+      },
+      _sum: { amount: true }
+    })
+
+    // Previous calendar month revenue for month-over-month comparisons
+    const prevMonthRevenue = await prisma.payment.aggregate({
+      where: {
+        status: 'CONFIRMED',
+        processedAt: {
+          gte: prevMonthStartUtc,
+          lt: lastMonthStartUtc
+        }
       },
       _sum: { amount: true }
     })
@@ -690,6 +720,8 @@ export async function GET() {
       metrics: {
         totalRevenue: Number(totalRevenue._sum.amount) || 0,
         monthlyRecurring: Number(monthlyRevenue._sum.amount) || 0,
+        monthlyRecurringLastMonth: Number(lastMonthRevenue._sum.amount) || 0,
+        monthlyRecurringPrevMonth: Number(prevMonthRevenue._sum.amount) || 0,
         churnRate: Math.round(churnRate * 100) / 100,
         acquisitionRate: Math.round(acquisitionRate * 100) / 100,
         avgLifetimeValue: totalCustomers > 0 ? Math.round((Number(totalRevenue._sum.amount) || 0) / totalCustomers) : 0,
