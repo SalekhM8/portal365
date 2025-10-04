@@ -171,6 +171,7 @@ function AdminDashboardContent() {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null)
   const [memberMemberships, setMemberMemberships] = useState<Array<{ userId: string; memberName: string; membershipType: string; status: string; nextBilling: string | null; subscriptionId: string | null; cancelAtPeriodEnd: boolean }>>([])
   const [membershipsLoading, setMembershipsLoading] = useState(false)
+  const [openPill, setOpenPill] = useState<'personal'|'contact'|'payments'|'management'|null>('personal')
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [addCustomerData, setAddCustomerData] = useState({
     firstName: '',
@@ -1498,341 +1499,154 @@ function AdminDashboardContent() {
       {selectedCustomer && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[85vh] overflow-y-auto">
-            <h3 className="text-xl font-bold mb-4 text-white">Customer Details</h3>
-            <div className="grid gap-4">
-              <div className="space-y-3">
-                <div className="border-b border-white/10 pb-2">
-                  <p className="text-white"><strong className="text-white/90">Name:</strong> {selectedCustomer.name}</p>
-                  <p className="text-white"><strong className="text-white/90">Email:</strong> {selectedCustomer.email}</p>
-                  <p className="text-white"><strong className="text-white/90">Phone:</strong> {selectedCustomer.phone}</p>
-                  {(() => {
-                    // Address injected into emergencyContact.addressInfo without schema changes
-                    const addr = (selectedCustomer as any)?.emergencyContact?.addressInfo
-                    if (!addr) return null
-                    return (
-                      <>
-                        <p className="text-white"><strong className="text-white/90">Address:</strong> {addr.address || '—'}</p>
-                        <p className="text-white"><strong className="text-white/90">Post Code:</strong> {addr.postcode || '—'}</p>
-                      </>
-                    )
-                  })()}
-                  {selectedCustomer.phone && (
-                    <div className="flex gap-2 mt-2">
-                      <Button variant="outline" asChild>
-                        <a href={`tel:${selectedCustomer.phone}`}>Call</a>
-                      </Button>
-                      <Button variant="outline" asChild>
-                        <a href={`sms:${selectedCustomer.phone}`}>SMS</a>
-                      </Button>
-                      <Button variant="outline" asChild>
-                        <a href={`https://api.whatsapp.com/send?phone=${normalizeForWhatsApp(selectedCustomer.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
-                      </Button>
-                      <Button variant="outline" asChild>
-                        <a href={`mailto:${selectedCustomer.email}`}>Email</a>
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div className="border-b border-white/10 pb-2">
-                  <p className="text-white"><strong className="text-white/90">Membership Type:</strong> {selectedCustomer.membershipType}</p>
-                  <p className="text-white"><strong className="text-white/90">Status:</strong> {selectedCustomer.status}</p>
-                  <p className="text-white"><strong className="text-white/90">Join Date:</strong> {new Date(selectedCustomer.joinDate).toLocaleDateString()}</p>
-                </div>
-                <div className="border-b border-white/10 pb-2">
-                  <p className="text-white"><strong className="text-white/90">Last Payment:</strong> {new Date(selectedCustomer.lastPayment).toLocaleDateString()}</p>
-                  <p className="text-white"><strong className="text-white/90">Total Paid:</strong> £{selectedCustomer.totalPaid}</p>
-                  <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
-                  <div className="flex gap-2 mt-3">
-                    {selectedCustomer.status === 'PENDING_PAYMENT' && (selectedCustomer.totalPaid || 0) === 0 ? (
-                      <Button
-                        variant="outline"
-                        onClick={async () => {
-                          await handleRemovePendingSignup(selectedCustomer.id)
-                        }}
-                        className="border-red-500/20 text-red-400 hover:bg-red-500/10"
-                      >
-                        Remove Abandoned Signup
-                      </Button>
-                    ) : (
-                      <>
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        if (!confirm('Retry the latest open invoice for this customer?')) return
-                        const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/retry-invoice`, { method: 'POST' })
-                        const json = await resp.json()
-                        if (resp.ok) alert('Invoice retry requested. Status: ' + json.invoice.status)
-                        else alert('Retry failed: ' + (json.error || 'Unknown error'))
-                      }}
-                    >
-                      Retry Payment
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={async () => {
-                        if (!confirm('Void the latest open invoice for this customer? This cannot be undone.')) return
-                        const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/void-invoice`, { method: 'POST' })
-                        const json = await resp.json()
-                        if (resp.ok) alert('Invoice voided. Status: ' + json.invoice.status)
-                        else alert('Void failed: ' + (json.error || 'Unknown error'))
-                      }}
-                      className="border-red-500/20 text-red-400 hover:bg-red-500/10"
-                    >
-                      Void Invoice
-                    </Button>
-                      </>
-                    )}
+            <h3 className="text-2xl sm:text-3xl font-extrabold mb-4 text-white">Member Summary</h3>
+            <div className="grid gap-3">
+              {/* Summary first */}
+              <div className="space-y-1">
+                <p className="text-white text-base font-semibold">{selectedCustomer.name}</p>
+                <p className="text-white/80 text-sm">{selectedCustomer.membershipType} • {selectedCustomer.status}</p>
+                {selectedCustomer.phone && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <Button variant="outline" asChild className="rounded-full"><a href={`tel:${selectedCustomer.phone}`}>Call</a></Button>
+                    <Button variant="outline" asChild className="rounded-full"><a href={`sms:${selectedCustomer.phone}`}>SMS</a></Button>
+                    <Button variant="outline" asChild className="rounded-full"><a href={`https://api.whatsapp.com/send?phone=${normalizeForWhatsApp(selectedCustomer.phone)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></Button>
+                    <Button variant="outline" asChild className="rounded-full"><a href={`mailto:${selectedCustomer.email}`}>Email</a></Button>
                   </div>
-                </div>
-                <div className="border-b border-white/10 pb-2">
-                  <p className="text-white"><strong className="text-white/90">Routed Entity:</strong> {selectedCustomer.routedEntity}</p>
-                </div>
-                {/* 🚀 NEW: Memberships on this account */}
-                <div className="border-b border-white/10 pb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-white font-semibold">Memberships on this account</h4>
-                    <Button variant="outline" size="sm" onClick={() => fetchCustomerMemberships(selectedCustomer.id)} className="border-white/20 text-white hover:bg-white/10">
-                      Refresh
-                    </Button>
-                  </div>
-                  {membershipsLoading ? (
-                    <p className="text-white/60 text-sm">Loading memberships…</p>
-                  ) : memberMemberships.length === 0 ? (
-                    <p className="text-white/60 text-sm">No linked memberships</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {memberMemberships.map(m => (
-                        <div key={m.userId} className="bg-white/5 border border-white/10 rounded p-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-white font-medium">{m.memberName}</p>
-                              <p className="text-xs text-white/60">{m.membershipType} • Next billing: {m.nextBilling ? new Date(m.nextBilling).toLocaleDateString() : '—'}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={m.status === 'ACTIVE' ? 'default' : m.status === 'SUSPENDED' ? 'secondary' : m.status === 'CANCELLED' ? 'destructive' : 'outline'}>
-                                {m.status}
-                              </Badge>
-                            </div>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {(m.status === 'ACTIVE') && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  onClick={() => {
-                                    setSelectedCustomer({ ...selectedCustomer, id: m.userId })
-                                    openMembershipActionModal('pause')
-                                  }}
-                                  className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10"
-                                >
-                                  Pause
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  onClick={() => {
-                                    setSelectedCustomer({ ...selectedCustomer, id: m.userId })
-                                    setShowChangePlanModal(true)
-                                  }}
-                                  className="border-white/20 text-white hover:bg-white/10"
-                                >
-                                  Change Plan (Admin)
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  onClick={() => {
-                                    setSelectedCustomer({ ...selectedCustomer, id: m.userId })
-                                    openMembershipActionModal('cancel')
-                                  }}
-                                  className="border-red-500/20 text-red-400 hover:bg-red-500/10"
-                                >
-                                  Cancel
-                                </Button>
-                              </>
-                            )}
-                            {m.status === 'SUSPENDED' && (
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedCustomer({ ...selectedCustomer, id: m.userId })
-                                  openMembershipActionModal('resume')
-                                }}
-                                className="border-green-500/20 text-green-400 hover:bg-green-500/10"
-                              >
-                                Resume
-                              </Button>
-                            )}
-                            {m.cancelAtPeriodEnd && (
-                              <span className="text-xs text-orange-400">Scheduled to cancel at period end</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <p className="text-white"><strong className="text-white/90">Emergency Contact:</strong> {selectedCustomer.emergencyContact?.name} ({selectedCustomer.emergencyContact?.relationship})</p>
-                  {/* Guardian details if captured during U16 registration */}
-                  {selectedCustomer?.emergencyContact && (selectedCustomer as any).emergencyContact?.guardian && (
-                    <p className="text-white"><strong className="text-white/90">Guardian:</strong> {(selectedCustomer as any).emergencyContact.guardian.name} — {(selectedCustomer as any).emergencyContact.guardian.phone}</p>
-                  )}
-                  <p className="text-white"><strong className="text-white/90">Access History:</strong> {selectedCustomer.accessHistory?.totalVisits} visits, {selectedCustomer.accessHistory?.avgWeeklyVisits}/week avg</p>
-                </div>
+                )}
               </div>
-            </div>
-            {/* 🚀 NEW: Recent Payments (mini) */}
-            <div className="border-t border-white/10 pt-4 mt-6">
-              <h4 className="text-white font-semibold mb-3">Recent Payments</h4>
-              <div className="bg-white/5 border border-white/10 rounded">
-                <table className="w-full text-sm">
-                  <thead className="text-white/60">
-                    <tr>
-                      <th className="text-left p-2">Date</th>
-                      <th className="text-left p-2">Amount</th>
-                      <th className="text-left p-2">Status</th>
-                      <th className="text-left p-2">Entity</th>
-                      <th className="text-left p-2">Member / Payer</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payments.filter(p => p.customerId === selectedCustomer.id).slice(0, 6).map((p) => (
-                      <tr key={p.id} className="border-t border-white/10">
-                        <td className="p-2">{new Date(p.timestamp).toLocaleDateString()}</td>
-                        <td className="p-2">£{p.amount}</td>
-                        <td className="p-2"><Badge variant={getStatusBadgeVariant(p.status)}>{p.status}</Badge></td>
-                        <td className="p-2">{p.routedToEntity}</td>
-                        <td className="p-2 text-white/80 text-xs">
-                          {/* Label: Member and Payer (best-effort; using selectedCustomer for payer email) */}
-                          Member: {selectedCustomer.name} • Payer: {selectedCustomer.email}
-                        </td>
-                      </tr>
-                    ))}
-                    {payments.filter(p => p.customerId === selectedCustomer.id).length === 0 && (
-                      <tr>
-                        <td className="p-3 text-white/60" colSpan={5}>No payments yet.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-2 text-right">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearchTerm(selectedCustomer.name)
-                    setActiveTab('payments')
-                    setSelectedCustomer(null)
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                  }}
-                  className="border-white/20 text-white hover:bg-white/10"
-                >
-                  View all payments
-                </Button>
-              </div>
-            </div>
 
-            {/* 🚀 NEW: Membership Management Actions */}
-            <div className="border-t border-white/10 pt-4 mt-6">
-              <h4 className="text-white font-semibold mb-4">Membership Management</h4>
-              <div className="grid grid-cols-2 gap-3">
-                {/* Show current subscription status */}
-                <div className="col-span-2 mb-2 p-2 bg-blue-500/10 rounded text-xs text-blue-300 flex justify-between items-center">
-                  <span>
-                    Subscription: {selectedCustomer.subscriptionStatus} | Membership: {selectedCustomer.membershipStatus}
-                    {selectedCustomer.cancelAtPeriodEnd && ' | Scheduled for cancellation'}
-                  </span>
-                </div>
-                
-                {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && (
-                  <>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => openMembershipActionModal('pause')}
-                      className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10"
-                    >
-                      Pause Membership
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => openMembershipActionModal('cancel')}
-                      className="border-red-500/20 text-red-400 hover:bg-red-500/10"
-                    >
-                      Cancel Membership
-                    </Button>
-                  </>
-                )}
-                {(selectedCustomer.subscriptionStatus === 'PAUSED' || selectedCustomer.status === 'PAUSED') && (
-                  <Button 
-                    variant="outline" 
-                    onClick={() => openMembershipActionModal('resume')}
-                    className="border-green-500/20 text-green-400 hover:bg-green-500/10 col-span-2"
-                  >
-                    Resume Membership
-                  </Button>
-                )}
-                {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && (
-                  <div className="col-span-2 text-center text-white/60 py-2">
-                    Membership has been cancelled
+              {/* Vertical collapsibles */}
+              <div className="divide-y divide-white/10 border border-white/10 rounded">
+                {/* Personal Information */}
+    <button onClick={() => setOpenPill(openPill==='personal'? null:'personal')} className="w-full flex items-center justify-between px-3 py-2 text-left">
+                  <span className="text-white text-base sm:text-lg font-semibold">Personal Information</span>
+                  <span className="text-white/60 text-xs">{openPill==='personal' ? '▾' : '▸'}</span>
+                </button>
+                {openPill==='personal' && (
+                  <div className="px-3 pb-3 space-y-2">
+                    {(() => {
+                      try {
+                        const raw = (selectedCustomer as any)?.emergencyContact
+                        const addrObj = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw || {}
+                        const addr = (addrObj as any)?.addressInfo || (addrObj as any)?.address || null
+                        const postcode = (addrObj as any)?.postcode || (addrObj as any)?.addressInfo?.postcode || null
+                        return (
+                          <>
+                            <p className="text-white"><strong className="text-white/90">Address:</strong> {(addr && (addr.address || addr.line1 || addr)) || '—'}</p>
+                            <p className="text-white"><strong className="text-white/90">Post Code:</strong> {postcode || '—'}</p>
+                          </>
+                        )
+                      } catch { return null }
+                    })()}
+                    <p className="text-white"><strong className="text-white/90">Email:</strong> {selectedCustomer.email}</p>
+                    <p className="text-white"><strong className="text-white/90">Phone:</strong> {selectedCustomer.phone || '—'}</p>
+                    <p className="text-white"><strong className="text-white/90">Join Date:</strong> {new Date(selectedCustomer.joinDate).toLocaleDateString()}</p>
+                    {(() => {
+                      const last = payments.find(p => p.customerId === selectedCustomer.id && p.status === 'CONFIRMED')
+                      return (
+                        <p className="text-white"><strong className="text-white/90">Last Payment:</strong> £{last ? Number(last.amount).toLocaleString() : '—'}</p>
+                      )
+                    })()}
+                    <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
                   </div>
                 )}
-                {selectedCustomer.cancelAtPeriodEnd && (
-                  <div className="col-span-2 text-center text-orange-400 py-2 text-sm">
-                    ⚠️ Scheduled for cancellation at period end
+
+                {/* Emergency Contact */}
+    <button onClick={() => setOpenPill(openPill==='contact'? null:'contact')} className="w-full flex items-center justify-between px-3 py-2 text-left">
+                  <span className="text-white text-base sm:text-lg font-semibold">Emergency Contact</span>
+                  <span className="text-white/60 text-xs">{openPill==='contact' ? '▾' : '▸'}</span>
+                </button>
+                {openPill==='contact' && (
+                  <div className="px-3 pb-3 space-y-2">
+                    {(() => {
+                      try {
+                        const raw = (selectedCustomer as any)?.emergencyContact
+                        const ec = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw || {})
+                        const name = (ec as any)?.name || '—'
+                        const phone = (ec as any)?.phone || '—'
+                        const relationship = (ec as any)?.relationship || '—'
+                        return (
+                          <>
+                            <p className="text-white"><strong className="text-white/90">Name:</strong> {name}</p>
+                            <p className="text-white"><strong className="text-white/90">Phone:</strong> {phone}</p>
+                            <p className="text-white"><strong className="text-white/90">Relationship:</strong> {relationship}</p>
+                          </>
+                        )
+                      } catch {
+                        return (
+                          <>
+                            <p className="text-white"><strong className="text-white/90">Name:</strong> —</p>
+                            <p className="text-white"><strong className="text-white/90">Phone:</strong> —</p>
+                            <p className="text-white"><strong className="text-white/90">Relationship:</strong> —</p>
+                          </>
+                        )
+                      }
+                    })()}
+                  </div>
+                )}
+
+                {/* Recent Payments */}
+    <button onClick={() => setOpenPill(openPill==='payments'? null:'payments')} className="w-full flex items-center justify-between px-3 py-2 text-left">
+                  <span className="text-white text-base sm:text-lg font-semibold">Payments</span>
+                  <span className="text-white/60 text-xs">{openPill==='payments' ? '▾' : '▸'}</span>
+                </button>
+                {openPill==='payments' && (
+                  <div className="px-3 pb-2">
+                    <table className="w-full text-sm">
+                      <thead className="text-white/60">
+                        <tr><th className="text-left p-2">Date</th><th className="text-left p-2">Amount</th><th className="text-left p-2">Status</th></tr>
+                      </thead>
+                      <tbody>
+                        {payments.filter(p => p.customerId === selectedCustomer.id).slice(0, 6).map((p) => (
+                          <tr key={p.id} className="border-t border-white/10">
+                            <td className="p-2">{new Date(p.timestamp).toLocaleDateString()}</td>
+                            <td className="p-2">£{p.amount}</td>
+                            <td className="p-2"><Badge variant={getStatusBadgeVariant(p.status)}>{p.status}</Badge></td>
+                          </tr>
+                        ))}
+                        {payments.filter(p => p.customerId === selectedCustomer.id).length === 0 && (
+                          <tr><td className="p-3 text-white/60" colSpan={3}>No payments yet.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                    <div className="mt-2 text-right">
+                      <Button variant="outline" onClick={() => { setSearchTerm(selectedCustomer.name); setActiveTab('payments'); setSelectedCustomer(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="border-white/20 text-white hover:bg-white/10">View all payments</Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Membership Management */}
+    <button onClick={() => setOpenPill(openPill==='management'? null:'management')} className="w-full flex items-center justify-between px-3 py-2 text-left">
+                  <span className="text-white text-base sm:text-lg font-semibold">Membership Management</span>
+                  <span className="text-white/60 text-xs">{openPill==='management' ? '▾' : '▸'}</span>
+                </button>
+                {openPill==='management' && (
+                  <div className="px-3 pb-3 space-y-3">
+                    <div className="p-2 bg-blue-500/10 rounded text-xs text-blue-300">Subscription: {selectedCustomer.subscriptionStatus} • Membership: {selectedCustomer.membershipStatus}{selectedCustomer.cancelAtPeriodEnd && ' • Scheduled for cancellation'}</div>
+        {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && (
+          <div className="flex flex-col gap-2">
+                        <Button variant="outline" onClick={() => openMembershipActionModal('pause')} className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10">Pause</Button>
+                        <Button variant="outline" onClick={() => openMembershipActionModal('cancel')} className="border-red-500/20 text-red-400 hover:bg-red-500/10">Cancel</Button>
+                      </div>
+                    )}
+        {(selectedCustomer.subscriptionStatus === 'PAUSED' || selectedCustomer.status === 'PAUSED') && (
+          <Button variant="outline" onClick={() => openMembershipActionModal('resume')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Resume</Button>
+                    )}
+                    {selectedCustomer.cancelAtPeriodEnd && (<div className="text-orange-400 text-xs">⚠️ Scheduled for cancellation at period end</div>)}
+                    {/* Admin tools moved here */}
+        <div className="flex flex-col gap-2">
+          <Button variant="outline" onClick={async () => { if (!confirm('Delete this account? Only allowed when no active/trial/paused/past_due subs, no paid invoices, no confirmed payments.')) return; const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/delete`, { method: 'POST' }); const json = await resp.json(); if (resp.ok) { alert('Account deleted'); setSelectedCustomer(null); await fetchAdminData() } else { alert('Delete blocked: ' + (json.error || 'Unknown reason')) } }} className="border-red-500/20 text-red-400 hover:bg-red-500/10 w-full">Delete Account</Button>
+          <Button variant="outline" onClick={() => setShowChangePlanModal(true)} className="border-white/20 text-white hover:bg-white/10 w-full">Change Plan (Admin)</Button>
+          <Button variant="outline" onClick={() => handlePasswordReset(selectedCustomer.id)} disabled={resetPasswordLoading} className="border-blue-500/20 text-blue-400 hover:bg-blue-500/10 w-full">{resetPasswordLoading ? 'Resetting…' : 'Reset Password'}</Button>
+        </div>
                   </div>
                 )}
               </div>
-            </div>
 
-            <div className="flex justify-between items-center gap-2 mt-6 border-t border-white/10 pt-4">
-              {/* Safe Delete Account: only when no subs/payments/invoices */}
-              {selectedCustomer && (
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    if (!confirm('Delete this account? Only allowed when no active/trial/paused/past_due subs, no paid invoices, no confirmed payments.')) return
-                    const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/delete`, { method: 'POST' })
-                    const json = await resp.json()
-                    if (resp.ok) {
-                      alert('Account deleted')
-                      setSelectedCustomer(null)
-                      await fetchAdminData()
-                    } else {
-                      alert('Delete blocked: ' + (json.error || 'Unknown reason'))
-                    }
-                  }}
-                  className="border-red-500/20 text-red-400 hover:bg-red-500/10"
-                >
-                  Delete Account
-                </Button>
-              )}
-              {selectedCustomer && (
-                <Button
-                  variant="outline"
-                  onClick={() => setShowChangePlanModal(true)}
-                  className="border-white/20 text-white hover:bg-white/10"
-                >
-                  Change Plan (Admin)
-                </Button>
-              )}
-              <Button 
-                variant="outline" 
-                onClick={() => handlePasswordReset(selectedCustomer.id)}
-                disabled={resetPasswordLoading}
-                className="border-blue-500/20 text-blue-400 hover:bg-blue-500/10"
-              >
-                {resetPasswordLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 mr-2" />
-                    Resetting...
-                  </>
-                ) : (
-                  <>
-                    <Key className="h-4 w-4 mr-2" />
-                    Reset Password
-                  </>
-                )}
-              </Button>
-              <Button variant="outline" onClick={() => setSelectedCustomer(null)} className="bg-white text-black hover:bg-white/90">Close</Button>
+              {/* Close button aligned bottom */}
+              <div className="flex justify-end items-center gap-2 mt-4">
+                <Button variant="outline" onClick={() => setSelectedCustomer(null)} className="bg-white text-black hover:bg-white/90">Close</Button>
+              </div>
             </div>
           </div>
         </div>
