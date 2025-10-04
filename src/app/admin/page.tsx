@@ -1062,9 +1062,7 @@ function AdminDashboardContent() {
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Membership</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Total Paid</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Status</th>
-                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Routed Entity</th>
-                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Next Billing</th>
-                      <th className="text-left p-4 font-medium text-white">Activity</th>
+                      {/* Removed Routed Entity, Next Billing, Activity per client request */}
                     </tr>
                   </thead>
                   <tbody>
@@ -1110,32 +1108,7 @@ function AdminDashboardContent() {
                             )}
                           </div>
                         </td>
-                        <td className="p-4 border-r border-white/5">
-                          <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-white/60" />
-                            <span className="text-sm text-white">{customer.routedEntity}</span>
-                          </div>
-                        </td>
-                        <td className="p-4 border-r border-white/5">
-                          <p className="font-semibold text-white">£{customer.totalPaid}</p>
-                          <p className="text-sm text-white/60">
-                            Last: {new Date(customer.lastPayment).toLocaleDateString()}
-                          </p>
-                        </td>
-                        <td className="p-4 border-r border-white/5">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-white/60" />
-                            <span className="text-sm text-white">{new Date(customer.nextBilling).toLocaleDateString()}</span>
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="text-sm">
-                            <p className="text-white">{typeof customer.accessHistory.totalVisits === 'string' ? customer.accessHistory.totalVisits : `${customer.accessHistory.totalVisits} visits`}</p>
-                            <p className="text-white/60">
-                              {typeof customer.accessHistory.avgWeeklyVisits === 'string' ? customer.accessHistory.avgWeeklyVisits : `${customer.accessHistory.avgWeeklyVisits}/week avg`}
-                            </p>
-                          </div>
-                        </td>
+                        {/* Routed Entity, Next Billing, Activity columns removed from body */}
                       </tr>
                     ))}
                   </tbody>
@@ -1190,7 +1163,7 @@ function AdminDashboardContent() {
                     <tr>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Customer & Payment</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Amount & Type</th>
-                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Routed To</th>
+                      {/* Removed Routed To per client request */}
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Status & Processing</th>
                       <th className="text-left p-4 font-medium text-white">Refund</th>
                     </tr>
@@ -1226,12 +1199,7 @@ function AdminDashboardContent() {
                             </Badge>
                           </div>
                         </td>
-                        <td className="p-4 border-r border-white/5">
-                          <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-white/60" />
-                            <span className="text-sm text-white">{payment.routedToEntity}</span>
-                          </div>
-                        </td>
+                        {/* Routed To column removed from body */}
                         <td className="p-4 border-r border-white/5">
                           <div className="space-y-1">
                             <Badge variant={getStatusBadgeVariant(payment.status)}>
@@ -1524,30 +1492,30 @@ function AdminDashboardContent() {
                 </button>
                 {openPill==='personal' && (
                   <div className="px-3 pb-3 space-y-2">
-                    {(() => {
+                  {(() => {
                       try {
                         const raw = (selectedCustomer as any)?.emergencyContact
                         const addrObj = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw || {}
                         const addr = (addrObj as any)?.addressInfo || (addrObj as any)?.address || null
                         const postcode = (addrObj as any)?.postcode || (addrObj as any)?.addressInfo?.postcode || null
-                        return (
-                          <>
+                    return (
+                      <>
                             <p className="text-white"><strong className="text-white/90">Address:</strong> {(addr && (addr.address || addr.line1 || addr)) || '—'}</p>
                             <p className="text-white"><strong className="text-white/90">Post Code:</strong> {postcode || '—'}</p>
-                          </>
-                        )
+                      </>
+                    )
                       } catch { return null }
-                    })()}
+                  })()}
                     <p className="text-white"><strong className="text-white/90">Email:</strong> {selectedCustomer.email}</p>
                     <p className="text-white"><strong className="text-white/90">Phone:</strong> {selectedCustomer.phone || '—'}</p>
-                    <p className="text-white"><strong className="text-white/90">Join Date:</strong> {new Date(selectedCustomer.joinDate).toLocaleDateString()}</p>
+                  <p className="text-white"><strong className="text-white/90">Join Date:</strong> {new Date(selectedCustomer.joinDate).toLocaleDateString()}</p>
                     {(() => {
                       const last = payments.find(p => p.customerId === selectedCustomer.id && p.status === 'CONFIRMED')
                       return (
                         <p className="text-white"><strong className="text-white/90">Last Payment:</strong> £{last ? Number(last.amount).toLocaleString() : '—'}</p>
                       )
                     })()}
-                    <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
+                  <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
                   </div>
                 )}
 
@@ -1582,8 +1550,8 @@ function AdminDashboardContent() {
                         )
                       }
                     })()}
-                  </div>
-                )}
+                    </div>
+                  )}
 
                 {/* Recent Payments */}
     <button onClick={() => setOpenPill(openPill==='payments'? null:'payments')} className="w-full flex items-center justify-between px-3 py-2 text-left">
@@ -1592,27 +1560,27 @@ function AdminDashboardContent() {
                 </button>
                 {openPill==='payments' && (
                   <div className="px-3 pb-2">
-                    <table className="w-full text-sm">
-                      <thead className="text-white/60">
+                <table className="w-full text-sm">
+                  <thead className="text-white/60">
                         <tr><th className="text-left p-2">Date</th><th className="text-left p-2">Amount</th><th className="text-left p-2">Status</th></tr>
-                      </thead>
-                      <tbody>
-                        {payments.filter(p => p.customerId === selectedCustomer.id).slice(0, 6).map((p) => (
-                          <tr key={p.id} className="border-t border-white/10">
-                            <td className="p-2">{new Date(p.timestamp).toLocaleDateString()}</td>
-                            <td className="p-2">£{p.amount}</td>
-                            <td className="p-2"><Badge variant={getStatusBadgeVariant(p.status)}>{p.status}</Badge></td>
-                          </tr>
-                        ))}
-                        {payments.filter(p => p.customerId === selectedCustomer.id).length === 0 && (
+                  </thead>
+                  <tbody>
+                    {payments.filter(p => p.customerId === selectedCustomer.id).slice(0, 6).map((p) => (
+                      <tr key={p.id} className="border-t border-white/10">
+                        <td className="p-2">{new Date(p.timestamp).toLocaleDateString()}</td>
+                        <td className="p-2">£{p.amount}</td>
+                        <td className="p-2"><Badge variant={getStatusBadgeVariant(p.status)}>{p.status}</Badge></td>
+                      </tr>
+                    ))}
+                    {payments.filter(p => p.customerId === selectedCustomer.id).length === 0 && (
                           <tr><td className="p-3 text-white/60" colSpan={3}>No payments yet.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                    <div className="mt-2 text-right">
+                    )}
+                  </tbody>
+                </table>
+              <div className="mt-2 text-right">
                       <Button variant="outline" onClick={() => { setSearchTerm(selectedCustomer.name); setActiveTab('payments'); setSelectedCustomer(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="border-white/20 text-white hover:bg-white/10">View all payments</Button>
-                    </div>
-                  </div>
+              </div>
+            </div>
                 )}
 
                 {/* Membership Management */}
@@ -1623,13 +1591,13 @@ function AdminDashboardContent() {
                 {openPill==='management' && (
                   <div className="px-3 pb-3 space-y-3">
                     <div className="p-2 bg-blue-500/10 rounded text-xs text-blue-300">Subscription: {selectedCustomer.subscriptionStatus} • Membership: {selectedCustomer.membershipStatus}{selectedCustomer.cancelAtPeriodEnd && ' • Scheduled for cancellation'}</div>
-        {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && (
+                {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && (
           <div className="flex flex-col gap-2">
                         <Button variant="outline" onClick={() => openMembershipActionModal('pause')} className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10">Pause</Button>
                         <Button variant="outline" onClick={() => openMembershipActionModal('cancel')} className="border-red-500/20 text-red-400 hover:bg-red-500/10">Cancel</Button>
                       </div>
-                    )}
-        {(selectedCustomer.subscriptionStatus === 'PAUSED' || selectedCustomer.status === 'PAUSED') && (
+                )}
+                {(selectedCustomer.subscriptionStatus === 'PAUSED' || selectedCustomer.status === 'PAUSED') && (
           <Button variant="outline" onClick={() => openMembershipActionModal('resume')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Resume</Button>
                     )}
                     {selectedCustomer.cancelAtPeriodEnd && (<div className="text-orange-400 text-xs">⚠️ Scheduled for cancellation at period end</div>)}
@@ -1638,14 +1606,14 @@ function AdminDashboardContent() {
           <Button variant="outline" onClick={async () => { if (!confirm('Delete this account? Only allowed when no active/trial/paused/past_due subs, no paid invoices, no confirmed payments.')) return; const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/delete`, { method: 'POST' }); const json = await resp.json(); if (resp.ok) { alert('Account deleted'); setSelectedCustomer(null); await fetchAdminData() } else { alert('Delete blocked: ' + (json.error || 'Unknown reason')) } }} className="border-red-500/20 text-red-400 hover:bg-red-500/10 w-full">Delete Account</Button>
           <Button variant="outline" onClick={() => setShowChangePlanModal(true)} className="border-white/20 text-white hover:bg-white/10 w-full">Change Plan (Admin)</Button>
           <Button variant="outline" onClick={() => handlePasswordReset(selectedCustomer.id)} disabled={resetPasswordLoading} className="border-blue-500/20 text-blue-400 hover:bg-blue-500/10 w-full">{resetPasswordLoading ? 'Resetting…' : 'Reset Password'}</Button>
-        </div>
+                  </div>
                   </div>
                 )}
-              </div>
+            </div>
 
               {/* Close button aligned bottom */}
               <div className="flex justify-end items-center gap-2 mt-4">
-                <Button variant="outline" onClick={() => setSelectedCustomer(null)} className="bg-white text-black hover:bg-white/90">Close</Button>
+              <Button variant="outline" onClick={() => setSelectedCustomer(null)} className="bg-white text-black hover:bg-white/90">Close</Button>
               </div>
             </div>
           </div>
