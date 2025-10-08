@@ -15,6 +15,7 @@ interface MembershipData {
   price: number
   nextBilling: string
   accessPermissions: any
+  scheduleAccess?: { timezone?: string; allowedWindows?: Array<{ days: string[]; start: string; end: string }> }
 }
 
 interface PaymentData {
@@ -145,6 +146,49 @@ function DashboardContent() {
       case 'SUSPENDED': return 'secondary'
       default: return 'secondary'
     }
+  }
+
+  function formatWindowDays(days: string[] = []) {
+    const order = ['mon','tue','wed','thu','fri','sat','sun']
+    const label: Record<string, string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' }
+    const sorted = [...days].sort((a,b) => order.indexOf(a) - order.indexOf(b))
+    return sorted.map(d => label[d] || d).join(', ')
+  }
+
+  function WeekGrid({ windows }: { windows: Array<{ days: string[]; start: string; end: string }> }) {
+    const days = ['mon','tue','wed','thu','fri','sat','sun']
+    const label: Record<string, string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' }
+    const slots: Record<string, Array<{ start: string; end: string }>> = {}
+    for (const d of days) slots[d] = []
+    for (const w of windows || []) {
+      for (const d of w.days || []) {
+        if (!slots[d]) slots[d] = []
+        slots[d].push({ start: w.start, end: w.end })
+      }
+    }
+    return (
+      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+        {days.map(d => (
+          <div key={d} className="p-3 border rounded-lg bg-white/5 border-white/10">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-white font-medium">{label[d]}</span>
+              <Badge variant={slots[d].length ? 'default' : 'secondary'}>{slots[d].length ? 'Included' : 'Not Included'}</Badge>
+            </div>
+            {slots[d].length ? (
+              <div className="flex flex-wrap gap-2">
+                {slots[d].map((s, idx) => (
+                  <span key={idx} className="text-xs px-2 py-1 rounded-full bg-green-500/15 text-green-300 border border-green-500/30">
+                    {s.start}–{s.end}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-white/60">No access</p>
+            )}
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -417,38 +461,20 @@ function DashboardContent() {
 
         {/* Access Permissions Tab */}
         <TabsContent value="access" className="space-y-6">
+          {/* Included time windows (mirror of package schedule). Hide classes below per request. */}
           <Card>
             <CardHeader>
-              <CardTitle>Your Accessible Classes</CardTitle>
+              <CardTitle>Included in your plan</CardTitle>
               <CardDescription>
-                Classes you can attend with your current membership
+                Time windows when your membership grants access
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {upcomingClasses.filter(classItem => classItem.canAccess).length > 0 ? (
-                  <div className="grid gap-3">
-                    {upcomingClasses.filter(classItem => classItem.canAccess).map((classItem) => (
-                      <div
-                        key={classItem.id}
-                        className="flex items-center justify-between p-3 border rounded-lg bg-green-500/10 border-green-500/20"
-                      >
-                        <div>
-                          <h4 className="font-medium text-white">{classItem.name}</h4>
-                          <p className="text-sm text-white/70">
-                            {classItem.time} • {classItem.location} • {classItem.instructor}
-                          </p>
-                        </div>
-                        <Badge variant="default" className="bg-green-500 text-white">
-                          Included
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-white/70">No accessible classes found.</p>
-                )}
-              </div>
+              {membershipData?.scheduleAccess?.allowedWindows?.length ? (
+                <WeekGrid windows={membershipData.scheduleAccess.allowedWindows} />
+              ) : (
+                <p className="text-white/70 text-sm">No explicit time windows configured for this plan.</p>
+              )}
             </CardContent>
           </Card>
 

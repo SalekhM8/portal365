@@ -96,14 +96,27 @@ export async function GET(request: NextRequest) {
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }]
     })
 
-    // Membership snapshot
+    // Membership snapshot + effective schedule policy (membership.scheduleAccess or plan.schedulePolicy)
     const activeMembership = userData.memberships[0]
+    let effectiveSchedule: any = null
+    if (activeMembership) {
+      // Prefer plan policy so changes in Package Management reflect immediately for all users on the plan
+      try {
+        const planRow = await prisma.membershipPlan.findUnique({ where: { key: activeMembership.membershipType } })
+        effectiveSchedule = planRow?.schedulePolicy ? JSON.parse(planRow.schedulePolicy as any) : null
+      } catch {}
+      // Fallback to membership-specific schedule if plan policy not present
+      if (!effectiveSchedule) {
+        try { effectiveSchedule = activeMembership.scheduleAccess ? JSON.parse(activeMembership.scheduleAccess) : null } catch {}
+      }
+    }
     const membershipData = activeMembership ? {
       type: activeMembership.membershipType,
       status: activeMembership.status,
       price: activeMembership.monthlyPrice,
       nextBilling: activeMembership.nextBillingDate.toISOString().split('T')[0],
-      accessPermissions: JSON.parse(activeMembership.accessPermissions)
+      accessPermissions: JSON.parse(activeMembership.accessPermissions),
+      scheduleAccess: effectiveSchedule
     } : null
 
     // Format class schedule with user's membership access
@@ -115,7 +128,7 @@ export async function GET(request: NextRequest) {
       location: cls.location,
       maxParticipants: cls.maxParticipants,
       duration: cls.duration,
-      canAccess: membershipData ? canUserAccessClass(cls, activeMembership) : false
+      canAccess: membershipData ? canUserAccessClass(cls, activeMembership, effectiveSchedule) : false
     }))
 
     return NextResponse.json({
@@ -142,11 +155,48 @@ function getDayName(dayOfWeek: number): string {
   return days[dayOfWeek] || 'Unknown'
 }
 
-function canUserAccessClass(cls: any, membership: any): boolean {
+function canUserAccessClass(cls: any, membership: any, schedule: any): boolean {
+  // 1) Membership type gate (class-level restriction)
   try {
     const requiredMemberships = JSON.parse(cls.requiredMemberships) as string[]
-    return requiredMemberships.includes(membership.membershipType)
+    if (Array.isArray(requiredMemberships) && requiredMemberships.length > 0) {
+      if (!requiredMemberships.includes(membership.membershipType)) return false
+    }
   } catch {
+    // If class has malformed requiredMemberships, fail closed on type gate
     return false
   }
-} 
+
+  // 2) Time-window gate (package schedule)
+  const dayCodeMap = ['sun','mon','tue','wed','thu','fri','sat']
+  const classDayCode = dayCodeMap[cls.dayOfWeek] || ''
+  const classStart = cls.startTime as string // 'HH:mm'
+  const classEnd = cls.endTime as string // 'HH:mm'
+
+  // Use provided effective schedule (already chosen from membership or plan). If absent, allow by default for back-compat.
+  const windows: Array<{ days: string[]; start: string; end: string }> = Array.isArray(schedule?.allowedWindows) ? schedule.allowedWindows : []
+  if (windows.length === 0) return true
+
+  // Check if class time overlaps any allowed window for the class day
+  return windows.some((w: any) => {
+    try {
+      if (!Array.isArray(w.days) || !w.start || !w.end) return false
+      if (!w.days.includes(classDayCode)) return false
+      // time overlap: classStart..classEnd within w.start..w.end or overlapping
+      return timeOverlap(classStart, classEnd, w.start as string, w.end as string)
+    } catch { return false }
+  })
+}
+
+function timeToMinutes(hhmm: string): number {
+  const [h, m] = (hhmm || '00:00').split(':').map((x: string) => parseInt(x, 10))
+  return (h * 60) + (m || 0)
+}
+
+function timeOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  const aS = timeToMinutes(aStart)
+  const aE = timeToMinutes(aEnd)
+  const bS = timeToMinutes(bStart)
+  const bE = timeToMinutes(bEnd)
+  return Math.max(aS, bS) < Math.min(aE, bE)
+}

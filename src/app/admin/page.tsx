@@ -1060,7 +1060,7 @@ function AdminDashboardContent() {
                     <tr>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Customer</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Membership</th>
-                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Total Paid</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Last Paid</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Status</th>
                       {/* Removed Routed Entity, Next Billing, Activity per client request */}
                     </tr>
@@ -1093,8 +1093,7 @@ function AdminDashboardContent() {
                           )}
                         </td>
                         <td className="p-4 border-r border-white/5">
-                          <p className="font-semibold text-white">£{customer.totalPaid}</p>
-                          <p className="text-sm text-white/60">Last: {new Date(customer.lastPayment).toLocaleDateString()}</p>
+                          <p className="font-semibold text-white">{typeof customer.lastPayment === 'number' ? `£${customer.lastPayment}` : (customer.lastPayment ? `£${customer.lastPayment}` : 'N/A')}</p>
                         </td>
                         <td className="p-4 border-r border-white/5">
                           <div className="space-y-1">

@@ -240,6 +240,7 @@ function PackagesContent() {
                         })
                       }}>Edit</Button>
                     )}
+                    <Button size="sm" onClick={() => router.push(`/admin/packages/${encodeURIComponent(plan.key)}`)}>View details</Button>
                   </div>
                 </>
               ) : (

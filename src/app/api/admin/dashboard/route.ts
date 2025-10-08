@@ -535,6 +535,10 @@ export async function GET() {
         ? membership.nextBillingDate.toISOString().split('T')[0]
         : null
 
+      // Determine last paid amount (most recent CONFIRMED payment)
+      const lastConfirmedPayment = customer.payments.find((p: any) => p.status === 'CONFIRMED')
+      const lastPaidAmount = lastConfirmedPayment ? Number(lastConfirmedPayment.amount) : null
+
       return {
         id: customer.id,
         name: `${customer.firstName} ${customer.lastName}`,
@@ -546,7 +550,7 @@ export async function GET() {
         membershipStatus: membership?.status || 'NO_MEMBERSHIP',
         cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd || false,
         joinDate: customer.createdAt.toISOString().split('T')[0],
-        lastPayment: customer.payments[0]?.createdAt.toISOString().split('T')[0] || 'N/A',
+        lastPayment: lastPaidAmount,
         totalPaid: totalPaidByUser[customer.id] ?? 0,
         routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
         nextBilling: nextBillingIso,
