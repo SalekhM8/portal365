@@ -1036,10 +1036,32 @@ function AdminDashboardContent() {
               </Select>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => {
+                    const params = new URLSearchParams()
+                    if (searchTerm) params.set('search', searchTerm)
+                    if (statusFilter) params.set('status', statusFilter)
+                    if (planFilter) params.set('plan', planFilter)
+                    const url = `/api/admin/export/customers?format=xlsx&${params.toString()}`
+                    if (typeof window !== 'undefined') window.location.href = url
+                  }}>Excel (.xlsx)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    const params = new URLSearchParams()
+                    if (searchTerm) params.set('search', searchTerm)
+                    if (statusFilter) params.set('status', statusFilter)
+                    if (planFilter) params.set('plan', planFilter)
+                    const url = `/api/admin/export/customers?format=csv&${params.toString()}`
+                    if (typeof window !== 'undefined') window.location.href = url
+                  }}>CSV (.csv)</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <Button onClick={() => setShowAddCustomer(true)}>
                 <UserPlus className="h-4 w-4 mr-2" />
@@ -1143,10 +1165,30 @@ function AdminDashboardContent() {
               </Select>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Export Payments
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Payments
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => {
+                    const params = new URLSearchParams()
+                    if (searchTerm) params.set('search', searchTerm)
+                    if (statusFilter) params.set('status', statusFilter)
+                    const url = `/api/admin/export/payments?format=xlsx&${params.toString()}`
+                    if (typeof window !== 'undefined') window.location.href = url
+                  }}>Excel (.xlsx)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    const params = new URLSearchParams()
+                    if (searchTerm) params.set('search', searchTerm)
+                    if (statusFilter) params.set('status', statusFilter)
+                    const url = `/api/admin/export/payments?format=csv&${params.toString()}`
+                    if (typeof window !== 'undefined') window.location.href = url
+                  }}>CSV (.csv)</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button variant="outline">
                 <FileText className="h-4 w-4 mr-2" />
                 Audit Report

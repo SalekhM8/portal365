@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ArrowLeft, Users } from 'lucide-react'
+import { useState as useReactState } from 'react'
 
 export default function PlanMembersPage() {
   const router = useRouter()
@@ -64,6 +65,14 @@ export default function PlanMembersPage() {
           onChange={e => setSearch(e.target.value)}
           className="w-72"
         />
+        <Button type="button" variant="outline" onClick={() => {
+          const url = `/api/admin/export/plan-members?key=${encodeURIComponent(planKey)}&format=xlsx`
+          if (typeof window !== 'undefined') window.location.href = url
+        }}>Export Excel</Button>
+        <Button type="button" variant="outline" onClick={() => {
+          const url = `/api/admin/export/plan-members?key=${encodeURIComponent(planKey)}&format=csv`
+          if (typeof window !== 'undefined') window.location.href = url
+        }}>Export CSV</Button>
       </div>
 
       <Card>

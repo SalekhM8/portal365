@@ -27,6 +27,7 @@ import {
   Target,
   Loader2
 } from 'lucide-react'
+import { useState as useReactState } from 'react'
 
 interface ClassData {
   id: string
@@ -245,10 +246,20 @@ export default function AdminClassesPage() {
             <p className="text-muted-foreground">Manage class schedules, instructors, and access permissions</p>
           </div>
         </div>
-        <Button onClick={() => setShowAddForm(true)} disabled={editing !== null}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add New Class
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={() => {
+            const url = `/api/admin/export/classes?format=xlsx`
+            if (typeof window !== 'undefined') window.location.href = url
+          }}>Export Excel</Button>
+          <Button type="button" variant="outline" onClick={() => {
+            const url = `/api/admin/export/classes?format=csv`
+            if (typeof window !== 'undefined') window.location.href = url
+          }}>Export CSV</Button>
+          <Button onClick={() => setShowAddForm(true)} disabled={editing !== null}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add New Class
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -595,3 +606,29 @@ function ClassForm({
     </form>
   )
 } 
+
+function ExportMenu({ endpoint }: { endpoint: string }) {
+  const [open, setOpen] = useReactState(false)
+  const filenameBase = `classes`
+  const download = (format: 'xlsx'|'csv') => {
+    const url = `${endpoint}?format=${format}`
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `portal365-${filenameBase}-${new Date().toISOString().slice(0,10)}.${format}`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setOpen(false)
+  }
+  return (
+    <div className="relative">
+      <Button type="button" variant="outline" onClick={() => setOpen(!open)}>Export</Button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-40 border rounded-md bg-background z-10">
+          <button className="w-full text-left px-3 py-2 hover:bg-white/10" onClick={() => download('xlsx')}>Excel (.xlsx)</button>
+          <button className="w-full text-left px-3 py-2 hover:bg-white/10" onClick={() => download('csv')}>CSV (.csv)</button>
+        </div>
+      )}
+    </div>
+  )
+}

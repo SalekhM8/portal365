@@ -47,6 +47,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "exceljs": "^4.3.0",
     "gocardless-nodejs": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
     "lightningcss": "^1.26.0",
