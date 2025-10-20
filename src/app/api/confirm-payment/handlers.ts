@@ -125,6 +125,7 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
     return NextResponse.json({ success: false, error: 'Subscription not found' }, { status: 404 })
   }
 
+  //test
   // Idempotency guard: if we've already replaced the placeholder with a real Stripe sub, do nothing
   if (dbSub.stripeSubscriptionId && dbSub.stripeSubscriptionId.startsWith('sub_')) {
     const user = await prisma.user.findUnique({ where: { id: dbSub.userId }, select: { id: true, email: true, firstName: true, lastName: true } })
