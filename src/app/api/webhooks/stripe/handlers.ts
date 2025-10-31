@@ -1,4 +1,7 @@
 import { prisma } from '@/lib/prisma'
+import { sendDunningAttemptSms, sendSuspendedSms, sendSuccessSms, sendActionRequiredSms } from '@/lib/notify'
+import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActionRequiredEmail } from '@/lib/email'
+import { isAutoSuspendEnabled, isPauseCollectionEnabled } from '@/lib/flags'
 import { stripe } from '@/lib/stripe'
 
 export async function handlePaymentSucceeded(invoice: any) {
@@ -257,6 +260,15 @@ export async function handlePaymentSucceeded(invoice: any) {
     })
     
     console.log(`✅ [${operationId}] Created payment record: ${paymentRecord.id} for £${amountPaid}`)
+
+    // Dunning success notifications if user was previously suspended
+    try {
+      const userPhone = subscription.user?.phone || null
+      const userEmail = subscription.user?.email || null
+      await sendSuccessSms({ userPhone })
+      await sendSuccessEmail({ to: userEmail })
+      try { await prisma.systemSetting.delete({ where: { key: `dunning:suspended:${subscription.id}` } }) } catch {}
+    } catch {}
     console.log(`✅ [${operationId}] Payment processing completed successfully via ${mappingMethod}`)
 
   } catch (error) {
@@ -286,6 +298,8 @@ export async function handlePaymentFailed(invoice: any) {
     const subscriptionIdFromParent = invoice?.parent?.subscription_details?.subscription
     const subscriptionId = subscriptionIdTop || subscriptionIdFromLines || subscriptionIdFromParent
     const amountDue = invoice.amount_due / 100
+    const attempt: number = Number(invoice.attempt_count ?? 1)
+    const nextAttemptAtISO = invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000).toISOString() : null
     
     // Use same robust mapping as handlePaymentSucceeded
     let subscription = null
@@ -322,8 +336,32 @@ export async function handlePaymentFailed(invoice: any) {
       throw new Error(`Cannot map failed invoice ${invoiceId} to subscription`)
     }
     
-    await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
-    await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
+    // Dunning notifications and conditional suspension after 3rd attempt
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.FRONTEND_BASE_URL || process.env.NEXTAUTH_URL || ''
+      const manageUrl = `${baseUrl || ''}/dashboard/payment-methods`
+      const userPhone = subscription.user?.phone || null
+      const userEmail = subscription.user?.email || null
+
+      if (attempt >= 3) {
+        if (isAutoSuspendEnabled()) {
+          await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
+          await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
+          // mark a dunning-suspended flag for webhook subscription.updated logic
+          try { await prisma.systemSetting.create({ data: { key: `dunning:suspended:${subscription.id}`, value: '1', category: 'dunning' } }) } catch {}
+          if (isPauseCollectionEnabled()) {
+            try { await stripe.subscriptions.update(subscription.stripeSubscriptionId, { pause_collection: { behavior: 'void' } }) } catch {}
+          }
+        }
+        await sendSuspendedSms({ userPhone, managePaymentUrl: manageUrl, invoiceId })
+        await sendSuspendedEmail({ to: userEmail, manageUrl: manageUrl, invoiceId })
+      } else {
+        await sendDunningAttemptSms({ userPhone, attempt, totalAttempts: 3, nextRetryDateISO: nextAttemptAtISO, managePaymentUrl: manageUrl, invoiceId })
+        await sendDunningAttemptEmail({ to: userEmail, attempt, total: 3, nextRetryISO: nextAttemptAtISO, manageUrl: manageUrl, invoiceId })
+      }
+    } catch (e) {
+      console.warn('Dunning notification failed (non-fatal)', e)
+    }
 
     // Try to enrich failure reason using the charge decline_code (more precise than generic messages)
     let failureReason = 'Payment declined'
@@ -379,6 +417,38 @@ export async function handlePaymentFailed(invoice: any) {
   }
 }
 
+export async function handlePaymentActionRequired(invoice: any) {
+  const invoiceId = invoice.id
+  const operationId = `webhook_action_required_${invoiceId}_${Date.now()}`
+  try {
+    const attempt: number = Number(invoice.attempt_count ?? 1)
+    const subscriptionId = invoice.subscription
+    let subscription = null
+    if (subscriptionId) {
+      subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
+    }
+    if (!subscription && invoice.customer) {
+      try {
+        const stripeCustomer = await stripe.customers.retrieve(invoice.customer as string)
+        const userId = (stripeCustomer as any).metadata?.userId
+        if (userId) {
+          subscription = await prisma.subscription.findFirst({ where: { userId, status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE'] } }, orderBy: { createdAt: 'desc' }, include: { user: true } })
+        }
+      } catch {}
+    }
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.FRONTEND_BASE_URL || process.env.NEXTAUTH_URL || ''
+    const manageUrl = `${baseUrl || ''}/dashboard/payment-methods`
+    const userPhone = subscription?.user?.phone || null
+    const userEmail = subscription?.user?.email || null
+    const hosted = (invoice as any)?.hosted_invoice_url || null
+    await sendActionRequiredSms({ userPhone, hostedInvoiceUrl: hosted, managePaymentUrl: manageUrl, invoiceId, attempt, totalAttempts: 3 })
+    await sendActionRequiredEmail({ to: userEmail, hostedUrl: hosted, manageUrl, invoiceId, attempt })
+  } catch (e) {
+    console.error(`❌ [${operationId}] action_required handling failed:`, e)
+    throw e
+  }
+}
+
 export async function handleSubscriptionUpdated(stripeSubscription: any) {
   try {
     console.log(`🔄 [WEBHOOK] Processing subscription update for ${stripeSubscription.id}`)
@@ -423,14 +493,20 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
     }
 
     const previousStatus = subscription.status
+    const cpStartSec = Number(stripeSubscription.current_period_start)
+    const cpEndSec = Number(stripeSubscription.current_period_end)
+    const safeStart = !isNaN(cpStartSec) && cpStartSec > 0 ? new Date(cpStartSec * 1000) : subscription.currentPeriodStart
+    const safeEnd = !isNaN(cpEndSec) && cpEndSec > 0 ? new Date(cpEndSec * 1000) : subscription.currentPeriodEnd
+    const safeNext = safeEnd || subscription.nextBillingDate
+
     const updatedSubscription = await prisma.subscription.update({ 
       where: { id: subscription.id }, 
       data: { 
         status: subscriptionStatus,
-        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000), 
-        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000), 
-        nextBillingDate: new Date(stripeSubscription.current_period_end * 1000), 
-        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end 
+        currentPeriodStart: safeStart, 
+        currentPeriodEnd: safeEnd, 
+        nextBillingDate: safeNext, 
+        cancelAtPeriodEnd: !!stripeSubscription.cancel_at_period_end 
       } 
     })
     
@@ -442,13 +518,23 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
     // INCOMPLETE/INCOMPLETE_EXPIRED -> PENDING_PAYMENT (never granted access)
     // PAUSED -> SUSPENDED access
     // CANCELLED -> CANCELLED
-    const membershipStatus =
+    // Only suspend on PAST_DUE if we explicitly flagged a dunning suspension (3rd failure)
+    let membershipStatus =
       subscriptionStatus === 'PAUSED' ? 'SUSPENDED' :
-      subscriptionStatus === 'PAST_DUE' ? 'SUSPENDED' :
       subscriptionStatus === 'INCOMPLETE' ? 'PENDING_PAYMENT' :
       subscriptionStatus === 'INCOMPLETE_EXPIRED' ? 'PENDING_PAYMENT' :
       subscriptionStatus === 'CANCELLED' ? 'CANCELLED' :
       'ACTIVE'
+
+    if (subscriptionStatus === 'PAST_DUE') {
+      try {
+        const flag = await prisma.systemSetting.findUnique({ where: { key: `dunning:suspended:${subscription.id}` } })
+        if (flag) membershipStatus = 'SUSPENDED'
+        else membershipStatus = 'ACTIVE'
+      } catch {
+        membershipStatus = 'ACTIVE'
+      }
+    }
     
     const updatedMemberships = await prisma.membership.updateMany({ 
       where: { userId: subscription.userId }, 

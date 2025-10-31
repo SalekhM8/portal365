@@ -9,7 +9,6 @@ if (!process.env.STRIPE_SECRET_KEY) {
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   typescript: true,
-  apiVersion: '2025-06-30.basil',
   appInfo: { name: 'Portal365', version: '1.0.0' }
 })
 
@@ -278,7 +277,7 @@ export class SubscriptionProcessor {
         amount: proratedAmountPence,
         currency: 'gbp',
         customer: customerIdToUse,
-        automatic_payment_methods: { enabled: true },
+        ...(process.env.CARD_ONLY_FOR_NEW_SIGNUPS === 'true' ? { payment_method_types: ['card'] as any } : { automatic_payment_methods: { enabled: true } }),
         setup_future_usage: 'off_session',
         metadata: {
           userId: request.userId,

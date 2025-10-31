@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { stripe } from '@/lib/stripe'
-import { handlePaymentSucceeded, handlePaymentFailed, handleSubscriptionUpdated, handleSubscriptionCancelled } from './handlers'
+import { handlePaymentSucceeded, handlePaymentFailed, handleSubscriptionUpdated, handleSubscriptionCancelled, handlePaymentActionRequired } from './handlers'
 
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
@@ -38,8 +38,7 @@ export async function POST(request: NextRequest) {
         await handleSubscriptionUpdated(event.data.object)
         break
       case 'invoice.payment_action_required':
-        // Handle 3D Secure and other payment authentication requirements
-        console.log('🔐 Payment action required for invoice:', event.data.object.id)
+        await handlePaymentActionRequired(event.data.object)
         break
       case 'customer.subscription.updated':
         await handleSubscriptionUpdated(event.data.object)

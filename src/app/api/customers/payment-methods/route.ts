@@ -104,10 +104,17 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({
-      success: true,
-      message: 'Payment method updated successfully'
-    })
+    // Try to pay newest open overdue invoice immediately and resume if paid
+    try {
+      const customerId = setupIntent.customer as string
+      const invoices = await stripe.invoices.list({ customer: customerId, limit: 5 })
+      const openOverdue = invoices.data.find(i => i.status === 'open' || i.status === 'uncollectible' || i.status === 'draft')
+      if (openOverdue && openOverdue.id && openOverdue.status === 'open') {
+        try { await stripe.invoices.pay(openOverdue.id as string) } catch {}
+      }
+    } catch {}
+
+    return NextResponse.json({ success: true, message: 'Payment method updated successfully' })
 
   } catch (error) {
     console.error('❌ Error updating payment method:', error)

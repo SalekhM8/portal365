@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
       where: { id: userId },
       include: {
         memberships: {
-          where: { status: { in: ['ACTIVE', 'PENDING_PAYMENT'] } },
+          // Include SUSPENDED to surface status on customer dashboard after dunning suspension
+          where: { status: { in: ['ACTIVE', 'PENDING_PAYMENT', 'SUSPENDED'] } },
           orderBy: { createdAt: 'desc' },
           take: 1
         }

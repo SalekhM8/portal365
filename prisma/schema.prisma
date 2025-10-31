@@ -3,6 +3,8 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Include Linux engine for Vercel serverless (arm64 + OpenSSL 3)
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
 }
 
 datasource db {

@@ -227,6 +227,21 @@ function DashboardContent() {
           </div>
         </div>
       )}
+      {membershipData?.status === 'SUSPENDED' && (
+        <div className="border border-red-500/30 bg-red-500/10 rounded-lg p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-red-200">Membership suspended due to failed payments</p>
+              <p className="text-red-200/80 text-sm">Update your payment method to restore access. Once the overdue invoice is paid, your membership will automatically become active.</p>
+            </div>
+            <Button
+              onClick={() => router.push('/dashboard/payment-methods')}
+            >
+              Update payment method
+            </Button>
+          </div>
+        </div>
+      )}
       {/* Header with Navigation */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
