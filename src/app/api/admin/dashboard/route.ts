@@ -307,7 +307,8 @@ export async function GET() {
         message: payment.status === 'CONFIRMED' 
           ? `${payment.user?.firstName} ${payment.user?.lastName} paid £${payment.amount}`
           : `Payment failed for ${payment.user?.firstName} ${payment.user?.lastName} (£${payment.amount})`,
-        detail: `${payment.routedEntity?.displayName} • ${new Date(payment.createdAt).toLocaleString()}`,
+        // For now, always show Sporting U as the routed entity label in activity
+        detail: `Sporting U • ${new Date(payment.createdAt).toLocaleString()}`,
         timestamp: payment.createdAt,
         amount: `£${payment.amount}`,
         status: payment.status,
