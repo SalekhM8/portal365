@@ -15,7 +15,7 @@ export default function PlanMembersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [planName, setPlanName] = useState<string>('')
-  const [members, setMembers] = useState<Array<{ id: string; name: string; email: string; status: string; joinedAt: string; nextBilling: string | null; lastPaidAt: string | null }>>([])
+  const [members, setMembers] = useState<Array<{ id: string; name: string; email: string; status: string; joinedAt: string; nextBilling: string | null; lastPaidAt: string | null; totalPaid?: number; lastMonthPaid?: number }>>([])
   const [search, setSearch] = useState('')
 
   useEffect(() => {
@@ -97,7 +97,9 @@ export default function PlanMembersPage() {
                     <th className="text-left p-4 font-medium text-white border-r border-white/10">Status</th>
                     <th className="text-left p-4 font-medium text-white border-r border-white/10">Joined</th>
                     <th className="text-left p-4 font-medium text-white border-r border-white/10">Next Billing</th>
-                    <th className="text-left p-4 font-medium text-white">Last Paid</th>
+                    <th className="text-left p-4 font-medium text-white border-r border-white/10">Last Paid</th>
+                    <th className="text-left p-4 font-medium text-white border-r border-white/10">Total Paid</th>
+                    <th className="text-left p-4 font-medium text-white">Last Month Paid</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -108,7 +110,9 @@ export default function PlanMembersPage() {
                       <td className="p-4 border-r border-white/5">{m.status}</td>
                       <td className="p-4 border-r border-white/5">{new Date(m.joinedAt).toLocaleDateString()}</td>
                       <td className="p-4 border-r border-white/5">{m.nextBilling ? new Date(m.nextBilling).toLocaleDateString() : 'N/A'}</td>
-                      <td className="p-4">{m.lastPaidAt ? new Date(m.lastPaidAt).toLocaleDateString() : 'N/A'}</td>
+                      <td className="p-4 border-r border-white/5">{m.lastPaidAt ? new Date(m.lastPaidAt).toLocaleDateString() : 'N/A'}</td>
+                      <td className="p-4 border-r border-white/5">£{(m.totalPaid||0).toLocaleString()}</td>
+                      <td className="p-4">£{(m.lastMonthPaid||0).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

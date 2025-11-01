@@ -41,6 +41,20 @@ export async function GET(
       orderBy: { createdAt: 'desc' }
     })
 
+    // Compute totals for users (all time) and last calendar month
+    const nowUtc = new Date()
+    const thisMonthStartUtc = new Date(Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth(), 1))
+    const lastMonthStartUtc = new Date(Date.UTC(nowUtc.getUTCFullYear(), nowUtc.getUTCMonth() - 1, 1))
+
+    const userIds = memberships.map((m: any) => m.user.id)
+    const totals = await prisma.payment.groupBy({ by: ['userId'], where: { status: 'CONFIRMED', userId: { in: userIds } }, _sum: { amount: true } })
+    const totalsMap: Record<string, number> = {}
+    for (const t of totals) totalsMap[t.userId] = Number(t._sum.amount || 0)
+
+    const lastMonthTotals = await prisma.payment.groupBy({ by: ['userId'], where: { status: 'CONFIRMED', userId: { in: userIds }, processedAt: { gte: lastMonthStartUtc, lt: thisMonthStartUtc } }, _sum: { amount: true } })
+    const lastMonthMap: Record<string, number> = {}
+    for (const t of lastMonthTotals) lastMonthMap[t.userId] = Number(t._sum.amount || 0)
+
     const members = memberships.map((m: any) => ({
       id: m.user.id,
       name: `${m.user.firstName} ${m.user.lastName}`.trim(),
@@ -48,7 +62,9 @@ export async function GET(
       status: m.status,
       joinedAt: m.startDate?.toISOString() || m.user.createdAt.toISOString(),
       nextBilling: m.nextBillingDate ? m.nextBillingDate.toISOString() : null,
-      lastPaidAt: m.user.payments?.[0]?.createdAt ? new Date(m.user.payments[0].createdAt).toISOString() : null
+      lastPaidAt: m.user.payments?.[0]?.createdAt ? new Date(m.user.payments[0].createdAt).toISOString() : null,
+      totalPaid: totalsMap[m.user.id] || 0,
+      lastMonthPaid: lastMonthMap[m.user.id] || 0
     }))
 
     return NextResponse.json({
