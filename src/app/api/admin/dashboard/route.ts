@@ -117,13 +117,13 @@ export async function GET() {
       _sum: { amount: true }
     })
 
-    // Stripe-aligned total revenue (NET VOLUME FROM SALES):
-    // Sum of Stripe balance transactions' net amounts for types that affect
-    // sales (charges, refunds, and disputes) in GBP, across all time.
+    // Stripe-aligned total revenue (NET VOLUME FROM SALES, all-time):
+    // Sum over all succeeded charges of (amount - amount_refunded) in GBP.
+    // This matches Stripe dashboard "Net volume" (excludes fees).
     // Cached for 10 minutes to avoid repeated full scans.
     let stripeNetVolumeAllTime: number | null = null
     try {
-      const CACHE_KEY = 'metrics:stripeNetAllTime'
+      const CACHE_KEY = 'metrics:stripeNetSalesAllTime'
       const CACHE_TTL_MS = 10 * 60 * 1000
       const setting = await prisma.systemSetting.findUnique({ where: { key: CACHE_KEY } })
       const nowMs = Date.now()
@@ -137,21 +137,19 @@ export async function GET() {
         } catch {}
       }
       if (stripeNetVolumeAllTime == null) {
-        // Primary method: iterate balance transactions and sum "net"
+        // Iterate all charges and compute net sales (amount - amount_refunded)
         let hasMore = true
         let startingAfter: string | undefined = undefined
         let totalNetMinor = 0
         while (hasMore) {
-          const batch: any = await stripe.balanceTransactions.list({
-            limit: 100,
-            starting_after: startingAfter,
-            currency: 'gbp'
-          })
-          for (const t of batch.data) {
-            const type = (t as any).type
-            if (type === 'charge' || type === 'refund' || type === 'dispute' || type === 'dispute_reversal') {
-              totalNetMinor += Number((t as any).net || 0)
-            }
+          const batch: any = await stripe.charges.list({ limit: 100, starting_after: startingAfter })
+          for (const ch of batch.data) {
+            const currency = (ch.currency || 'gbp').toLowerCase()
+            const succeeded = (ch as any).status === 'succeeded' || (ch as any).paid === true
+            if (currency !== 'gbp' || !succeeded) continue
+            const amount = Number(ch.amount || 0)
+            const refunded = Number((ch as any).amount_refunded || 0)
+            totalNetMinor += Math.max(0, amount - refunded)
           }
           hasMore = batch.has_more
           startingAfter = batch.data[batch.data.length - 1]?.id
@@ -161,7 +159,7 @@ export async function GET() {
         if (setting) {
           await prisma.systemSetting.update({ where: { key: CACHE_KEY }, data: { value: payload } })
         } else {
-          await prisma.systemSetting.create({ data: { key: CACHE_KEY, value: payload, description: 'Cached Stripe NET volume (all time)', category: 'metrics' } })
+          await prisma.systemSetting.create({ data: { key: CACHE_KEY, value: payload, description: 'Cached Stripe Net volume from sales (all time)', category: 'metrics' } })
         }
       }
     } catch (e) {
