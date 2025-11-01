@@ -2,6 +2,8 @@
 type UserRole = 'CUSTOMER' | 'ADMIN' | 'INSTRUCTOR' | 'SUPER_ADMIN'
 type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
 
+
+
 declare module 'next-auth' {
   interface Session {
     user: {

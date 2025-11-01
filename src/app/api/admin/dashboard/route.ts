@@ -111,11 +111,58 @@ export async function GET() {
       _sum: { amount: true }
     })
 
-    // Get total revenue all time
+    // Get total revenue all time (DB) – kept as fallback
     const totalRevenue = await prisma.payment.aggregate({
       where: { status: 'CONFIRMED' },
       _sum: { amount: true }
     })
+
+    // Stripe-aligned total revenue (gross volume proxy):
+    // Prefer a short-lived cache in SystemSetting (10 minutes) to avoid
+    // scanning Stripe on each request. Cache key: metrics:stripeGrossAllTime
+    let stripeGrossVolumeAllTime: number | null = null
+    try {
+      const CACHE_KEY = 'metrics:stripeGrossAllTime'
+      const CACHE_TTL_MS = 10 * 60 * 1000
+      const setting = await prisma.systemSetting.findUnique({ where: { key: CACHE_KEY } })
+      const nowMs = Date.now()
+      if (setting) {
+        try {
+          const parsed = JSON.parse(setting.value || '{}') as { amount?: number; fetchedAt?: string }
+          const fetchedAtMs = parsed?.fetchedAt ? Date.parse(parsed.fetchedAt) : 0
+          if (parsed?.amount != null && fetchedAtMs && nowMs - fetchedAtMs < CACHE_TTL_MS) {
+            stripeGrossVolumeAllTime = Number(parsed.amount)
+          }
+        } catch {}
+      }
+      if (stripeGrossVolumeAllTime == null) {
+        let hasMore = true
+        let startingAfter: string | undefined = undefined
+        let totalMinorUnits = 0
+        while (hasMore) {
+          const batch: any = await stripe.invoices.list({
+            status: 'paid',
+            limit: 100,
+            starting_after: startingAfter
+          })
+          for (const inv of batch.data) {
+            totalMinorUnits += Number(inv.amount_paid || 0)
+          }
+          hasMore = batch.has_more
+          startingAfter = batch.data[batch.data.length - 1]?.id
+        }
+        stripeGrossVolumeAllTime = totalMinorUnits / 100
+        const payload = JSON.stringify({ amount: stripeGrossVolumeAllTime, fetchedAt: new Date().toISOString() })
+        if (setting) {
+          await prisma.systemSetting.update({ where: { key: CACHE_KEY }, data: { value: payload } })
+        } else {
+          await prisma.systemSetting.create({ data: { key: CACHE_KEY, value: payload, description: 'Cached Stripe gross volume (all time)', category: 'metrics' } })
+        }
+      }
+    } catch (e) {
+      // Non-fatal; fall back to DB-computed total
+      stripeGrossVolumeAllTime = null
+    }
 
     // Calculate Customer Lifetime Value by membership type
     const membershipAnalytics = await prisma.user.findMany({
@@ -722,7 +769,8 @@ export async function GET() {
       payments: payments_full,
       payments_todo,
       metrics: {
-        totalRevenue: Number(totalRevenue._sum.amount) || 0,
+        // Prefer Stripe-aligned gross volume; fallback to DB sum
+        totalRevenue: (stripeGrossVolumeAllTime ?? Number(totalRevenue._sum.amount)) || 0,
         monthlyRecurring: Number(monthlyRevenue._sum.amount) || 0,
         monthlyRecurringLastMonth: Number(lastMonthRevenue._sum.amount) || 0,
         monthlyRecurringPrevMonth: Number(prevMonthRevenue._sum.amount) || 0,

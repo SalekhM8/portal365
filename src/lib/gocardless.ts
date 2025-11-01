@@ -268,3 +268,4 @@ export async function getRevenueSummary() {
     headroom: Number(entity.vatThreshold) - entity.payments.reduce((sum: number, p: any) => sum + Number(p.amount), 0)
   }))
 } 
+
