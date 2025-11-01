@@ -30,7 +30,8 @@ export async function GET(req: NextRequest) {
       payments: {
         where: { status: 'CONFIRMED' },
         orderBy: { processedAt: 'desc' },
-        take: 1
+        take: 1,
+        select: { createdAt: true, processedAt: true, amount: true }
       }
     }
   })
@@ -44,15 +45,13 @@ export async function GET(req: NextRequest) {
   const totalsMap: Record<string, number> = {}
   for (const t of totals) totalsMap[t.userId] = Number(t._sum.amount || 0)
 
-  const lastMonthTotals = await prisma.payment.groupBy({ by: ['userId'], where: { status: 'CONFIRMED', processedAt: { gte: lastMonthStartUtc, lt: thisMonthStartUtc } }, _sum: { amount: true } })
-  const lastMonthMap: Record<string, number> = {}
-  for (const t of lastMonthTotals) lastMonthMap[t.userId] = Number(t._sum.amount || 0)
+  // Last payment amount comes from most recent confirmed payment (already joined above)
 
   const rows = members.filter(m => m.memberships.length > 0).map(m => {
     const membership = m.memberships[0] as any
     const lastPaid = (m.payments[0]?.processedAt || m.payments[0]?.createdAt) as Date | undefined
     const totalPaid = totalsMap[m.id] || 0
-    const lastMonthPaid = lastMonthMap[m.id] || 0
+    const lastPayment = m.payments[0]?.amount ? Number(m.payments[0].amount) : 0
     return {
       id: m.id,
       name: `${m.firstName} ${m.lastName}`,
@@ -62,14 +61,14 @@ export async function GET(req: NextRequest) {
       nextBilling: membership?.nextBillingDate ? toIsoDate(membership.nextBillingDate) : 'N/A',
       lastPaidAt: lastPaid ? toIsoDate(lastPaid) : 'N/A',
       totalPaid,
-      lastMonthPaid
+      lastPayment
     }
   })
 
   const fileBase = `portal365-plan-${plan.key}-members-${new Date().toISOString().slice(0,10)}`
 
   if (format === 'csv') {
-    const header = ['User ID','Name','Email','Status','Joined','Next Billing','Last Paid (date)','Total Paid','Last Month Paid']
+    const header = ['User ID','Name','Email','Status','Joined','Next Billing','Last Paid (date)','Total Paid','Last Payment']
     const csvLines = [header.join(',')]
     for (const r of rows) {
       csvLines.push([
@@ -81,7 +80,7 @@ export async function GET(req: NextRequest) {
         r.nextBilling,
         r.lastPaidAt,
         String(r.totalPaid),
-        String(r.lastMonthPaid)
+        String(r.lastPayment)
       ].join(','))
     }
     const body = `\uFEFF${csvLines.join('\n')}`
@@ -105,7 +104,7 @@ export async function GET(req: NextRequest) {
     { header: 'Next Billing', key: 'nextBilling', width: 14 },
     { header: 'Last Paid (date)', key: 'lastPaidAt', width: 16 },
     { header: 'Total Paid', key: 'totalPaid', width: 14 },
-    { header: 'Last Month Paid', key: 'lastMonthPaid', width: 16 },
+    { header: 'Last Payment', key: 'lastPayment', width: 14 },
   ]
   sheet.addRows(rows)
   sheet.getRow(1).font = { bold: true }

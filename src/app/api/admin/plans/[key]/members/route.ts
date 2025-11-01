@@ -33,7 +33,7 @@ export async function GET(
               where: { status: 'CONFIRMED' },
               orderBy: { createdAt: 'desc' },
               take: 1,
-              select: { createdAt: true }
+              select: { createdAt: true, amount: true }
             }
           }
         }
@@ -64,7 +64,7 @@ export async function GET(
       nextBilling: m.nextBillingDate ? m.nextBillingDate.toISOString() : null,
       lastPaidAt: m.user.payments?.[0]?.createdAt ? new Date(m.user.payments[0].createdAt).toISOString() : null,
       totalPaid: totalsMap[m.user.id] || 0,
-      lastMonthPaid: lastMonthMap[m.user.id] || 0
+      lastPayment: m.user.payments?.[0]?.amount ? Number(m.user.payments[0].amount) : 0
     }))
 
     return NextResponse.json({
