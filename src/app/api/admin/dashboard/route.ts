@@ -136,20 +136,38 @@ export async function GET() {
         } catch {}
       }
       if (stripeGrossVolumeAllTime == null) {
+        // Primary method: sum succeeded charges (matches Stripe Gross volume)
         let hasMore = true
         let startingAfter: string | undefined = undefined
         let totalMinorUnits = 0
         while (hasMore) {
-          const batch: any = await stripe.invoices.list({
-            status: 'paid',
+          const batch: any = await stripe.charges.list({
             limit: 100,
             starting_after: startingAfter
           })
-          for (const inv of batch.data) {
-            totalMinorUnits += Number(inv.amount_paid || 0)
+          for (const ch of batch.data) {
+            const currency = (ch.currency || 'gbp').toLowerCase()
+            const isSucceeded = (ch as any).status === 'succeeded' || (ch as any).paid === true
+            if (currency === 'gbp' && isSucceeded) {
+              totalMinorUnits += Number(ch.amount || 0)
+            }
           }
           hasMore = batch.has_more
           startingAfter = batch.data[batch.data.length - 1]?.id
+        }
+        // Fallback: if charges API unexpectedly yields 0, try paid invoices sum
+        if (totalMinorUnits === 0) {
+          let invHasMore = true
+          let invStartingAfter: string | undefined = undefined
+          while (invHasMore) {
+            const batch: any = await stripe.invoices.list({ status: 'paid', limit: 100, starting_after: invStartingAfter })
+            for (const inv of batch.data) {
+              const currency = (inv.currency || 'gbp').toLowerCase()
+              if (currency === 'gbp') totalMinorUnits += Number(inv.amount_paid || 0)
+            }
+            invHasMore = batch.has_more
+            invStartingAfter = batch.data[batch.data.length - 1]?.id
+          }
         }
         stripeGrossVolumeAllTime = totalMinorUnits / 100
         const payload = JSON.stringify({ amount: stripeGrossVolumeAllTime, fetchedAt: new Date().toISOString() })
