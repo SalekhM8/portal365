@@ -137,7 +137,7 @@ export async function GET() {
       const settingLast = await prisma.systemSetting.findUnique({ where: { key: CACHE_KEY_LAST } })
       const settingThis = await prisma.systemSetting.findUnique({ where: { key: CACHE_KEY_THIS } })
       const nowMs = Date.now()
-      if (settingTotal) {
+      if (settingTotal && !useStripeLedger) {
         try {
           const parsed = JSON.parse(settingTotal.value || '{}') as { amount?: number; fetchedAt?: string }
           const fetchedAtMs = parsed?.fetchedAt ? Date.parse(parsed.fetchedAt) : 0
@@ -146,7 +146,7 @@ export async function GET() {
           }
         } catch {}
       }
-      if (settingLast) {
+      if (settingLast && !useStripeLedger) {
         try {
           const parsed = JSON.parse(settingLast.value || '{}') as { amount?: number; fetchedAt?: string }
           const fetchedAtMs = parsed?.fetchedAt ? Date.parse(parsed.fetchedAt) : 0
@@ -155,7 +155,7 @@ export async function GET() {
           }
         } catch {}
       }
-      if (settingThis) {
+      if (settingThis && !useStripeLedger) {
         try {
           const parsed = JSON.parse(settingThis.value || '{}') as { amount?: number; fetchedAt?: string }
           const fetchedAtMs = parsed?.fetchedAt ? Date.parse(parsed.fetchedAt) : 0
@@ -188,19 +188,19 @@ export async function GET() {
         return netMinor / 100
       }
 
-      if (ledgerTotalNetAllTime == null) {
+      if (ledgerTotalNetAllTime == null || useStripeLedger) {
         ledgerTotalNetAllTime = await sumSalesNet()
         const payload = JSON.stringify({ amount: ledgerTotalNetAllTime, fetchedAt: new Date().toISOString() })
         if (settingTotal) await prisma.systemSetting.update({ where: { key: CACHE_KEY_TOTAL }, data: { value: payload } })
         else await prisma.systemSetting.create({ data: { key: CACHE_KEY_TOTAL, value: payload, description: 'Cached Stripe ledger total net (all time)', category: 'metrics' } })
       }
-      if (ledgerLastMonthNet == null) {
+      if (ledgerLastMonthNet == null || useStripeLedger) {
         ledgerLastMonthNet = await sumSalesNet({ gte: Math.floor(lastMonthStart.getTime()/1000), lt: Math.floor(thisMonthStart.getTime()/1000) })
         const payload = JSON.stringify({ amount: ledgerLastMonthNet, fetchedAt: new Date().toISOString() })
         if (settingLast) await prisma.systemSetting.update({ where: { key: CACHE_KEY_LAST }, data: { value: payload } })
         else await prisma.systemSetting.create({ data: { key: CACHE_KEY_LAST, value: payload, description: 'Cached Stripe ledger last month net', category: 'metrics' } })
       }
-      if (ledgerThisMonthNet == null) {
+      if (ledgerThisMonthNet == null || useStripeLedger) {
         ledgerThisMonthNet = await sumSalesNet({ gte: Math.floor(thisMonthStart.getTime()/1000) })
         const payload = JSON.stringify({ amount: ledgerThisMonthNet, fetchedAt: new Date().toISOString() })
         if (settingThis) await prisma.systemSetting.update({ where: { key: CACHE_KEY_THIS }, data: { value: payload } })
