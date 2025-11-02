@@ -1503,7 +1503,13 @@ function AdminDashboardContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {revenueMonths.map((m) => (
+                  {(() => {
+                    // Show months starting from the first non-zero totalNet and most recent first
+                    const firstNonZeroIdx = revenueMonths.findIndex(m => (m.totalNet || 0) > 0)
+                    const sliced = firstNonZeroIdx >= 0 ? revenueMonths.slice(firstNonZeroIdx) : revenueMonths
+                    const sorted = [...sliced].reverse()
+                    return sorted
+                  })().map((m) => (
                     <tr key={m.month} className="border-b border-white/5">
                       <td className="py-2">{m.month}</td>
                       <td className="py-2">£{(m.totalNet || 0).toLocaleString()}</td>
