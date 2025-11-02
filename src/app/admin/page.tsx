@@ -266,15 +266,22 @@ function AdminDashboardContent() {
   }, [activeTab])
 
   // Fetch monthly revenue when Analytics tab is active
+  async function loadRevenueMonths() {
+    try {
+      const res = await fetch('/api/admin/analytics/revenue?months=12', { cache: 'no-store' })
+      const j = await res.json()
+      if (j?.ok && Array.isArray(j.months)) setRevenueMonths(j.months)
+    } catch {}
+  }
+
+  // Load once on mount so the section is populated immediately
   useEffect(() => {
-    if (activeTab !== 'analytics') return
-    ;(async () => {
-      try {
-        const res = await fetch('/api/admin/analytics/revenue?months=12', { cache: 'no-store' })
-        const j = await res.json()
-        if (j?.ok && Array.isArray(j.months)) setRevenueMonths(j.months)
-      } catch {}
-    })()
+    loadRevenueMonths()
+  }, [])
+
+  // Also reload when the Analytics tab is focused
+  useEffect(() => {
+    if (activeTab === 'analytics') loadRevenueMonths()
   }, [activeTab])
 
   const fetchAdminData = async () => {
