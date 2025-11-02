@@ -117,54 +117,94 @@ export async function GET() {
       _sum: { amount: true }
     })
 
-    // Stripe-aligned total revenue (NET VOLUME FROM SALES, all-time):
-    // Sum over all succeeded charges of (amount - amount_refunded) in GBP.
-    // This matches Stripe dashboard "Net volume" (excludes fees).
-    // Cached for 10 minutes to avoid repeated full scans.
-    let stripeNetVolumeAllTime: number | null = null
+    // Strict Stripe-ledger parity mode for metrics (feature-flagged)
+    const useStripeLedger = process.env.STRIPE_LEDGER_MODE === 'true'
+
+    // Stripe-aligned metrics via balance transactions (NET), cached 10 minutes
+    let ledgerTotalNetAllTime: number | null = null
+    let ledgerLastMonthNet: number | null = null
+    let ledgerThisMonthNet: number | null = null
     try {
-      const CACHE_KEY = 'metrics:stripeNetSalesAllTime'
+      const now = new Date()
+      const thisMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+      const lastMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+
+      const CACHE_KEY_TOTAL = 'metrics:ledger:totalNetAllTime'
+      const CACHE_KEY_LAST = 'metrics:ledger:lastMonthNet'
+      const CACHE_KEY_THIS = 'metrics:ledger:thisMonthNet'
       const CACHE_TTL_MS = 10 * 60 * 1000
-      const setting = await prisma.systemSetting.findUnique({ where: { key: CACHE_KEY } })
+      const settingTotal = await prisma.systemSetting.findUnique({ where: { key: CACHE_KEY_TOTAL } })
+      const settingLast = await prisma.systemSetting.findUnique({ where: { key: CACHE_KEY_LAST } })
+      const settingThis = await prisma.systemSetting.findUnique({ where: { key: CACHE_KEY_THIS } })
       const nowMs = Date.now()
-      if (setting) {
+      if (settingTotal) {
         try {
-          const parsed = JSON.parse(setting.value || '{}') as { amount?: number; fetchedAt?: string }
+          const parsed = JSON.parse(settingTotal.value || '{}') as { amount?: number; fetchedAt?: string }
           const fetchedAtMs = parsed?.fetchedAt ? Date.parse(parsed.fetchedAt) : 0
           if (parsed?.amount != null && fetchedAtMs && nowMs - fetchedAtMs < CACHE_TTL_MS) {
-            stripeNetVolumeAllTime = Number(parsed.amount)
+            ledgerTotalNetAllTime = Number(parsed.amount)
           }
         } catch {}
       }
-      if (stripeNetVolumeAllTime == null) {
-        // Iterate all charges and compute net sales (amount - amount_refunded)
+      if (settingLast) {
+        try {
+          const parsed = JSON.parse(settingLast.value || '{}') as { amount?: number; fetchedAt?: string }
+          const fetchedAtMs = parsed?.fetchedAt ? Date.parse(parsed.fetchedAt) : 0
+          if (parsed?.amount != null && fetchedAtMs && nowMs - fetchedAtMs < CACHE_TTL_MS) {
+            ledgerLastMonthNet = Number(parsed.amount)
+          }
+        } catch {}
+      }
+      if (settingThis) {
+        try {
+          const parsed = JSON.parse(settingThis.value || '{}') as { amount?: number; fetchedAt?: string }
+          const fetchedAtMs = parsed?.fetchedAt ? Date.parse(parsed.fetchedAt) : 0
+          if (parsed?.amount != null && fetchedAtMs && nowMs - fetchedAtMs < CACHE_TTL_MS) {
+            ledgerThisMonthNet = Number(parsed.amount)
+          }
+        } catch {}
+      }
+
+      async function sumBalanceNet(created?: { gte?: number; lt?: number }) {
         let hasMore = true
         let startingAfter: string | undefined = undefined
-        let totalNetMinor = 0
+        let netMinor = 0
         while (hasMore) {
-          const batch: any = await stripe.charges.list({ limit: 100, starting_after: startingAfter })
-          for (const ch of batch.data) {
-            const currency = (ch.currency || 'gbp').toLowerCase()
-            const succeeded = (ch as any).status === 'succeeded' || (ch as any).paid === true
-            if (currency !== 'gbp' || !succeeded) continue
-            const amount = Number(ch.amount || 0)
-            const refunded = Number((ch as any).amount_refunded || 0)
-            totalNetMinor += Math.max(0, amount - refunded)
-          }
+          const batch: any = await stripe.balanceTransactions.list({
+            limit: 100,
+            currency: 'gbp',
+            starting_after: startingAfter,
+            ...(created ? { created } : {})
+          })
+          for (const t of batch.data) netMinor += Number((t as any).net || 0)
           hasMore = batch.has_more
           startingAfter = batch.data[batch.data.length - 1]?.id
         }
-        stripeNetVolumeAllTime = totalNetMinor / 100
-        const payload = JSON.stringify({ amount: stripeNetVolumeAllTime, fetchedAt: new Date().toISOString() })
-        if (setting) {
-          await prisma.systemSetting.update({ where: { key: CACHE_KEY }, data: { value: payload } })
-        } else {
-          await prisma.systemSetting.create({ data: { key: CACHE_KEY, value: payload, description: 'Cached Stripe Net volume from sales (all time)', category: 'metrics' } })
-        }
+        return netMinor / 100
+      }
+
+      if (ledgerTotalNetAllTime == null) {
+        ledgerTotalNetAllTime = await sumBalanceNet()
+        const payload = JSON.stringify({ amount: ledgerTotalNetAllTime, fetchedAt: new Date().toISOString() })
+        if (settingTotal) await prisma.systemSetting.update({ where: { key: CACHE_KEY_TOTAL }, data: { value: payload } })
+        else await prisma.systemSetting.create({ data: { key: CACHE_KEY_TOTAL, value: payload, description: 'Cached Stripe ledger total net (all time)', category: 'metrics' } })
+      }
+      if (ledgerLastMonthNet == null) {
+        ledgerLastMonthNet = await sumBalanceNet({ gte: Math.floor(lastMonthStart.getTime()/1000), lt: Math.floor(thisMonthStart.getTime()/1000) })
+        const payload = JSON.stringify({ amount: ledgerLastMonthNet, fetchedAt: new Date().toISOString() })
+        if (settingLast) await prisma.systemSetting.update({ where: { key: CACHE_KEY_LAST }, data: { value: payload } })
+        else await prisma.systemSetting.create({ data: { key: CACHE_KEY_LAST, value: payload, description: 'Cached Stripe ledger last month net', category: 'metrics' } })
+      }
+      if (ledgerThisMonthNet == null) {
+        ledgerThisMonthNet = await sumBalanceNet({ gte: Math.floor(thisMonthStart.getTime()/1000) })
+        const payload = JSON.stringify({ amount: ledgerThisMonthNet, fetchedAt: new Date().toISOString() })
+        if (settingThis) await prisma.systemSetting.update({ where: { key: CACHE_KEY_THIS }, data: { value: payload } })
+        else await prisma.systemSetting.create({ data: { key: CACHE_KEY_THIS, value: payload, description: 'Cached Stripe ledger this month net (MTD)', category: 'metrics' } })
       }
     } catch (e) {
-      // Non-fatal; fall back to DB-computed total
-      stripeNetVolumeAllTime = null
+      ledgerTotalNetAllTime = null
+      ledgerLastMonthNet = null
+      ledgerThisMonthNet = null
     }
 
     // Calculate Customer Lifetime Value by membership type
@@ -746,15 +786,6 @@ export async function GET() {
           currency: pendingPayouts.data[0].currency.toUpperCase(),
           arrivalDate: new Date(pendingPayouts.data[0].arrival_date * 1000).toISOString().split('T')[0]
         }
-      } else {
-        // Fallback: show pending balance as an estimate
-        const bal = await stripe.balance.retrieve()
-        const pendingTotal = (bal.pending || []).reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0)
-        nextPayout = {
-          amount: pendingTotal / 100,
-          currency: (bal.pending?.[0]?.currency || 'gbp').toUpperCase(),
-          arrivalDate: null
-        }
       }
     } catch (e) {
       // Non-fatal; payouts not available
@@ -773,10 +804,10 @@ export async function GET() {
       payments: payments_full,
       payments_todo,
       metrics: {
-        // Prefer Stripe NET volume from sales; fallback to DB sum
-        totalRevenue: (stripeNetVolumeAllTime ?? Number(totalRevenue._sum.amount)) || 0,
-        monthlyRecurring: Number(monthlyRevenue._sum.amount) || 0,
-        monthlyRecurringLastMonth: Number(lastMonthRevenue._sum.amount) || 0,
+        // Strict Stripe-ledger parity when enabled
+        totalRevenue: useStripeLedger ? (ledgerTotalNetAllTime || 0) : ((ledgerTotalNetAllTime ?? Number(totalRevenue._sum.amount)) || 0),
+        monthlyRecurring: useStripeLedger ? (ledgerThisMonthNet || 0) : (Number(monthlyRevenue._sum.amount) || 0),
+        monthlyRecurringLastMonth: useStripeLedger ? (ledgerLastMonthNet || 0) : (Number(lastMonthRevenue._sum.amount) || 0),
         monthlyRecurringPrevMonth: Number(prevMonthRevenue._sum.amount) || 0,
         churnRate: Math.round(churnRate * 100) / 100,
         acquisitionRate: Math.round(acquisitionRate * 100) / 100,
