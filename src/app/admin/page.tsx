@@ -291,7 +291,7 @@ function AdminDashboardContent() {
       // ✅ REPLACE hardcoded data with real API call
       console.log('🔍 Fetching real admin dashboard data...')
       
-      const response = await fetch('/api/admin/dashboard?lite=1', {
+      const response = await fetch('/api/admin/dashboard', {
         headers: {
           'Content-Type': 'application/json'
         }
@@ -305,9 +305,9 @@ function AdminDashboardContent() {
       
       // ✅ KEEP your existing state setters (no changes to UI logic)
       setVatStatus(data.vatStatus)
-      // Customers and payments will be loaded lazily via list endpoints
-      setCustomers([])
-      setPayments([])
+      setCustomers(data.customers)
+      // Use full payments for Payments tab
+      setPayments(Array.isArray(data.payments) ? data.payments : [])
       setPaymentsTodo(Array.isArray(data.payments_todo) ? data.payments_todo : [])
       setBusinessMetrics(data.metrics)
       setRecentActivity(data.recentActivity)
@@ -323,32 +323,6 @@ function AdminDashboardContent() {
       setLoading(false)
     }
   }
-
-  // Lazy load customers when tab opens
-  useEffect(() => {
-    if (activeTab !== 'customers') return
-    if (customers.length > 0) return
-    ;(async () => {
-      try {
-        const r = await fetch('/api/admin/customers/list?page=1&limit=50', { cache: 'no-store' })
-        const j = await r.json()
-        if (j?.ok) setCustomers(j.rows || [])
-      } catch {}
-    })()
-  }, [activeTab])
-
-  // Lazy load payments when tab opens
-  useEffect(() => {
-    if (activeTab !== 'payments') return
-    if (payments.length > 0) return
-    ;(async () => {
-      try {
-        const r = await fetch('/api/admin/payments/list?page=1&limit=50', { cache: 'no-store' })
-        const j = await r.json()
-        if (j?.ok) setPayments(j.rows || [])
-      } catch {}
-    })()
-  }, [activeTab])
 
   const dismissTodo = (paymentId: string) => {
     setDismissedTodoIds((prev) => {
