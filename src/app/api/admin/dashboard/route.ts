@@ -125,7 +125,7 @@ export async function GET() {
     // Strict Stripe-ledger parity mode for metrics (feature-flagged)
     const useStripeLedger = process.env.STRIPE_LEDGER_MODE === 'true'
 
-    // Stripe-aligned metrics via balance transactions (NET), cached 10 minutes
+    // Stripe-aligned metrics via charges minus refunds (Stripe dashboard Net volume), cached 10 minutes
     let ledgerTotalNetAllTime: number | null = null
     let ledgerLastMonthNet: number | null = null
     let ledgerThisMonthNet: number | null = null
@@ -170,43 +170,43 @@ export async function GET() {
         } catch {}
       }
 
-      async function sumSalesNet(created?: { gte?: number; lt?: number }) {
+      async function sumChargesMinusRefunds(created?: { gte?: number; lt?: number }) {
         let hasMore = true
         let startingAfter: string | undefined = undefined
-        let netMinor = 0
+        let grossMinor = 0
+        let refundedMinor = 0
         while (hasMore) {
-          const batch: any = await stripe.balanceTransactions.list({
+          const batch: any = await stripe.charges.list({
             limit: 100,
-            currency: 'gbp',
             starting_after: startingAfter,
             ...(created ? { created } : {})
           })
-          for (const t of batch.data) {
-            const type = (t as any).type
-            if (type === 'charge' || type === 'refund' || type === 'dispute' || type === 'dispute_reversal') {
-              netMinor += Number((t as any).net || 0)
-            }
+          for (const ch of batch.data) {
+            const succeeded = (ch as any).status === 'succeeded' || (ch as any).paid === true
+            if (!succeeded) continue
+            grossMinor += Number(ch.amount || 0)
+            refundedMinor += Number((ch as any).amount_refunded || 0)
           }
           hasMore = batch.has_more
           startingAfter = batch.data[batch.data.length - 1]?.id
         }
-        return netMinor / 100
+        return (grossMinor - refundedMinor) / 100
       }
 
       if (ledgerTotalNetAllTime == null || useStripeLedger) {
-        ledgerTotalNetAllTime = await sumSalesNet()
+        ledgerTotalNetAllTime = await sumChargesMinusRefunds()
         const payload = JSON.stringify({ amount: ledgerTotalNetAllTime, fetchedAt: new Date().toISOString() })
         if (settingTotal) await prisma.systemSetting.update({ where: { key: CACHE_KEY_TOTAL }, data: { value: payload } })
         else await prisma.systemSetting.create({ data: { key: CACHE_KEY_TOTAL, value: payload, description: 'Cached Stripe ledger total net (all time)', category: 'metrics' } })
       }
       if (ledgerLastMonthNet == null || useStripeLedger) {
-        ledgerLastMonthNet = await sumSalesNet({ gte: Math.floor(lastMonthStart.getTime()/1000), lt: Math.floor(thisMonthStart.getTime()/1000) })
+        ledgerLastMonthNet = await sumChargesMinusRefunds({ gte: Math.floor(lastMonthStart.getTime()/1000), lt: Math.floor(thisMonthStart.getTime()/1000) })
         const payload = JSON.stringify({ amount: ledgerLastMonthNet, fetchedAt: new Date().toISOString() })
         if (settingLast) await prisma.systemSetting.update({ where: { key: CACHE_KEY_LAST }, data: { value: payload } })
         else await prisma.systemSetting.create({ data: { key: CACHE_KEY_LAST, value: payload, description: 'Cached Stripe ledger last month net', category: 'metrics' } })
       }
       if (ledgerThisMonthNet == null || useStripeLedger) {
-        ledgerThisMonthNet = await sumSalesNet({ gte: Math.floor(thisMonthStart.getTime()/1000) })
+        ledgerThisMonthNet = await sumChargesMinusRefunds({ gte: Math.floor(thisMonthStart.getTime()/1000) })
         const payload = JSON.stringify({ amount: ledgerThisMonthNet, fetchedAt: new Date().toISOString() })
         if (settingThis) await prisma.systemSetting.update({ where: { key: CACHE_KEY_THIS }, data: { value: payload } })
         else await prisma.systemSetting.create({ data: { key: CACHE_KEY_THIS, value: payload, description: 'Cached Stripe ledger this month net (MTD)', category: 'metrics' } })
@@ -796,6 +796,16 @@ export async function GET() {
           currency: pendingPayouts.data[0].currency.toUpperCase(),
           arrivalDate: new Date(pendingPayouts.data[0].arrival_date * 1000).toISOString().split('T')[0]
         }
+      } else {
+        try {
+          const bal = await stripe.balance.retrieve()
+          const pendingTotal = (bal.pending || []).reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0)
+          nextPayout = {
+            amount: pendingTotal / 100,
+            currency: (bal.pending?.[0]?.currency || 'gbp').toUpperCase(),
+            arrivalDate: null
+          }
+        } catch {}
       }
     } catch (e) {
       // Non-fatal; payouts not available
