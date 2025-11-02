@@ -1013,37 +1013,7 @@ function AdminDashboardContent() {
             </Card>
           </div>
 
-      {/* Monthly Revenue (Stripe Net) */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>Monthly Revenue (Stripe Net)</CardTitle>
-          <CardDescription>Exact Net volume (succeeded charges minus refunds) per month</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left border-b border-white/10">
-                  <th className="py-2">Month</th>
-                  <th className="py-2">Total Net</th>
-                  <th className="py-2">Charges</th>
-                  <th className="py-2">Refunds</th>
-                </tr>
-              </thead>
-              <tbody>
-                {revenueMonths.map((m) => (
-                  <tr key={m.month} className="border-b border-white/5">
-                    <td className="py-2">{m.month}</td>
-                    <td className="py-2">£{(m.totalNet || 0).toLocaleString()}</td>
-                    <td className="py-2">£{(m.charges || 0).toLocaleString()}</td>
-                    <td className="py-2">£{(m.refunds || 0).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      
         </TabsContent>
 
         {/* Customer Management Tab */}
