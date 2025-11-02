@@ -1,3 +1,8 @@
+// Force dynamic, no caching – ensure fresh values and env flags on each call
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
+export const runtime = 'nodejs'
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions, hasPermission } from '@/lib/auth'
@@ -797,6 +802,8 @@ export async function GET() {
     }
 
     return NextResponse.json({
+      parityMode: useStripeLedger ? 'stripe_ledger' : 'db',
+      build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0,7) || null,
       totalCustomers,
       activeSubscriptions,
       monthlyRevenue: Number(monthlyRevenue._sum.amount) || 0,
