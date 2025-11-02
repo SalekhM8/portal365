@@ -163,6 +163,7 @@ function AdminDashboardContent() {
   const [businessMetrics, setBusinessMetrics] = useState<BusinessMetrics | null>(null)
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null) // 🚀 NEW: Real analytics data
+  const [revenueMonths, setRevenueMonths] = useState<Array<{ month: string; totalNet: number; charges: number; refunds: number }>>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -262,6 +263,18 @@ function AdminDashboardContent() {
       router.push(`/admin?${params.toString()}`, { scroll: false })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  // Fetch monthly revenue when Analytics tab is active
+  useEffect(() => {
+    if (activeTab !== 'analytics') return
+    ;(async () => {
+      try {
+        const res = await fetch('/api/admin/analytics/revenue?months=12', { cache: 'no-store' })
+        const j = await res.json()
+        if (j?.ok && Array.isArray(j.months)) setRevenueMonths(j.months)
+      } catch {}
+    })()
   }, [activeTab])
 
   const fetchAdminData = async () => {
@@ -992,6 +1005,38 @@ function AdminDashboardContent() {
                 </CardContent>
             </Card>
           </div>
+
+      {/* Monthly Revenue (Stripe Net) */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Monthly Revenue (Stripe Net)</CardTitle>
+          <CardDescription>Exact Net volume (succeeded charges minus refunds) per month</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b border-white/10">
+                  <th className="py-2">Month</th>
+                  <th className="py-2">Total Net</th>
+                  <th className="py-2">Charges</th>
+                  <th className="py-2">Refunds</th>
+                </tr>
+              </thead>
+              <tbody>
+                {revenueMonths.map((m) => (
+                  <tr key={m.month} className="border-b border-white/5">
+                    <td className="py-2">{m.month}</td>
+                    <td className="py-2">£{(m.totalNet || 0).toLocaleString()}</td>
+                    <td className="py-2">£{(m.charges || 0).toLocaleString()}</td>
+                    <td className="py-2">£{(m.refunds || 0).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
         </TabsContent>
 
         {/* Customer Management Tab */}
