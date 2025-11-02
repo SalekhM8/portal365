@@ -3,15 +3,17 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
 export const runtime = 'nodejs'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions, hasPermission } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { VATCalculationEngine } from '@/lib/vat-routing'
 import { stripe } from '@/lib/stripe'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const url = request?.url ? new URL(request.url) : null
+    const isLite = url?.searchParams?.get('lite') === '1'
     // ✅ REUSE your existing auth pattern
     const session = await getServerSession(authOptions) as any
     
@@ -20,9 +22,7 @@ export async function GET() {
     }
 
     // Get total customers
-    const totalCustomers = await prisma.user.count({
-      where: { role: 'CUSTOMER' }
-    })
+    const totalCustomers = await prisma.user.count({ where: { role: 'CUSTOMER' } })
 
     // Get customers from this month
     const thisMonthStart = new Date()
@@ -436,7 +436,7 @@ export async function GET() {
     const vatPositions = await VATCalculationEngine.calculateVATPositions()
 
     // Get detailed customer data with payments and routing info
-    const customers = await prisma.user.findMany({
+    const customers = isLite ? [] : await prisma.user.findMany({
       where: { role: 'CUSTOMER' },
       include: {
         memberships: {
@@ -475,7 +475,7 @@ export async function GET() {
     }
 
     // Get recent payments with detailed info
-    const payments = await prisma.payment.findMany({
+    const payments = isLite ? [] : await prisma.payment.findMany({
       where: { amount: { gt: 0 } },
       orderBy: [
         { processedAt: 'desc' },
@@ -822,8 +822,12 @@ export async function GET() {
       routingEfficiency: Math.round(actualRoutingEfficiency * 100) / 100,
       recentActivity: activities,
       vatStatus: vatPositions,
-      customers: formattedCustomers,
-      payments: payments_full,
+      customers: isLite ? [] : formattedCustomers,
+      payments: isLite ? [] : payments_full,
+      counts: {
+        customers: totalCustomers,
+        payments: await prisma.payment.count()
+      },
       payments_todo,
       metrics: {
         // Strict Stripe-ledger parity when enabled
