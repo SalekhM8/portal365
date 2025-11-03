@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Users, PlusCircle, Crown, CheckCircle2 } from 'lucide-react'
-import { MEMBERSHIP_PLANS } from '@/config/memberships'
+// Plans will be loaded dynamically from /api/plans (DB-first with config fallback)
 
 export default function FamilyPage() {
   const { data: session, status } = useSession()
@@ -18,6 +18,7 @@ export default function FamilyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [children, setChildren] = useState<any[]>([])
+  const [plans, setPlans] = useState<Array<{ key: string; displayName: string }>>([])
   const [parentHasDefaultPm, setParentHasDefaultPm] = useState<boolean>(false)
   const [activatingId, setActivatingId] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState<{ name: string; amount?: number } | null>(null)
@@ -27,10 +28,10 @@ export default function FamilyPage() {
   const [childFirst, setChildFirst] = useState('')
   const [childLast, setChildLast] = useState('')
   const [childDob, setChildDob] = useState('')
-  const [childPlan, setChildPlan] = useState('KIDS_UNLIMITED_UNDER14')
+  const [childPlan, setChildPlan] = useState('')
   const [saving, setSaving] = useState(false)
   const [changingId, setChangingId] = useState<string | null>(null)
-  const [newPlan, setNewPlan] = useState<string>('KIDS_UNLIMITED_UNDER14')
+  const [newPlan, setNewPlan] = useState<string>('')
 
   useEffect(() => {
     if (status === 'loading') return
@@ -38,7 +39,7 @@ export default function FamilyPage() {
       router.push('/auth/signin')
       return
     }
-    fetchChildren()
+    Promise.all([fetchChildren(), fetchPlans()])
   }, [session, status])
 
   const fetchChildren = async () => {
@@ -59,6 +60,19 @@ export default function FamilyPage() {
     }
   }
 
+  const fetchPlans = async () => {
+    try {
+      const res = await fetch('/api/plans')
+      const data = await res.json()
+      if (res.ok && data.success) {
+        const list = (data.plans as Array<any>).map(p => ({ key: p.key, displayName: p.displayName || p.name }))
+        setPlans(list)
+        if (!childPlan && list[0]) setChildPlan(list[0].key)
+        if (!newPlan && list[0]) setNewPlan(list[0].key)
+      }
+    } catch {}
+  }
+
   const addChild = async () => {
     setSaving(true)
     setError(null)
@@ -74,7 +88,7 @@ export default function FamilyPage() {
         setChildFirst('')
         setChildLast('')
         setChildDob('')
-        setChildPlan('KIDS_UNLIMITED_UNDER14')
+        if (plans[0]) setChildPlan(plans[0].key)
         await fetchChildren()
       } else {
         setError(data.error || 'Failed to add child')
@@ -213,8 +227,9 @@ export default function FamilyPage() {
                       <SelectValue placeholder="Select a plan" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="KIDS_UNLIMITED_UNDER14">{MEMBERSHIP_PLANS.KIDS_UNLIMITED_UNDER14.displayName}</SelectItem>
-                      <SelectItem value="KIDS_WEEKEND_UNDER14">{MEMBERSHIP_PLANS.KIDS_WEEKEND_UNDER14.displayName}</SelectItem>
+                      {plans.map(p => (
+                        <SelectItem key={p.key} value={p.key}>{p.displayName}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -265,8 +280,9 @@ export default function FamilyPage() {
                         <SelectValue placeholder="Select new plan" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="KIDS_UNLIMITED_UNDER14">{MEMBERSHIP_PLANS.KIDS_UNLIMITED_UNDER14.displayName}</SelectItem>
-                        <SelectItem value="KIDS_WEEKEND_UNDER14">{MEMBERSHIP_PLANS.KIDS_WEEKEND_UNDER14.displayName}</SelectItem>
+                        {plans.map(p => (
+                          <SelectItem key={p.key} value={p.key}>{p.displayName}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <Button onClick={() => changePlan(c.childId, newPlan)} disabled={changingId === c.childId} variant="outline">

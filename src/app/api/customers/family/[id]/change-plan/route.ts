@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { stripe } from '@/lib/stripe'
-import { getPlan } from '@/config/memberships'
+import { getPlanDbFirst } from '@/lib/plans'
 
 export async function POST(
   request: NextRequest,
@@ -26,7 +26,7 @@ export async function POST(
     const subscription = await prisma.subscription.findFirst({ where: { userId: childId }, orderBy: { createdAt: 'desc' } })
     if (!subscription) return NextResponse.json({ error: 'No subscription found' }, { status: 404 })
 
-    const details = getPlan(newMembershipType)
+    const details = await getPlanDbFirst(newMembershipType)
     const stripeSub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId)
 
     // Find or create price
