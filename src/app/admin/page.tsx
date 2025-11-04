@@ -1300,6 +1300,27 @@ function AdminDashboardContent() {
                             >
                               {payment.status === 'REFUNDED' ? 'Refunded' : 'Refund'}
                             </Button>
+                            <Button
+                              variant="outline"
+                              onClick={async (e) => {
+                                e.stopPropagation()
+                                const full = confirm(`Create credit note for £${payment.amount} (full)? Click Cancel to enter a partial credit.`)
+                                let amount = payment.amount
+                                if (!full) {
+                                  const input = prompt('Enter credit amount (e.g., 5.50):', '')
+                                  if (!input) return
+                                  const val = Number(input)
+                                  if (Number.isNaN(val) || val <= 0) { alert('Invalid amount'); return }
+                                  amount = val
+                                }
+                                const resp = await fetch(`/api/admin/payments/${payment.id}/credit-note`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amountPounds: amount }) })
+                                const json = await resp.json()
+                                if (resp.ok) { alert('Credit note created. It will be applied to the next invoice.'); await fetchAdminData() } else { alert('Credit note failed: ' + (json.error || 'Unknown error')) }
+                              }}
+                              className="text-xs"
+                            >
+                              Credit Note
+                            </Button>
                           </div>
                         </td>
                       </tr>

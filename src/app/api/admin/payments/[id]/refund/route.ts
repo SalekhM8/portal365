@@ -47,6 +47,65 @@ export async function POST(
         paymentIntentId = ((inv as any).payment_intent as string) || null
       }
     }
+
+    // Fallback enrichment: try to resolve identifiers from Stripe if still missing
+    if (!paymentIntentId) {
+      // Guard: not a Stripe charge (e.g., GoCardless/demo)
+      if (payment.goCardlessPaymentId) {
+        return NextResponse.json({ error: 'Refund unavailable: non-Stripe payment' }, { status: 400 })
+      }
+
+      // Find a Stripe customer for this user
+      const sub = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
+      const stripeCustomerId = sub?.stripeCustomerId
+
+      if (stripeCustomerId) {
+        const targetTs = payment.processedAt || payment.createdAt
+        const targetMinor = Math.round(Number(payment.amount) * 100)
+        let resolvedInvoiceId: string | null = null
+        let resolvedPi: string | null = null
+
+        try {
+          // Prefer invoices (paid) close to the payment time and matching amount
+          const ts = Math.floor(new Date(targetTs).getTime() / 1000)
+          const invList: any = await stripe.invoices.list({ customer: stripeCustomerId, status: 'paid', created: { gte: ts - 60 * 24 * 60 * 60, lte: ts + 60 * 24 * 60 * 60 }, limit: 100 })
+          const candidates = invList.data.filter((inv: any) => Number(inv.amount_paid || 0) === targetMinor)
+          if (candidates.length) {
+            // Pick the closest by paid_at/created timestamp
+            const best = candidates.reduce((a: any, b: any) => {
+              const aTs = (a.status_transitions?.paid_at || a.created) * 1000
+              const bTs = (b.status_transitions?.paid_at || b.created) * 1000
+              return Math.abs(aTs - Number(targetTs)) <= Math.abs(bTs - Number(targetTs)) ? a : b
+            })
+            resolvedInvoiceId = best.id
+            resolvedPi = (best as any).payment_intent || null
+          }
+        } catch {}
+
+        // If no invoice match, try charges
+        if (!resolvedPi) {
+          try {
+            const ts = Math.floor(new Date(targetTs).getTime() / 1000)
+            const chList: any = await stripe.charges.list({ customer: stripeCustomerId, created: { gte: ts - 60 * 24 * 60 * 60, lte: ts + 60 * 24 * 60 * 60 }, limit: 100 })
+            const ch = chList.data.find((c: any) => Number(c.amount || 0) === targetMinor)
+            if (ch) {
+              resolvedPi = (ch as any).payment_intent || null
+            }
+          } catch {}
+        }
+
+        if (resolvedPi) {
+          paymentIntentId = resolvedPi
+          // Persist tags for future operations (idempotent append)
+          const desc = payment.description || 'Monthly membership payment'
+          const withInv = resolvedInvoiceId && !desc.includes(`[inv:${resolvedInvoiceId}]`) ? `${desc} [inv:${resolvedInvoiceId}]` : desc
+          const withPi = !withInv.includes(`[pi:${resolvedPi}]`) ? `${withInv} [pi:${resolvedPi}]` : withInv
+          try {
+            await prisma.payment.update({ where: { id: payment.id }, data: { description: withPi } })
+          } catch {}
+        }
+      }
+    }
     if (!paymentIntentId) {
       return NextResponse.json({ error: 'Refund unavailable: missing Stripe identifiers on this payment' }, { status: 400 })
     }
