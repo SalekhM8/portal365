@@ -73,6 +73,7 @@ interface VATStatus {
 
 interface CustomerDetail {
   id: string
+  account?: string
   name: string
   email: string
   phone: string
@@ -1110,6 +1111,7 @@ function AdminDashboardContent() {
                     <tr>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Customer</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Membership</th>
+                      <th className="text-left p-4 font-medium text-white border-r border-white/10">Account</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Last Paid</th>
                       <th className="text-left p-4 font-medium text-white border-r border-white/10">Status</th>
                       {/* Removed Routed Entity, Next Billing, Activity per client request */}
@@ -1141,6 +1143,11 @@ function AdminDashboardContent() {
                               <Badge variant="secondary" className="text-xs">Starts on {new Date(customer.startsOn).toLocaleDateString()}</Badge>
                             </div>
                           )}
+                        </td>
+                        <td className="p-4 border-r border-white/5">
+                          <Badge variant="secondary" className="text-xs">
+                            {(customer.account === 'IQ' ? 'IQ' : 'SU')}
+                          </Badge>
                         </td>
                         <td className="p-4 border-r border-white/5">
                           <p className="font-semibold text-white">{typeof customer.lastPayment === 'number' ? `£${customer.lastPayment}` : (customer.lastPayment ? `£${customer.lastPayment}` : 'N/A')}</p>
@@ -1617,7 +1624,10 @@ function AdminDashboardContent() {
               {/* Summary first */}
               <div className="space-y-1">
                 <p className="text-white text-base font-semibold">{selectedCustomer.name}</p>
-                <p className="text-white/80 text-sm">{selectedCustomer.membershipType} • {selectedCustomer.status}</p>
+                <p className="text-white/80 text-sm">
+                  {selectedCustomer.membershipType} • {selectedCustomer.status}
+                  {selectedCustomer.account && <> • {(selectedCustomer.account === 'IQ' ? 'IQ' : 'SU')}</>}
+                </p>
                 {selectedCustomer.phone && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     <Button variant="outline" asChild className="rounded-full"><a href={`tel:${selectedCustomer.phone}`}>Call</a></Button>

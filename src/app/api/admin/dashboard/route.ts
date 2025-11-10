@@ -632,6 +632,7 @@ export async function GET() {
 
       return {
         id: customer.id,
+        account: (subscription?.stripeAccountKey as any) || 'SU',
         name: `${customer.firstName} ${customer.lastName}`,
         email: customer.email,
         phone: customer.phone || 'N/A',
