@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
       defaultSource = (c as any)?.default_source || null
       // Any attached card payment methods
       const pms = await stripe.paymentMethods.list({ customer: c.id, type: 'card' })
-      hasAnyPm = hasInvoiceDefault || !!defaultSource || pms.data.length > 0
+      hasAnyPm = hasInvoiceDefault || !!defaultSource || pms.data.length > 0 || !!lastPaymentMethodId
       // choose suggested pm: prefer last charge pm; else first attached
       if (lastPaymentMethodId) {
         suggestedPmId = lastPaymentMethodId

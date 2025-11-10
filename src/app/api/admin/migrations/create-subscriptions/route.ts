@@ -41,9 +41,12 @@ export async function POST(request: NextRequest) {
           trialEnd = Math.floor(firstNextMonth.getTime() / 1000)
         }
 
-        // Set default PM if suggested provided
+        // Ensure suggested PM is attached and set as default if provided
         if (it.suggestedPmId) {
-          try { await stripe.customers.update(it.stripeCustomerId, { invoice_settings: { default_payment_method: it.suggestedPmId } }) } catch {}
+          try {
+            try { await stripe.paymentMethods.attach(it.suggestedPmId, { customer: it.stripeCustomerId }) } catch {}
+            try { await stripe.customers.update(it.stripeCustomerId, { invoice_settings: { default_payment_method: it.suggestedPmId } }) } catch {}
+          } catch {}
         }
 
         // Get or create price in IQ

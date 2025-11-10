@@ -89,7 +89,7 @@ export default function IQMigrationPage() {
     try {
       setError(null)
       const candidates = rows
-        .filter(r => r.inferredNextBillISO && r.hasAnyPm)
+        .filter(r => r.inferredNextBillISO && (r.hasAnyPm || r.suggestedPmId))
         .slice(0, 10)
         .map(r => {
           const plan = inferPlanKeyFromDescription(r.lastChargeDescription)
@@ -135,7 +135,7 @@ export default function IQMigrationPage() {
                 <div className="text-sm">
                   <div className="font-medium">{r.email || r.stripeCustomerId}</div>
                   <div className="text-muted-foreground">
-                    {r.lastChargeDescription || '—'} · {(r.lastChargeAmount ? `£${(r.lastChargeAmount/100).toFixed(2)}` : '£0.00')} · Next: {r.inferredNextBillISO ? new Date(r.inferredNextBillISO).toLocaleDateString('en-GB') : 'N/A'} · PM: {r.hasAnyPm ? `present${r.suggestedPmLast4 ? ` (will use ${r.suggestedPmBrand || ''} •••• ${r.suggestedPmLast4})` : ''}` : 'missing'}{r.hasInvoiceDefault ? '' : ' (no invoice default)'}
+                    {r.lastChargeDescription || '—'} · {(r.lastChargeAmount ? `£${(r.lastChargeAmount/100).toFixed(2)}` : '£0.00')} · Next: {r.inferredNextBillISO ? new Date(r.inferredNextBillISO).toLocaleDateString('en-GB') : 'N/A'} · PM: {(r.hasAnyPm || r.suggestedPmId) ? `present${r.suggestedPmLast4 ? ` (will use ${r.suggestedPmBrand || ''} •••• ${r.suggestedPmLast4})` : ''}` : 'missing'}{r.hasInvoiceDefault ? '' : ' (no invoice default)'}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
