@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 						if (user) {
 							const hasSubs = await prisma.subscription.count({ where: { userId } })
 							const hasPays = await prisma.payment.count({ where: { userId } })
-							const isShadow = user.email?.startsWith('migrated_') || !user.passwordHash
+							const isShadow = user.email?.startsWith('migrated_') === true
 							if (!hasSubs && !hasPays && isShadow) {
 								await prisma.user.delete({ where: { id: userId } })
 								userDeleted = true
