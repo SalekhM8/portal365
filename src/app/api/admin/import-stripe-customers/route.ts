@@ -28,26 +28,135 @@ export async function GET(req: NextRequest) {
   const stripe = getStripeClient(accountParam)
   const subs = await stripe.subscriptions.list({ status: 'all', limit })
 
-  // If there are subscriptions, return subscription-centric preview
+  // If there are subscriptions, return subscription-centric preview (but enrich with PM/charge info for UI parity)
   if (subs.data.length > 0) {
     const rows = await Promise.all(subs.data.map(async (s) => {
+      const stripeCustomerId = s.customer as string
       let email: string | null = null
-      let hasDefaultPm: boolean | null = null
+      let hasInvoiceDefault = false
+      let hasAnyPm = false
+      let suggestedPmId: string | null = null
+      let suggestedPmBrand: string | null = null
+      let suggestedPmLast4: string | null = null
+      let lastChargeAmount: number | null = null
+      let lastChargeAt: number | null = null
+      let currency: string | null = null
+      let lastChargeDescription: string | null = null
+      let inferredNextBillISO: string | null = null
+
       try {
-        const cust = await stripe.customers.retrieve(s.customer as string)
+        // Customer + default PM
+        const cust = await stripe.customers.retrieve(stripeCustomerId)
         if (!('deleted' in cust)) {
           email = (cust.email as string | null) || null
-          hasDefaultPm = !!cust.invoice_settings?.default_payment_method
+          const invDef = cust.invoice_settings?.default_payment_method
+          hasInvoiceDefault = !!invDef
+          if (invDef) {
+            const dpmId = typeof invDef === 'string' ? invDef : invDef.id
+            suggestedPmId = dpmId
+            try {
+              const pmObj = await stripe.paymentMethods.retrieve(dpmId)
+              // @ts-ignore
+              suggestedPmBrand = (pmObj as any)?.card?.brand || null
+              // @ts-ignore
+              suggestedPmLast4 = (pmObj as any)?.card?.last4 || null
+            } catch {}
+          }
+        }
+        // Attached PMs
+        const pms = await stripe.paymentMethods.list({ customer: stripeCustomerId, type: 'card' })
+        if (!suggestedPmId && pms.data.length > 0) {
+          suggestedPmId = pms.data[0].id
+          suggestedPmBrand = pms.data[0].card?.brand || null
+          suggestedPmLast4 = pms.data[0].card?.last4 || null
+        }
+        // Charges + PI fallback
+        const charges = await stripe.charges.list({ customer: stripeCustomerId, limit: 5, expand: ['data.payment_method'] })
+        const paid = charges.data.find(ch => ch.paid && !ch.refunded && ch.amount > 0)
+        if (paid) {
+          lastChargeAmount = paid.amount
+          lastChargeAt = paid.created
+          currency = paid.currency
+          lastChargeDescription = (paid.description as string | null) || null
+          const pmid = (paid.payment_method as string | undefined) || null
+          if (pmid && !suggestedPmId) {
+            suggestedPmId = pmid
+            try {
+              const det = (paid as any)?.payment_method_details
+              if (det?.card) {
+                suggestedPmBrand = det.card.brand || null
+                suggestedPmLast4 = det.card.last4 || null
+              }
+            } catch {}
+          } else if (!pmid && (paid.payment_intent as string | undefined)) {
+            try {
+              const pi = await stripe.paymentIntents.retrieve(paid.payment_intent as string)
+              const pmFromPi = (pi.payment_method as string | undefined) || null
+              if (pmFromPi && !suggestedPmId) {
+                suggestedPmId = pmFromPi
+                try {
+                  const pmObj = await stripe.paymentMethods.retrieve(pmFromPi)
+                  // @ts-ignore
+                  suggestedPmBrand = (pmObj as any)?.card?.brand || null
+                  // @ts-ignore
+                  suggestedPmLast4 = (pmObj as any)?.card?.last4 || null
+                } catch {}
+              }
+            } catch {}
+          }
+        } else {
+          try {
+            const pis = await stripe.paymentIntents.list({ customer: stripeCustomerId, limit: 5 })
+            const succ = pis.data.find(pi => pi.status === 'succeeded')
+            if (succ) {
+              lastChargeAmount = succ.amount_received || succ.amount || null
+              lastChargeAt = succ.created || null
+              // @ts-ignore
+              currency = (succ.currency as string | null) || null
+              const pmFromPi = (succ.payment_method as string | undefined) || null
+              if (pmFromPi && !suggestedPmId) {
+                suggestedPmId = pmFromPi
+                try {
+                  const pmObj = await stripe.paymentMethods.retrieve(pmFromPi)
+                  // @ts-ignore
+                  suggestedPmBrand = (pmObj as any)?.card?.brand || null
+                  // @ts-ignore
+                  suggestedPmLast4 = (pmObj as any)?.card?.last4 || null
+                } catch {}
+              }
+            }
+          } catch {}
+        }
+        hasAnyPm = !!(hasInvoiceDefault || suggestedPmId || (pms.data.length > 0))
+
+        // Infer next bill date: current_period_end if active/trialing; else from last charge month
+        const cpe = (s as any)?.current_period_end || null
+        if (cpe) {
+          inferredNextBillISO = new Date(cpe * 1000).toISOString()
+        } else if (lastChargeAt) {
+          const d = new Date(lastChargeAt * 1000)
+          const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 0, 0, 0))
+          inferredNextBillISO = next.toISOString()
         }
       } catch {}
+
       return {
         mode: 'subscriptions',
         stripeSubscriptionId: s.id,
-        stripeCustomerId: s.customer as string,
+        stripeCustomerId,
         status: (s as any).status,
         current_period_end: (s as any)?.current_period_end || null,
         email,
-        hasDefaultPm,
+        hasInvoiceDefault,
+        hasAnyPm,
+        suggestedPmId,
+        suggestedPmBrand,
+        suggestedPmLast4,
+        lastChargeAmount,
+        lastChargeAt,
+        currency,
+        lastChargeDescription,
+        inferredNextBillISO,
         items: s.items?.data?.map(i => ({ price: i.price?.unit_amount, currency: i.price?.currency })) || []
       }
     }))
