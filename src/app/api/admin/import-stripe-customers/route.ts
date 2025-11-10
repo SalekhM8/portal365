@@ -29,8 +29,45 @@ export async function GET(req: NextRequest) {
   const accountParam = (searchParams.get('account') || 'SU').toUpperCase() as StripeAccountKey
   const limit = Math.min(Number(searchParams.get('limit') || '50'), 200)
   const filterCustomerId = searchParams.get('customerId')
+  const debugCustomerIdEarly = searchParams.get('debugCustomerId')
 
   const stripe = getStripeClient(accountParam)
+  
+  // If explicitly debugging a single customer, return raw payments-focused debug first
+  if (debugCustomerIdEarly) {
+    try {
+      const cust = await stripe.customers.retrieve(debugCustomerIdEarly)
+      const pms = await stripe.paymentMethods.list({ customer: debugCustomerIdEarly, type: 'card' })
+      // Prefer search for succeeded charges for this customer
+      let charges: any = null
+      try {
+        // @ts-ignore
+        charges = await (stripe.charges as any).search({
+          query: `customer:'${debugCustomerIdEarly}' AND status:'succeeded'`,
+          limit: 10,
+          expand: ['data.payment_method']
+        })
+      } catch {
+        charges = await stripe.charges.list({ customer: debugCustomerIdEarly, limit: 10, expand: ['data.payment_method'] })
+      }
+      const intents = await stripe.paymentIntents.list({ customer: debugCustomerIdEarly, limit: 10 })
+      return NextResponse.json({
+        success: true,
+        account: accountParam,
+        debug: {
+          customer: cust,
+          paymentMethodsCount: pms.data.length,
+          latestPaymentMethod: pms.data[0] || null,
+          chargesCount: charges?.data?.length || 0,
+          latestCharge: (charges?.data?.[0] || null),
+          intentsCount: intents.data.length,
+          latestIntent: intents.data[0] || null
+        }
+      })
+    } catch (e: any) {
+      return NextResponse.json({ success: false, error: e?.message || 'Debug fetch failed' }, { status: 500 })
+    }
+  }
   
   // If a specific customerId is provided, return a single enriched row for that customer
   if (filterCustomerId) {
@@ -451,32 +488,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, account: accountParam, rows })
   }
 
-  // Optional deep debug (legacy) – kept for compatibility
-  const debugCustomerId = searchParams.get('debugCustomerId')
-  if (debugCustomerId) {
-    try {
-      const cust = await stripe.customers.retrieve(debugCustomerId)
-      const pms = await stripe.paymentMethods.list({ customer: debugCustomerId, type: 'card' })
-      const charges = await stripe.charges.list({ customer: debugCustomerId, limit: 10, expand: ['data.payment_method'] })
-      // PaymentIntents can reveal pm when charge is legacy
-      const intents = await stripe.paymentIntents.list({ customer: debugCustomerId, limit: 10 })
-      return NextResponse.json({
-        success: true,
-        account: accountParam,
-        debug: {
-          customer: cust,
-          paymentMethodsCount: pms.data.length,
-          latestPaymentMethod: pms.data[0] || null,
-          chargesCount: charges.data.length,
-          latestCharge: charges.data[0] || null,
-          intentsCount: intents.data.length,
-          latestIntent: intents.data[0] || null
-        }
-      })
-    } catch (e: any) {
-      return NextResponse.json({ success: false, error: e?.message || 'Debug fetch failed' }, { status: 500 })
-    }
-  }
+  // (debug path handled above)
 
   // Fallback: charges-only preview for accounts managed by external cron (TeamUp)
   const customers = await stripe.customers.list({ limit })
