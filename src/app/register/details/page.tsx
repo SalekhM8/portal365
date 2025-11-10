@@ -194,7 +194,7 @@ function RegisterDetailsContent() {
 
       const result = await response.json()
 
-      if (result.success) {
+        if (result.success) {
         // Auto-login the user immediately after registration
         try {
           const loginResult = await signIn('credentials', {
@@ -215,7 +215,8 @@ function RegisterDetailsContent() {
         // Check if subscription creation succeeded and requires payment
         if (result.subscription?.clientSecret) {
           // Redirect to payment page with client secret (handles both SetupIntent and PaymentIntent)
-          router.push(`/register/payment?client_secret=${result.subscription.clientSecret}&subscription_id=${result.subscription.id}`)
+          const pk = encodeURIComponent(result.subscription.publishableKey || '')
+          router.push(`/register/payment?client_secret=${result.subscription.clientSecret}&subscription_id=${result.subscription.id}&pk=${pk}`)
         } else if (result.subscription?.paymentCompleted) {
           // Payment already processed - redirect directly to success page
           router.push(`/register/success?subscription_id=${result.subscription.id}&payment_completed=true&user_email=${encodeURIComponent(result.user.email)}`)

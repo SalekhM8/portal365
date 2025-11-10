@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 // Force fresh for accuracy; the caller (dashboard) can cache as needed
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,8 @@ function monthBoundsUTC(year: number, month0: number) {
   return { start, end }
 }
 
-async function sumChargesMinusRefunds(created?: { gte?: number; lt?: number }) {
+async function sumChargesMinusRefunds(account: StripeAccountKey, created?: { gte?: number; lt?: number }) {
+  const stripe = getStripeClient(account)
   let hasMore = true
   let startingAfter: string | undefined
   let grossMinor = 0
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
 
     const search = req.nextUrl.searchParams
     const monthsParam = Number(search.get('months') || 12)
+    const accountParam = (search.get('account') || 'SU').toUpperCase() as StripeAccountKey | 'ALL'
     const fromParam = search.get('from') // YYYY-MM
     const toParam = search.get('to') // YYYY-MM
 
@@ -76,8 +78,14 @@ export async function GET(req: NextRequest) {
     for (const r of range) {
       const { start, end } = monthBoundsUTC(r.y, r.m0)
       const window = { gte: Math.floor(start.getTime()/1000), lt: Math.floor(end.getTime()/1000) }
-      const { totalNet, charges, refunds } = await sumChargesMinusRefunds(window)
-      out.push({ month: `${r.y}-${String(r.m0+1).padStart(2,'0')}`, totalNet, charges, refunds })
+      if (accountParam === 'ALL') {
+        const su = await sumChargesMinusRefunds('SU', window)
+        const iq = await sumChargesMinusRefunds('IQ', window)
+        out.push({ month: `${r.y}-${String(r.m0+1).padStart(2,'0')}`, totalNet: su.totalNet + iq.totalNet, charges: su.charges + iq.charges, refunds: su.refunds + iq.refunds })
+      } else {
+        const { totalNet, charges, refunds } = await sumChargesMinusRefunds(accountParam as StripeAccountKey, window)
+        out.push({ month: `${r.y}-${String(r.m0+1).padStart(2,'0')}`, totalNet, charges, refunds })
+      }
     }
 
     return NextResponse.json({ ok: true, months: out })

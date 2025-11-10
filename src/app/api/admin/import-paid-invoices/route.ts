@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
  * Safely import paid Stripe invoices for specific customers (emails)
@@ -20,6 +20,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const emails: string[] = body?.emails || []
     const sinceIso: string | undefined = body?.sinceIso
+    const accountParam: StripeAccountKey = ((body?.account || 'SU') as string).toUpperCase() as StripeAccountKey
+    const stripe = getStripeClient(accountParam)
     const forceCustomerLookup: boolean = body?.forceCustomerLookup === true
     const reassignAcrossUsers: boolean = body?.reassignAcrossUsers === true
     const since = sinceIso ? new Date(sinceIso) : new Date(Date.now() - 7*24*60*60*1000)

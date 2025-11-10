@@ -8,16 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { CheckCircle, CreditCard, ArrowLeft } from 'lucide-react'
 
-if (!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-  throw new Error('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set')
-}
-
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+// We now load Stripe with the publishable key passed per-subscription via URL (pk)
+// A fallback request can be added if pk is missing.
 
 function PaymentPageContent() {
   const searchParams = useSearchParams()
   const clientSecret = searchParams.get('client_secret')
   const subscriptionId = searchParams.get('subscription_id')
+  const pk = searchParams.get('pk')
 
   if (!clientSecret) {
     return (
@@ -56,7 +54,7 @@ function PaymentPageContent() {
           </div>
           
           <Elements
-            stripe={stripePromise} 
+            stripe={pk ? loadStripe(pk) : null as any} 
             options={{
               clientSecret,
               appearance: {

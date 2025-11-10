@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, getPublishableKey } from '@/lib/stripe'
 
 /**
  * Resume a pending signup by returning a usable client_secret for either:
@@ -38,6 +38,7 @@ export async function POST(_request: NextRequest) {
     // Determine flow by the stored identifier shape
     const id = subscription.stripeSubscriptionId
     const isPaymentIntentPlaceholder = typeof id === 'string' && id.startsWith('pi_')
+    const stripe = getStripeClient((subscription as any).stripeAccountKey || 'SU')
 
     if (isPaymentIntentPlaceholder) {
       // Try to reuse existing PaymentIntent; else create a replacement
@@ -88,7 +89,8 @@ export async function POST(_request: NextRequest) {
       return NextResponse.json({
         mode: 'payment_intent',
         subscriptionId: subscription.id,
-        clientSecret: pi.client_secret
+        clientSecret: pi.client_secret,
+        publishableKey: getPublishableKey((subscription as any).stripeAccountKey || 'SU')
       })
     }
 
@@ -109,7 +111,8 @@ export async function POST(_request: NextRequest) {
     return NextResponse.json({
       mode: 'setup_intent',
       subscriptionId: subscription.id,
-      clientSecret: setup.client_secret
+      clientSecret: setup.client_secret,
+      publishableKey: getPublishableKey((subscription as any).stripeAccountKey || 'SU')
     })
 
   } catch (error) {

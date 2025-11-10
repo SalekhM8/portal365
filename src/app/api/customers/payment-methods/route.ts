@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, getPublishableKey } from '@/lib/stripe'
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     const subscription = user.subscriptions[0]
 
     // Get current payment method from Stripe
+    const stripe = getStripeClient((subscription as any).stripeAccountKey || 'SU')
     const stripeCustomer = await stripe.customers.retrieve(subscription.stripeCustomerId)
     let currentPaymentMethod = null
 
@@ -64,7 +65,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       currentPaymentMethod,
-      setupIntentClientSecret: setupIntent.client_secret
+      setupIntentClientSecret: setupIntent.client_secret,
+      publishableKey: getPublishableKey((subscription as any).stripeAccountKey || 'SU')
     })
 
   } catch (error) {
@@ -91,6 +93,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the setup intent
+    // Infer account from user's subscription for safety
+    const user = await prisma.user.findUnique({ where: { email: session.user.email }, include: { subscriptions: { orderBy: { updatedAt: 'desc' }, take: 1 } } })
+    const sub = user?.subscriptions?.[0]
+    const stripe = getStripeClient((sub as any)?.stripeAccountKey || 'SU')
     const setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
     
     if (setupIntent.status !== 'succeeded') {

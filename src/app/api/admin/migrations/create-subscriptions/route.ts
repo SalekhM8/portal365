@@ -1,0 +1,126 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { prisma } from '@/lib/prisma'
+import { MEMBERSHIP_PLANS, type MembershipKey } from '@/config/memberships'
+
+// Create Stripe subscriptions in IQ for migrated customers and write shadow users/subscriptions in DB.
+// POST body: { items: Array<{ stripeCustomerId: string; email: string | null; planKey: MembershipKey; trialEndISO: string; suggestedPmId?: string | null }> }
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions) as any
+    if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!['ADMIN', 'SUPER_ADMIN', 'STAFF'].includes(session.user.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const { items } = await request.json()
+    if (!Array.isArray(items) || items.length === 0) return NextResponse.json({ error: 'No items' }, { status: 400 })
+
+    const account: StripeAccountKey = 'IQ'
+    const stripe = getStripeClient(account)
+
+    // Ensure BusinessEntity exists for IQ
+    const iqEntity = await prisma.businessEntity.upsert({
+      where: { name: 'IQ' },
+      update: {},
+      create: { name: 'IQ', displayName: 'IQ Learning Centre', description: 'IQ entity', vatYearStart: new Date(new Date().getFullYear(), 3, 1), vatYearEnd: new Date(new Date().getFullYear()+1, 2, 31) }
+    })
+
+    const results: any[] = []
+
+    for (const it of items) {
+      try {
+        const plan = MEMBERSHIP_PLANS[it.planKey as MembershipKey]
+        if (!plan) throw new Error(`Unknown plan ${it.planKey}`)
+        let trialEnd = Math.floor(new Date(it.trialEndISO).getTime() / 1000)
+        const nowSec = Math.floor(Date.now() / 1000)
+        // Clamp trial_end to the future. If inferred is past, use 1st of next month
+        if (!trialEnd || trialEnd <= nowSec) {
+          const now = new Date()
+          const firstNextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0))
+          trialEnd = Math.floor(firstNextMonth.getTime() / 1000)
+        }
+
+        // Set default PM if suggested provided
+        if (it.suggestedPmId) {
+          try { await stripe.customers.update(it.stripeCustomerId, { invoice_settings: { default_payment_method: it.suggestedPmId } }) } catch {}
+        }
+
+        // Get or create price in IQ
+        const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any
+        const priceId = await getOrCreatePrice({ monthlyPrice: plan.monthlyPrice, name: plan.name }, account)
+
+        // Idempotency: check if a similar trialing subscription already exists
+        let existing: any = null
+        try {
+          const subsList = await stripe.subscriptions.list({ customer: it.stripeCustomerId, status: 'all', limit: 20 })
+          existing = subsList.data.find(s => s.status === 'trialing' && (s.items?.data?.[0]?.price?.id === priceId)) || null
+        } catch {}
+
+        // Create subscription in Stripe (IQ) if not existing
+        const sub = existing || await stripe.subscriptions.create({
+          customer: it.stripeCustomerId,
+          items: [{ price: priceId }],
+          collection_method: 'charge_automatically',
+          trial_end: trialEnd,
+          proration_behavior: 'none',
+          metadata: { migrated_from: 'teamup', account }
+        }, { idempotencyKey: `migrate:${it.stripeCustomerId}:${priceId}:${trialEnd}` })
+
+        // Find or create shadow user by email
+        let userId: string
+        if (it.email) {
+          const existing = await prisma.user.findUnique({ where: { email: it.email } })
+          if (existing) userId = existing.id
+          else {
+            const u = await prisma.user.create({ data: { email: it.email, firstName: it.email.split('@')[0], lastName: '', role: 'CUSTOMER', status: 'ACTIVE' } })
+            userId = u.id
+          }
+        } else {
+          // Fallback: create placeholder user
+          const u = await prisma.user.create({ data: { email: `migrated_${Date.now()}_${Math.random().toString(36).slice(2)}@local`, firstName: 'Member', lastName: 'Migrated', role: 'CUSTOMER', status: 'ACTIVE' } })
+          userId = u.id
+        }
+
+        // Write subscription in Portal365 DB (upsert by stripeSubscriptionId)
+        await prisma.subscription.upsert({
+          where: { stripeSubscriptionId: sub.id },
+          create: {
+            userId,
+            stripeSubscriptionId: sub.id,
+            stripeCustomerId: it.stripeCustomerId,
+            stripeAccountKey: account,
+            routedEntityId: iqEntity.id,
+            membershipType: it.planKey,
+            monthlyPrice: plan.monthlyPrice,
+            status: 'ACTIVE',
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: new Date(trialEnd * 1000),
+            nextBillingDate: new Date(trialEnd * 1000)
+          } as any,
+          update: {
+            userId,
+            stripeCustomerId: it.stripeCustomerId,
+            stripeAccountKey: account,
+            routedEntityId: iqEntity.id,
+            membershipType: it.planKey,
+            monthlyPrice: plan.monthlyPrice,
+            status: 'ACTIVE',
+            currentPeriodEnd: new Date(trialEnd * 1000),
+            nextBillingDate: new Date(trialEnd * 1000)
+          } as any
+        })
+
+        results.push({ stripeCustomerId: it.stripeCustomerId, subscriptionId: sub.id })
+      } catch (e: any) {
+        results.push({ stripeCustomerId: it.stripeCustomerId, error: e?.message || 'failed' })
+      }
+    }
+
+    return NextResponse.json({ success: true, results })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Migration failed' }, { status: 500 })
+  }
+}
+
+

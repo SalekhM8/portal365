@@ -1,20 +1,23 @@
 import { NextResponse } from 'next/server'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe' // getStripeClient for multi-account
 import { prisma } from '@/lib/prisma'
 import { getPlanDbFirst } from '@/lib/plans'
 
 export async function handleSetupIntentConfirmation(body: { setupIntentId: string, subscriptionId: string }) {
   const { setupIntentId, subscriptionId } = body
+  // Determine account from subscription row
+  const dbSub = await prisma.subscription.findUnique({ where: { id: subscriptionId }, include: { user: true } })
+  if (!dbSub) {
+    return NextResponse.json({ success: false, error: 'Subscription not found' }, { status: 404 })
+  }
+  const stripe = getStripeClient((dbSub as any).stripeAccountKey || 'SU')
   const setupIntent = await stripe.setupIntents.retrieve(setupIntentId)
   if (setupIntent.status !== 'succeeded') {
     return NextResponse.json({ success: false, error: 'Payment method setup not completed' }, { status: 400 })
   }
   const paymentMethodId = setupIntent.payment_method as string
 
-  const subscription = await prisma.subscription.findUnique({ where: { id: subscriptionId }, include: { user: true } })
-  if (!subscription) {
-    return NextResponse.json({ success: false, error: 'Subscription not found' }, { status: 404 })
-  }
+  const subscription = dbSub
   if (subscription.status === 'ACTIVE') {
     return NextResponse.json({ success: true, message: 'Subscription already active', subscription: { id: subscription.id, status: 'ACTIVE' }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
   }
@@ -58,7 +61,7 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
   }
 
   const membershipDetails = await getPlanDbFirst(subscription.membershipType)
-  const priceId = await getOrCreatePrice(membershipDetails)
+  const priceId = await getOrCreatePrice(membershipDetails, (subscription as any).stripeAccountKey || 'SU')
   const trialEndTimestamp = Math.floor(nextBillingDate.getTime() / 1000)
 
   const stripeSubscription = await stripe.subscriptions.create({
@@ -107,6 +110,11 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
 
 export async function handlePaymentIntentConfirmation(body: { paymentIntentId: string, subscriptionId: string }) {
   const { subscriptionId, paymentIntentId } = body
+  const dbSub = await prisma.subscription.findUnique({ where: { id: subscriptionId } })
+  if (!dbSub) {
+    return NextResponse.json({ success: false, error: 'Subscription not found' }, { status: 404 })
+  }
+  const stripe = getStripeClient((dbSub as any).stripeAccountKey || 'SU')
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
   if (paymentIntent.status !== 'succeeded') {
     return NextResponse.json({ success: false, error: 'Payment not completed' }, { status: 400 })
@@ -120,10 +128,6 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
   }
 
   // Create the Stripe subscription to start on the next billing date (trial until then)
-  const dbSub = await prisma.subscription.findUnique({ where: { id: subscriptionId } })
-  if (!dbSub) {
-    return NextResponse.json({ success: false, error: 'Subscription not found' }, { status: 404 })
-  }
 
   //test
   // Idempotency guard: if we've already replaced the placeholder with a real Stripe sub, do nothing
@@ -132,7 +136,7 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
     return NextResponse.json({ success: true, message: 'Subscription already created', subscription: { id: dbSub.id, status: dbSub.status, userId: dbSub.userId }, user })
   }
   const membershipDetails = await getPlanDbFirst(dbSub.membershipType)
-  const priceId = await getOrCreatePrice(membershipDetails)
+  const priceId = await getOrCreatePrice(membershipDetails, (dbSub as any).stripeAccountKey || 'SU')
   const trialEndTimestamp = Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000)
 
   const stripeSubscription = await stripe.subscriptions.create({
@@ -153,7 +157,8 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
   return NextResponse.json({ success: true, message: 'Payment confirmed and subscription activated', subscription: { id: subscription.id, status: subscription.status, userId: subscription.userId }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
 }
 
-export async function getOrCreatePrice(membershipDetails: { monthlyPrice: number; name: string }): Promise<string> {
+export async function getOrCreatePrice(membershipDetails: { monthlyPrice: number; name: string }, account: any = 'SU'): Promise<string> {
+  const stripe = getStripeClient(account)
   const existingPrices = await stripe.prices.list({ limit: 100, active: true, type: 'recurring', currency: 'gbp' })
   const existingPrice = existingPrices.data.find(price => price.unit_amount === membershipDetails.monthlyPrice * 100 && price.recurring?.interval === 'month')
   if (existingPrice) return existingPrice.id

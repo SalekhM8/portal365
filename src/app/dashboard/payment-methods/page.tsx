@@ -10,7 +10,7 @@ import { ArrowLeft, CreditCard, Loader2, CheckCircle } from 'lucide-react'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+// We load Stripe dynamically with the publishable key returned from the API per subscription
 
 function PaymentMethodsInner() {
   const { data: session, status } = useSession()
@@ -64,7 +64,8 @@ function PaymentMethodsInner() {
       // Family prorate SCA: confirm PaymentIntent and then finalize
       (async () => {
         try {
-          const stripeJs = await stripePromise
+          const pk = (await fetch('/api/customers/payment-methods').then(r => r.json()).catch(() => ({})))?.publishableKey
+          const stripeJs = pk ? await loadStripe(pk) : null
           if (!stripeJs) return
           const result = await stripeJs.confirmCardPayment(clientSecretFromLink)
           if (result.error) {
@@ -112,6 +113,10 @@ function PaymentMethodsInner() {
       if (data.success) {
         setCurrentPaymentMethod(data.currentPaymentMethod)
         setClientSecret(data.setupIntentClientSecret)
+        if (data.publishableKey) {
+          // Preload the Stripe instance for this account
+          await loadStripe(data.publishableKey)
+        }
       } else {
         setError(data.error || 'Failed to load payment methods')
       }
@@ -196,7 +201,11 @@ function PaymentMethodsInner() {
         <CardContent>
           {clientSecret && (
             <Elements
-              stripe={stripePromise}
+              // elements will lazy-init with the pk that matches the client secret
+              stripe={(async () => {
+                const pk = (await fetch('/api/customers/payment-methods').then(r => r.json()).catch(() => ({})))?.publishableKey
+                return pk ? loadStripe(pk) : null as any
+              })() as any}
               options={{
                 clientSecret,
                 appearance: { theme: 'stripe' }

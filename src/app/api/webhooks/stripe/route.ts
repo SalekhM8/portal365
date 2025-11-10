@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, getWebhookSecrets, type StripeAccountKey } from '@/lib/stripe'
 import { handlePaymentSucceeded, handlePaymentFailed, handleSubscriptionUpdated, handleSubscriptionCancelled, handlePaymentActionRequired } from './handlers'
 
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!
+// Support multiple Stripe accounts: try all configured webhook secrets, capture which one verifies
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,36 +15,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
     }
 
-    let event
-    try {
-      event = stripe.webhooks.constructEvent(body, signature, endpointSecret)
-    } catch (err) {
+    let event: any = null
+    let accountKeyVerified: StripeAccountKey | null = null
+    for (const { account, secret } of getWebhookSecrets()) {
+      try {
+        const client = getStripeClient(account)
+        event = client.webhooks.constructEvent(body, signature, secret)
+        accountKeyVerified = account
+        break
+      } catch {}
+    }
+    if (!event || !accountKeyVerified) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
     }
 
     switch (event.type) {
       case 'invoice.payment_succeeded':
-        await handlePaymentSucceeded(event.data.object)
+        await handlePaymentSucceeded(event.data.object, accountKeyVerified)
         break
       case 'invoice.paid':
         // When invoices are paid manually via API (retry) Stripe may emit invoice.paid
-        await handlePaymentSucceeded(event.data.object)
+        await handlePaymentSucceeded(event.data.object, accountKeyVerified)
         break
       case 'invoice.payment_failed':
-        await handlePaymentFailed(event.data.object)
+        await handlePaymentFailed(event.data.object, accountKeyVerified)
         break
       case 'customer.subscription.created':
         // Treat creation the same as update so trialing -> ACTIVE mapping applies immediately
-        await handleSubscriptionUpdated(event.data.object)
+        await handleSubscriptionUpdated(event.data.object, accountKeyVerified)
         break
       case 'invoice.payment_action_required':
-        await handlePaymentActionRequired(event.data.object)
+        await handlePaymentActionRequired(event.data.object, accountKeyVerified)
         break
       case 'customer.subscription.updated':
-        await handleSubscriptionUpdated(event.data.object)
+        await handleSubscriptionUpdated(event.data.object, accountKeyVerified)
         break
       case 'customer.subscription.deleted':
-        await handleSubscriptionCancelled(event.data.object)
+        await handleSubscriptionCancelled(event.data.object, accountKeyVerified)
         break
       case 'payment_intent.succeeded':
         // Handle async success (e.g., Klarna) to activate pending signups
@@ -55,7 +62,7 @@ export async function POST(request: NextRequest) {
             // Reuse our confirm-payment logic server-side
             const { activateFromPaymentIntent } = await import('./handlers') as any
             if (activateFromPaymentIntent) {
-              await activateFromPaymentIntent(pi)
+              await activateFromPaymentIntent(pi, accountKeyVerified)
             }
           }
         } catch {}

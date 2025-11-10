@@ -2,9 +2,10 @@ import { prisma } from '@/lib/prisma'
 import { sendDunningAttemptSms, sendSuspendedSms, sendSuccessSms, sendActionRequiredSms } from '@/lib/notify'
 import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActionRequiredEmail } from '@/lib/email'
 import { isAutoSuspendEnabled, isPauseCollectionEnabled } from '@/lib/flags'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
-export async function handlePaymentSucceeded(invoice: any) {
+export async function handlePaymentSucceeded(invoice: any, account?: StripeAccountKey) {
+  const stripe = getStripeClient(account || 'SU')
   const invoiceId = invoice.id
   const operationId = `webhook_payment_${invoiceId}_${Date.now()}`
   
@@ -285,7 +286,8 @@ export async function handlePaymentSucceeded(invoice: any) {
   }
 }
 
-export async function handlePaymentFailed(invoice: any) {
+export async function handlePaymentFailed(invoice: any, account?: StripeAccountKey) {
+  const stripe = getStripeClient(account || 'SU')
   const invoiceId = invoice.id
   const operationId = `webhook_failed_${invoiceId}_${Date.now()}`
   
@@ -417,7 +419,8 @@ export async function handlePaymentFailed(invoice: any) {
   }
 }
 
-export async function handlePaymentActionRequired(invoice: any) {
+export async function handlePaymentActionRequired(invoice: any, account?: StripeAccountKey) {
+  const stripe = getStripeClient(account || 'SU')
   const invoiceId = invoice.id
   const operationId = `webhook_action_required_${invoiceId}_${Date.now()}`
   try {
@@ -449,7 +452,8 @@ export async function handlePaymentActionRequired(invoice: any) {
   }
 }
 
-export async function handleSubscriptionUpdated(stripeSubscription: any) {
+export async function handleSubscriptionUpdated(stripeSubscription: any, account?: StripeAccountKey) {
+  const stripe = getStripeClient(account || 'SU')
   try {
     console.log(`🔄 [WEBHOOK] Processing subscription update for ${stripeSubscription.id}`)
     
@@ -568,7 +572,8 @@ export async function handleSubscriptionUpdated(stripeSubscription: any) {
   }
 }
 
-export async function handleSubscriptionCancelled(stripeSubscription: any) {
+export async function handleSubscriptionCancelled(stripeSubscription: any, account?: StripeAccountKey) {
+  const stripe = getStripeClient(account || 'SU')
   const operationId = `webhook_cancelled_${stripeSubscription.id}_${Date.now()}`
   
   try {
@@ -603,7 +608,8 @@ export async function handleSubscriptionCancelled(stripeSubscription: any) {
 } 
 
 // Activate placeholder subscription from a succeeded PaymentIntent (e.g., Klarna)
-export async function activateFromPaymentIntent(pi: any) {
+export async function activateFromPaymentIntent(pi: any, account?: StripeAccountKey) {
+  const stripe = getStripeClient(account || 'SU')
   const dbSubId = (pi?.metadata && (pi.metadata as any).dbSubscriptionId) || undefined
   const userId = (pi?.metadata && (pi.metadata as any).userId) || undefined
   if (!dbSubId && !userId) return

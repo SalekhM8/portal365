@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import * as bcrypt from 'bcryptjs'
 import { prisma } from '../../../lib/prisma'
-import { SubscriptionProcessor } from '../../../lib/stripe'
+import { SubscriptionProcessor, getPublishableKey, type StripeAccountKey } from '../../../lib/stripe'
 
 // Validation schema
 const registerSchema = z.object({
@@ -188,6 +188,11 @@ export async function POST(request: NextRequest) {
       console.log('✅ Subscription created successfully')
 
       // Return success response - payment setup required
+      // Determine publishable key for the assigned account (from created subscription)
+      const createdSub = subscriptionResult.subscription
+      const accountKey = (createdSub as any).stripeAccountKey as StripeAccountKey
+      const publishableKey = getPublishableKey(accountKey)
+
       return NextResponse.json({
         success: true,
         user: {
@@ -210,7 +215,8 @@ export async function POST(request: NextRequest) {
           confidence: subscriptionResult.routing.confidence,
           proratedAmount: subscriptionResult.proratedAmount,
           nextBillingDate: subscriptionResult.nextBillingDate,
-          paymentRequired: true
+          paymentRequired: true,
+          publishableKey
         }
       })
 

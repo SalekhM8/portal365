@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
  * 🔄 SYNC STRIPE SUBSCRIPTIONS
@@ -37,7 +37,10 @@ export async function POST(request: NextRequest) {
       }, { status: 403 })
     }
 
-    console.log('🔄 Starting Stripe subscription sync...')
+    const { searchParams } = new URL(request.url)
+    const account = (searchParams.get('account') || 'SU').toUpperCase() as StripeAccountKey
+    const stripe = getStripeClient(account)
+    console.log(`🔄 Starting Stripe subscription sync for ${account}...`)
 
     // Get all subscriptions from database
     const localSubscriptions = await prisma.subscription.findMany({

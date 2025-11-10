@@ -162,8 +162,9 @@ function AdminDashboardContent() {
   const [payments, setPayments] = useState<PaymentDetail[]>([])
   const [businessMetrics, setBusinessMetrics] = useState<BusinessMetrics | null>(null)
   const [recentActivity, setRecentActivity] = useState<any[]>([])
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null) // 🚀 NEW: Real analytics data
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [revenueMonths, setRevenueMonths] = useState<Array<{ month: string; totalNet: number; charges: number; refunds: number }>>([])
+  const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'ALL'>('SU')
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -268,7 +269,7 @@ function AdminDashboardContent() {
   // Fetch monthly revenue when Analytics tab is active
   async function loadRevenueMonths() {
     try {
-      const res = await fetch('/api/admin/analytics/revenue?months=12', { cache: 'no-store' })
+      const res = await fetch(`/api/admin/analytics/revenue?months=12&account=${revenueAccount}`, { cache: 'no-store' })
       const j = await res.json()
       if (j?.ok && Array.isArray(j.months)) setRevenueMonths(j.months)
     } catch {}
@@ -283,6 +284,11 @@ function AdminDashboardContent() {
   useEffect(() => {
     if (activeTab === 'analytics') loadRevenueMonths()
   }, [activeTab])
+
+  // reload when switching SU/IQ/ALL
+  useEffect(() => {
+    if (activeTab === 'analytics') loadRevenueMonths()
+  }, [revenueAccount])
 
   const fetchAdminData = async () => {
     try {
@@ -1476,8 +1482,21 @@ function AdminDashboardContent() {
       {/* Monthly Revenue (Stripe Net) */}
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Monthly Revenue (Stripe Net)</CardTitle>
-          <CardDescription>Exact Stripe Net volume per month (succeeded charges minus refunds)</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Monthly Revenue (Stripe Net)</CardTitle>
+              <CardDescription>Exact Stripe Net volume per month (succeeded charges minus refunds)</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-white/70">Account</span>
+              <select className="bg-transparent border border-white/20 rounded px-2 py-1 text-sm"
+                value={revenueAccount} onChange={(e)=>setRevenueAccount(e.target.value as any)}>
+                <option value="SU">SU</option>
+                <option value="IQ">IQ</option>
+                <option value="ALL">All</option>
+              </select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {revenueMonths.length === 0 ? (

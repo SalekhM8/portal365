@@ -3,14 +3,63 @@ import { prisma } from './prisma'
 import { IntelligentVATRouter, RoutingOptions } from './vat-routing'
 import { getPlanDbFirst } from '@/lib/plans'
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY is not set in environment variables')
+// =============================================================================
+// Multi-account Stripe manager
+// =============================================================================
+
+export type StripeAccountKey = 'SU' | 'IQ'
+
+type StripeAccountConfig = {
+  secretKey?: string
+  publishableKey?: string
+  webhookSecret?: string
+  label: string
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  typescript: true,
-  appInfo: { name: 'Portal365', version: '1.0.0' }
-})
+const STRIPE_ACCOUNTS: Record<StripeAccountKey, StripeAccountConfig> = {
+  SU: {
+    secretKey: process.env.STRIPE_SECRET_KEY,
+    publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+    label: 'Sporting U'
+  },
+  IQ: {
+    secretKey: process.env.STRIPE_IQ_SECRET_KEY,
+    publishableKey: process.env.NEXT_PUBLIC_STRIPE_IQ_PUBLISHABLE_KEY,
+    webhookSecret: process.env.STRIPE_IQ_WEBHOOK_SECRET,
+    label: 'IQ Learning Centre'
+  }
+}
+
+const stripeClients = new Map<StripeAccountKey, Stripe>()
+
+export function getStripeClient(account: StripeAccountKey): Stripe {
+  const existing = stripeClients.get(account)
+  if (existing) return existing
+  const cfg = STRIPE_ACCOUNTS[account]
+  if (!cfg?.secretKey) throw new Error(`Missing Stripe secret for account ${account}`)
+  const client = new Stripe(cfg.secretKey, { typescript: true, appInfo: { name: 'Portal365', version: '1.0.0' } })
+  stripeClients.set(account, client)
+  return client
+}
+
+export function getPublishableKey(account: StripeAccountKey): string {
+  const key = STRIPE_ACCOUNTS[account]?.publishableKey
+  if (!key) throw new Error(`Missing publishable key for account ${account}`)
+  return key
+}
+
+export function getWebhookSecrets(): Array<{ account: StripeAccountKey; secret: string }> {
+  const out: Array<{ account: StripeAccountKey; secret: string }> = []
+  for (const k of Object.keys(STRIPE_ACCOUNTS) as StripeAccountKey[]) {
+    const s = STRIPE_ACCOUNTS[k].webhookSecret
+    if (s) out.push({ account: k, secret: s })
+  }
+  return out
+}
+
+// Backward-compatible default client (SU). Existing code may still import { stripe }
+export const stripe = getStripeClient('SU')
 
 // ============================================================================
 // SUBSCRIPTION PROCESSING - 1ST OF MONTH BILLING WITH PRORATED FIRST PAYMENT
@@ -65,6 +114,14 @@ export class SubscriptionProcessor {
       const routing = await IntelligentVATRouter.routePayment(routingOptions)
       console.log('✅ VAT routing decision:', routing)
 
+      // 2b. Choose Stripe account for this signup
+      // Safe default: route only to SU unless STRIPE_IQ_ENABLED === 'true'
+      const iqEnabled = process.env.STRIPE_IQ_ENABLED === 'true'
+      const stripeAccount: StripeAccountKey = iqEnabled
+        ? (Math.random() < 0.5 ? 'SU' : 'IQ')
+        : 'SU'
+      const stripeClient = getStripeClient(stripeAccount)
+
       // 3. Create or reuse Stripe customer
       let customerIdToUse: string
       if (request.payerUserId) {
@@ -77,7 +134,7 @@ export class SubscriptionProcessor {
           customerIdToUse = payer.stripeCustomerId
         } else {
           const parentUser = await prisma.user.findUnique({ where: { id: request.payerUserId } })
-          const parentCustomer = await stripe.customers.create({
+          const parentCustomer = await stripeClient.customers.create({
             email: parentUser?.email || undefined,
             name: parentUser ? `${parentUser.firstName} ${parentUser.lastName}` : undefined,
             metadata: { userId: request.payerUserId }
@@ -85,7 +142,7 @@ export class SubscriptionProcessor {
           customerIdToUse = parentCustomer.id
         }
       } else {
-        const customer = await stripe.customers.create({
+        const customer = await stripeClient.customers.create({
           email: request.customerEmail,
           name: request.customerName,
           metadata: {
@@ -97,7 +154,7 @@ export class SubscriptionProcessor {
       }
 
       // 4. Get or create Stripe price for this membership type
-      const priceId = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name || membershipDetails.displayName })
+      const priceId = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name || membershipDetails.displayName }, stripeAccount)
 
       // 5. Calculate billing details (with admin date override)
       const now = new Date()
@@ -115,6 +172,7 @@ export class SubscriptionProcessor {
             userId: request.userId,
             stripeSubscriptionId: `setup_placeholder_${Date.now()}`,
             stripeCustomerId: customerIdToUse,
+            stripeAccountKey: stripeAccount,
             routedEntityId: routing.selectedEntityId,
             membershipType: request.membershipType,
             monthlyPrice: membershipDetails.monthlyPrice,
@@ -126,7 +184,7 @@ export class SubscriptionProcessor {
         })
         // If parent already has a default payment method, immediately create the Stripe subscription
         try {
-          const cust = await stripe.customers.retrieve(customerIdToUse)
+          const cust = await stripeClient.customers.retrieve(customerIdToUse)
           const hasDefault = !('deleted' in cust) && !!(cust as any)?.invoice_settings?.default_payment_method
           if (hasDefault) {
             // Compute prorated amount for the remainder of this month
@@ -170,9 +228,9 @@ export class SubscriptionProcessor {
               } catch {}
             }
 
-            const priceIdImmediate = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name })
+            const priceIdImmediate = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name }, stripeAccount)
             const trialEndTs = Math.floor(startDate.getTime() / 1000)
-            const childStripeSub = await stripe.subscriptions.create({
+            const childStripeSub = await stripeClient.subscriptions.create({
               customer: customerIdToUse,
               items: [{ price: priceIdImmediate }],
               collection_method: 'charge_automatically',
@@ -219,7 +277,7 @@ export class SubscriptionProcessor {
         }
 
         // Else: Create SetupIntent to collect and save card
-        const setupIntent = await stripe.setupIntents.create({
+        const setupIntent = await stripeClient.setupIntents.create({
           customer: customerIdToUse,
           usage: 'off_session',
           metadata: {
@@ -273,7 +331,7 @@ export class SubscriptionProcessor {
         proratedAmount: proratedAmountPence / 100
       })
 
-      const paymentIntent = await stripe.paymentIntents.create({
+      const paymentIntent = await stripeClient.paymentIntents.create({
         amount: proratedAmountPence,
         currency: 'gbp',
         customer: customerIdToUse,
@@ -295,6 +353,7 @@ export class SubscriptionProcessor {
           userId: request.userId,
           stripeSubscriptionId: paymentIntent.id,
           stripeCustomerId: customerIdToUse,
+          stripeAccountKey: stripeAccount,
           routedEntityId: routing.selectedEntityId,
           membershipType: request.membershipType,
           monthlyPrice: membershipDetails.monthlyPrice,
@@ -307,7 +366,7 @@ export class SubscriptionProcessor {
 
       // Add dbSubscriptionId to PaymentIntent metadata for webhook activation (e.g., Klarna async success)
       try {
-        await stripe.paymentIntents.update(paymentIntent.id, {
+        await stripeClient.paymentIntents.update(paymentIntent.id, {
           metadata: {
             userId: request.userId,
             membershipType: request.membershipType,
@@ -354,10 +413,11 @@ export class SubscriptionProcessor {
   /**
    * Get or create Stripe price for membership type (reuse existing prices)
    */
-  private static async getOrCreatePrice(membershipDetails: { monthlyPrice: number; name: string }): Promise<string> {
+  private static async getOrCreatePrice(membershipDetails: { monthlyPrice: number; name: string }, account: StripeAccountKey = 'SU'): Promise<string> {
     try {
+      const stripeClient = getStripeClient(account)
       // First, try to find existing price for this amount
-      const existingPrices = await stripe.prices.list({
+      const existingPrices = await stripeClient.prices.list({
         limit: 100,
         active: true,
         type: 'recurring',
@@ -375,7 +435,7 @@ export class SubscriptionProcessor {
       }
 
       // Create new product and price only if needed
-      const product = await stripe.products.create({
+      const product = await stripeClient.products.create({
         name: `${membershipDetails.name} Membership`,
         description: `Monthly membership for ${membershipDetails.name}`,
         metadata: {
@@ -383,7 +443,7 @@ export class SubscriptionProcessor {
         }
       })
 
-      const recurringPrice = await stripe.prices.create({
+      const recurringPrice = await stripeClient.prices.create({
         unit_amount: membershipDetails.monthlyPrice * 100,
         currency: 'gbp',
         recurring: {
