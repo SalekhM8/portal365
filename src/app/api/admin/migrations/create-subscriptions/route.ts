@@ -28,10 +28,75 @@ export async function POST(request: NextRequest) {
 
     const results: any[] = []
 
+    // Helper: infer plan from Stripe charge history (description first, then amount)
+    const inferPlanFromStripe = async (custId: string, email?: string): Promise<Partial<{ planKey: MembershipKey; lastAmountMinor: number; lastDesc: string }>> => {
+      try {
+        let paid: any | null = null
+        try {
+          // @ts-ignore
+          const search = await (stripe.charges as any).search({
+            query: `customer:'${custId}' AND status:'succeeded'`,
+            limit: 5
+          })
+          if (search?.data?.length) {
+            // take most recent non-refunded positive amount
+            paid = search.data.find((c: any) => c.paid && !c.refunded && c.amount > 0) || search.data[0]
+          }
+        } catch {}
+        if (!paid) {
+          const list = await stripe.charges.list({ customer: custId, limit: 5 })
+          paid = list.data.find(c => c.paid && !c.refunded && c.amount > 0) || null
+        }
+        if (!paid && email) {
+          try {
+            // @ts-ignore – email fallback if customer id search yields nothing (TeamUp style)
+            const byEmail = await (stripe.charges as any).search({
+              query: `billing_details.email:'${email}' AND status:'succeeded'`,
+              limit: 5
+            })
+            paid = byEmail?.data?.[0] || null
+          } catch {}
+        }
+        if (paid) {
+          const amt = Number(paid.amount || 0)
+          const desc: string = (paid.description as string) || ''
+          const d = desc.toLowerCase()
+          let key: MembershipKey | undefined
+          if (d.includes('female only')) key = 'WOMENS_CLASSES'
+          else if (d.includes('kids') && d.includes('weekend')) key = 'KIDS_WEEKEND_UNDER14'
+          else if (d.includes('kids') && (d.includes('unlimited') || d.includes('unlimited kids'))) key = 'KIDS_UNLIMITED_UNDER14'
+          else if (d.includes('weekend') && !d.includes('kids')) key = 'WEEKEND_ADULT'
+          else if (d.includes('full') || d.includes('unlimited adults')) key = 'FULL_ADULT'
+          if (!key) {
+            const priceMap: Array<{ minor: number; key: MembershipKey }> = Object.values(MEMBERSHIP_PLANS).map(p => ({
+              // monthlyPrice is number in your config
+              // @ts-ignore
+              minor: (p.monthlyPrice as number) * 100,
+              // @ts-ignore
+              key: p.key as unknown as MembershipKey
+            }))
+            const m = priceMap.find(x => x.minor === amt)
+            if (m) {
+              key = m.key
+            }
+          }
+          if (key) return { planKey: key, lastAmountMinor: amt, lastDesc: desc }
+        }
+      } catch {}
+      return {}
+    }
+
     for (const it of items) {
       try {
-        const plan = MEMBERSHIP_PLANS[it.planKey as MembershipKey]
-        if (!plan) throw new Error(`Unknown plan ${it.planKey}`)
+        // Determine plan: prefer inference from Stripe history, fall back to provided key
+        let chosenKey = (it?.planKey as unknown as MembershipKey) as MembershipKey | undefined
+        const inferred = await inferPlanFromStripe(it.stripeCustomerId, it.email || undefined)
+        if (inferred.planKey && (!chosenKey || chosenKey === 'FULL_ADULT' || chosenKey === 'WEEKEND_ADULT')) {
+          chosenKey = inferred.planKey as MembershipKey
+        }
+        if (!chosenKey) throw new Error(`Unable to determine plan for ${it.email || it.stripeCustomerId}`)
+        const plan = MEMBERSHIP_PLANS[chosenKey as MembershipKey]
+        if (!plan) throw new Error(`Unknown plan ${String(chosenKey)}`)
         let trialEnd = Math.floor(new Date(it.trialEndISO).getTime() / 1000)
         const nowSec = Math.floor(Date.now() / 1000)
         // Clamp trial_end to the future. If inferred is past, use 1st of next month
@@ -177,7 +242,7 @@ export async function POST(request: NextRequest) {
             stripeCustomerId: it.stripeCustomerId,
             stripeAccountKey: account,
             routedEntityId: iqEntity.id,
-            membershipType: it.planKey,
+            membershipType: chosenKey as string,
             monthlyPrice: plan.monthlyPrice,
             status: 'ACTIVE',
             currentPeriodStart: new Date(),
@@ -189,7 +254,7 @@ export async function POST(request: NextRequest) {
             stripeCustomerId: it.stripeCustomerId,
             stripeAccountKey: account,
             routedEntityId: iqEntity.id,
-            membershipType: it.planKey,
+            membershipType: chosenKey as string,
             monthlyPrice: plan.monthlyPrice,
             status: 'ACTIVE',
             currentPeriodEnd: new Date(trialEnd * 1000),
@@ -204,18 +269,18 @@ export async function POST(request: NextRequest) {
         })
         const defaultAccess = JSON.stringify({})
         const defaultScheduleAccess = JSON.stringify({})
-        const ageCategoryValue = (it.planKey && it.planKey.toLowerCase().includes('kids')) ? 'KID' : 'ADULT'
+        const ageCategoryValue = String(chosenKey).toLowerCase().includes('kids') ? 'KID' : 'ADULT'
         const trialEndDate = new Date(trialEnd * 1000)
         if (!existingMembership) {
           await prisma.membership.create({
             data: {
               userId,
-              membershipType: it.planKey,
+              membershipType: chosenKey as string,
               monthlyPrice: plan.monthlyPrice,
               status: 'ACTIVE',
               startDate: new Date(),
               nextBillingDate: trialEndDate,
-              // Some schemas require a non-null text/JSON field
+              // required text fields
               accessPermissions: defaultAccess,
               scheduleAccess: defaultScheduleAccess,
               ageCategory: ageCategoryValue
@@ -225,15 +290,13 @@ export async function POST(request: NextRequest) {
           await prisma.membership.update({
             where: { id: existingMembership.id },
             data: {
-              membershipType: it.planKey,
+              membershipType: chosenKey as string,
               monthlyPrice: plan.monthlyPrice,
               status: 'ACTIVE',
               nextBillingDate: (existingMembership as any)?.nextBillingDate ?? trialEndDate,
-              accessPermissions: existingMembership as any && (existingMembership as any).accessPermissions != null
-                ? (existingMembership as any).accessPermissions
-                : defaultAccess,
+              accessPermissions: (existingMembership as any)?.accessPermissions ?? defaultAccess,
               scheduleAccess: (existingMembership as any)?.scheduleAccess ?? defaultScheduleAccess,
-              ageCategory: (existingMembership as any)?.ageCategory ?? ageCategoryValue
+              ageCategory: ageCategoryValue
             } as any
           })
         }
