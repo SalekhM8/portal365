@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 		if (!session || !session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 		if (!['ADMIN', 'SUPER_ADMIN', 'STAFF'].includes((session?.user as any)?.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-		const { limit = 10, account = 'IQ' } = await request.json().catch(() => ({}))
+		const { limit = 10, account = 'IQ', hardDelete = false } = await request.json().catch(() => ({}))
 		const acct = (account as StripeAccountKey) || 'IQ'
 		const stripe = getStripeClient(acct)
 
@@ -23,13 +23,14 @@ export async function POST(request: NextRequest) {
 			.sort((a: any, b: any) => (b.created || 0) - (a.created || 0))
 			.slice(0, Math.max(1, Math.min(Number(limit) || 10, 50)))
 
-		const results: Array<{ stripeSubId: string; cancelled: boolean; dbRemoved: boolean; membershipAdjusted?: string }> = []
+		const results: Array<{ stripeSubId: string; cancelled: boolean; dbRemoved: boolean; membershipAdjusted?: string; userDeleted?: boolean }> = []
 
 		for (const s of candidates) {
 			const stripeSubId = s.id
 			let cancelled = false
 			let dbRemoved = false
 			let membershipAdjusted: string | undefined
+			let userDeleted: boolean | undefined
 
 			try {
 				// Cancel in Stripe (no proration; trialing implies no charge)
@@ -48,25 +49,38 @@ export async function POST(request: NextRequest) {
 					dbRemoved = true
 				} catch {}
 
-				// Adjust membership: if very recent and no confirmed payments, delete; else set INACTIVE
+				// Adjust membership
 				try {
 					const membership = await prisma.membership.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } })
 					if (membership) {
-						const createdMs = new Date(membership.createdAt).getTime()
-						const twentyFourHrsAgo = Date.now() - 24 * 60 * 60 * 1000
-						const hasConfirmed = await prisma.payment.count({ where: { userId, status: 'CONFIRMED' } })
-						if (createdMs >= twentyFourHrsAgo && hasConfirmed === 0) {
+						if (hardDelete) {
 							await prisma.membership.delete({ where: { id: membership.id } })
-							membershipAdjusted = 'deleted_recent'
+							membershipAdjusted = 'deleted_hard'
 						} else {
 							await prisma.membership.update({ where: { id: membership.id }, data: { status: 'INACTIVE' } })
 							membershipAdjusted = 'set_inactive'
 						}
 					}
 				} catch {}
+
+				// Optionally remove shadow user if safe
+				if (hardDelete) {
+					try {
+						const user = await prisma.user.findUnique({ where: { id: userId }, include: { subscriptions: true, payments: true } })
+						if (user) {
+							const hasSubs = await prisma.subscription.count({ where: { userId } })
+							const hasPays = await prisma.payment.count({ where: { userId } })
+							const isShadow = user.email?.startsWith('migrated_') || !user.passwordHash
+							if (!hasSubs && !hasPays && isShadow) {
+								await prisma.user.delete({ where: { id: userId } })
+								userDeleted = true
+							}
+						}
+					} catch {}
+				}
 			}
 
-			results.push({ stripeSubId, cancelled, dbRemoved, membershipAdjusted })
+			results.push({ stripeSubId, cancelled, dbRemoved, membershipAdjusted, userDeleted })
 		}
 
 		return NextResponse.json({ success: true, count: results.length, results })

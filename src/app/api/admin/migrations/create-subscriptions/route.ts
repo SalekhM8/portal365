@@ -70,13 +70,38 @@ export async function POST(request: NextRequest) {
           metadata: { migrated_from: 'teamup', account }
         }, { idempotencyKey: `migrate:${it.stripeCustomerId}:${priceId}:${trialEnd}` })
 
-        // Find or create shadow user by email
+        // Find or create shadow user by email (prefer Stripe customer's real name)
         let userId: string
         if (it.email) {
           const existing = await prisma.user.findUnique({ where: { email: it.email } })
-          if (existing) userId = existing.id
-          else {
-            const u = await prisma.user.create({ data: { email: it.email, firstName: it.email.split('@')[0], lastName: '', role: 'CUSTOMER', status: 'ACTIVE' } })
+          if (existing) {
+            userId = existing.id
+          } else {
+            // Try to read real name from Stripe
+            let firstName = it.email.split('@')[0]
+            let lastName = ''
+            try {
+              const cust = await stripe.customers.retrieve(it.stripeCustomerId)
+              if (!('deleted' in cust) && (cust as any)?.name) {
+                const full = ((cust as any).name as string).trim()
+                const parts = full.split(/\s+/)
+                if (parts.length > 1) {
+                  firstName = parts.slice(0, -1).join(' ')
+                  lastName = parts.slice(-1).join(' ')
+                } else {
+                  firstName = full
+                }
+              }
+            } catch {}
+            const u = await prisma.user.create({
+              data: {
+                email: it.email,
+                firstName,
+                lastName,
+                role: 'CUSTOMER',
+                status: 'ACTIVE'
+              }
+            })
             userId = u.id
           }
         } else {
@@ -119,6 +144,7 @@ export async function POST(request: NextRequest) {
           where: { userId },
           orderBy: { createdAt: 'desc' }
         })
+        const defaultAccess = JSON.stringify({})
         if (!existingMembership) {
           await prisma.membership.create({
             data: {
@@ -126,7 +152,9 @@ export async function POST(request: NextRequest) {
               membershipType: it.planKey,
               monthlyPrice: plan.monthlyPrice,
               status: 'ACTIVE',
-              startDate: new Date()
+              startDate: new Date(),
+              // Some schemas require a non-null text/JSON field
+              accessPermissions: defaultAccess
             } as any
           })
         } else {
@@ -135,7 +163,10 @@ export async function POST(request: NextRequest) {
             data: {
               membershipType: it.planKey,
               monthlyPrice: plan.monthlyPrice,
-              status: 'ACTIVE'
+              status: 'ACTIVE',
+              accessPermissions: existingMembership as any && (existingMembership as any).accessPermissions != null
+                ? (existingMembership as any).accessPermissions
+                : defaultAccess
             } as any
           })
         }
