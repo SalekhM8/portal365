@@ -4,8 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export async function GET() {
-	const session = await getServerSession(authOptions as any)
-	if (!session || (session.user as any)?.role !== 'ADMIN') {
+	const session: any = await getServerSession(authOptions as any)
+	if (!session || session?.user?.role !== 'ADMIN') {
 		return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
 	}
 
