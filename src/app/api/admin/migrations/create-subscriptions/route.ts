@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
           orderBy: { createdAt: 'desc' }
         })
         const defaultAccess = JSON.stringify({})
+        const defaultScheduleAccess = JSON.stringify({})
         if (!existingMembership) {
           await prisma.membership.create({
             data: {
@@ -154,7 +155,8 @@ export async function POST(request: NextRequest) {
               status: 'ACTIVE',
               startDate: new Date(),
               // Some schemas require a non-null text/JSON field
-              accessPermissions: defaultAccess
+              accessPermissions: defaultAccess,
+              scheduleAccess: defaultScheduleAccess
             } as any
           })
         } else {
@@ -166,7 +168,8 @@ export async function POST(request: NextRequest) {
               status: 'ACTIVE',
               accessPermissions: existingMembership as any && (existingMembership as any).accessPermissions != null
                 ? (existingMembership as any).accessPermissions
-                : defaultAccess
+                : defaultAccess,
+              scheduleAccess: (existingMembership as any)?.scheduleAccess ?? defaultScheduleAccess
             } as any
           })
         }
