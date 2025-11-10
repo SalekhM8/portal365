@@ -21,6 +21,7 @@ type Row = {
   currency: string | null
   lastChargeDescription: string | null
   inferredNextBillISO: string | null
+  inferredPlanKey?: string | null
 }
 
 export default function IQMigrationPage() {
@@ -89,12 +90,16 @@ export default function IQMigrationPage() {
     try {
       setError(null)
       const candidates = rows
-        // Allow fallback: if next date is missing, backend will default to 1st of next month
+        // Must have a usable PM; prefer rows where we could infer a plan
         .filter(r => (r.hasAnyPm || r.suggestedPmId))
         .slice(0, 10)
         .map(r => {
-          const plan = inferPlanKeyFromDescription(r.lastChargeDescription)
-          const planKey = plan ? normalizePlanKey(plan.planKey) : 'FULL_ADULT'
+          const planKey = r.inferredPlanKey
+            ? r.inferredPlanKey
+            : (() => {
+                const plan = inferPlanKeyFromDescription(r.lastChargeDescription)
+                return plan ? normalizePlanKey(plan.planKey) : 'FULL_ADULT'
+              })()
           return {
             stripeCustomerId: r.stripeCustomerId,
             email: r.email,
@@ -127,7 +132,22 @@ export default function IQMigrationPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Members (first 50)</CardTitle>
-              <Button onClick={createCanary}>Create subscriptions (canary 10)</Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={async () => {
+                  try {
+                    const resp = await fetch('/api/admin/migrations/revert-last-canary', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ limit: 10, account: 'IQ' })
+                    })
+                    const json = await resp.json()
+                    if (!resp.ok || !json?.success) throw new Error(json?.error || 'Failed')
+                    alert(`Reverted ${json.count} subs`)
+                  } catch (e: any) {
+                    alert(e?.message || 'Failed to revert')
+                  }
+                }}>Revert last canary (10)</Button>
+                <Button onClick={createCanary}>Create subscriptions (canary 10)</Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">

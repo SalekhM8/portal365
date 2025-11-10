@@ -1,0 +1,78 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth/next'
+import { authOptions } from '@/lib/auth'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { prisma } from '@/lib/prisma'
+
+// Cancel the most recent N IQ canary subscriptions (metadata.migrated_from==='teamup')
+// and remove corresponding Portal subscription rows; clean up membership if created recently.
+export async function POST(request: NextRequest) {
+	try {
+		const session = await getServerSession(authOptions as any)
+		if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+		if (!['ADMIN', 'SUPER_ADMIN', 'STAFF'].includes((session.user as any).role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+		const { limit = 10, account = 'IQ' } = await request.json().catch(() => ({}))
+		const acct = (account as StripeAccountKey) || 'IQ'
+		const stripe = getStripeClient(acct)
+
+		// Pull a wider window and select latest "teamup" subs
+		const subs = await stripe.subscriptions.list({ status: 'all', limit: 100 })
+		const candidates = subs.data
+			.filter((s: any) => (s?.metadata?.migrated_from === 'teamup'))
+			.sort((a: any, b: any) => (b.created || 0) - (a.created || 0))
+			.slice(0, Math.max(1, Math.min(Number(limit) || 10, 50)))
+
+		const results: Array<{ stripeSubId: string; cancelled: boolean; dbRemoved: boolean; membershipAdjusted?: string }> = []
+
+		for (const s of candidates) {
+			const stripeSubId = s.id
+			let cancelled = false
+			let dbRemoved = false
+			let membershipAdjusted: string | undefined
+
+			try {
+				// Cancel in Stripe (no proration; trialing implies no charge)
+				await stripe.subscriptions.cancel(stripeSubId, { prorate: false } as any)
+				cancelled = true
+			} catch (e) {
+				// keep going with DB clean-up even if Stripe cancel fails
+			}
+
+			// Remove Portal Subscription and adjust membership
+			const dbSub = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: stripeSubId } })
+			if (dbSub) {
+				const userId = dbSub.userId
+				try {
+					await prisma.subscription.delete({ where: { id: dbSub.id } })
+					dbRemoved = true
+				} catch {}
+
+				// Adjust membership: if very recent and no confirmed payments, delete; else set INACTIVE
+				try {
+					const membership = await prisma.membership.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } })
+					if (membership) {
+						const createdMs = new Date(membership.createdAt).getTime()
+						const twentyFourHrsAgo = Date.now() - 24 * 60 * 60 * 1000
+						const hasConfirmed = await prisma.payment.count({ where: { userId, status: 'CONFIRMED' } })
+						if (createdMs >= twentyFourHrsAgo && hasConfirmed === 0) {
+							await prisma.membership.delete({ where: { id: membership.id } })
+							membershipAdjusted = 'deleted_recent'
+						} else {
+							await prisma.membership.update({ where: { id: membership.id }, data: { status: 'INACTIVE' } })
+							membershipAdjusted = 'set_inactive'
+						}
+					}
+				} catch {}
+			}
+
+			results.push({ stripeSubId, cancelled, dbRemoved, membershipAdjusted })
+		}
+
+		return NextResponse.json({ success: true, count: results.length, results })
+	} catch (e: any) {
+		return NextResponse.json({ success: false, error: e?.message || 'Failed to revert canary' }, { status: 500 })
+	}
+}
+
+

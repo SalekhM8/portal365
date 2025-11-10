@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { MEMBERSHIP_PLANS, type MembershipKey } from '@/config/memberships'
+import { inferPlanKeyFromDescription as inferFromDesc, normalizePlanKey as normalizeClientKey } from '@/app/admin/iq-migration/planMap'
 
 /**
  * Admin: Preview or import existing Stripe customers/subscriptions into local DB
@@ -43,6 +45,7 @@ export async function GET(req: NextRequest) {
       let currency: string | null = null
       let lastChargeDescription: string | null = null
       let inferredNextBillISO: string | null = null
+      let inferredPlanKey: MembershipKey | null = null
 
       try {
         // Customer + default PM
@@ -138,6 +141,37 @@ export async function GET(req: NextRequest) {
           const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 0, 0, 0))
           inferredNextBillISO = next.toISOString()
         }
+
+        // Infer plan: prefer description mapping; then amount mapping
+        const fromDesc = inferFromDesc(lastChargeDescription || null)
+        if (fromDesc?.planKey) {
+          // @ts-ignore normalize client alias
+          const nk = normalizeClientKey(fromDesc.planKey)
+          inferredPlanKey = nk as MembershipKey
+        } else {
+          const amt = Number(lastChargeAmount || 0)
+          const priceToKey: Array<{ minor: number; key: MembershipKey }> = [
+            { minor: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice * 100, key: 'FULL_ADULT' },
+            { minor: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice * 100, key: 'WOMENS_CLASSES' },
+            { minor: MEMBERSHIP_PLANS.KIDS_WEEKEND_UNDER14.monthlyPrice * 100, key: 'KIDS_WEEKEND_UNDER14' },
+            { minor: MEMBERSHIP_PLANS.KIDS_UNLIMITED_UNDER14.monthlyPrice * 100, key: 'KIDS_UNLIMITED_UNDER14' },
+            { minor: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice * 100, key: 'WEEKEND_ADULT' },
+            { minor: MEMBERSHIP_PLANS.MASTERS.monthlyPrice * 100, key: 'MASTERS' },
+            { minor: MEMBERSHIP_PLANS.PERSONAL_TRAINING.monthlyPrice * 100, key: 'PERSONAL_TRAINING' },
+            { minor: MEMBERSHIP_PLANS.WELLNESS_PACKAGE.monthlyPrice * 100, key: 'WELLNESS_PACKAGE' }
+          ]
+          const match = priceToKey.find(p => p.minor === amt)
+          if (match) {
+            // Resolve 55.00 ambiguity using description keywords where possible
+            if (match.key === 'WEEKEND_ADULT' || match.key === 'KIDS_UNLIMITED_UNDER14') {
+              const d = (lastChargeDescription || '').toLowerCase()
+              if (d.includes('kid')) inferredPlanKey = 'KIDS_UNLIMITED_UNDER14'
+              else inferredPlanKey = 'WEEKEND_ADULT'
+            } else {
+              inferredPlanKey = match.key
+            }
+          }
+        }
       } catch {}
 
       return {
@@ -157,6 +191,7 @@ export async function GET(req: NextRequest) {
         currency,
         lastChargeDescription,
         inferredNextBillISO,
+        inferredPlanKey,
         items: s.items?.data?.map(i => ({ price: i.price?.unit_amount, currency: i.price?.currency })) || []
       }
     }))
@@ -314,10 +349,39 @@ export async function GET(req: NextRequest) {
 
     // Infer next billing date: next 1st of month based on last charge
     let inferredNextBillISO: string | null = null
+    let inferredPlanKey: MembershipKey | null = null
     if (lastChargeAt) {
       const d = new Date(lastChargeAt * 1000)
       const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 0, 0, 0))
       inferredNextBillISO = next.toISOString()
+    }
+    // Infer plan (same logic as above)
+    const fromDesc = inferFromDesc(lastChargeDescription || null)
+    if (fromDesc?.planKey) {
+      // @ts-ignore
+      inferredPlanKey = normalizeClientKey(fromDesc.planKey) as MembershipKey
+    } else {
+      const amt = Number(lastChargeAmount || 0)
+      const priceToKey: Array<{ minor: number; key: MembershipKey }> = [
+        { minor: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice * 100, key: 'FULL_ADULT' },
+        { minor: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice * 100, key: 'WOMENS_CLASSES' },
+        { minor: MEMBERSHIP_PLANS.KIDS_WEEKEND_UNDER14.monthlyPrice * 100, key: 'KIDS_WEEKEND_UNDER14' },
+        { minor: MEMBERSHIP_PLANS.KIDS_UNLIMITED_UNDER14.monthlyPrice * 100, key: 'KIDS_UNLIMITED_UNDER14' },
+        { minor: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice * 100, key: 'WEEKEND_ADULT' },
+        { minor: MEMBERSHIP_PLANS.MASTERS.monthlyPrice * 100, key: 'MASTERS' },
+        { minor: MEMBERSHIP_PLANS.PERSONAL_TRAINING.monthlyPrice * 100, key: 'PERSONAL_TRAINING' },
+        { minor: MEMBERSHIP_PLANS.WELLNESS_PACKAGE.monthlyPrice * 100, key: 'WELLNESS_PACKAGE' }
+      ]
+      const match = priceToKey.find(p => p.minor === amt)
+      if (match) {
+        if (match.key === 'WEEKEND_ADULT' || match.key === 'KIDS_UNLIMITED_UNDER14') {
+          const d = (lastChargeDescription || '').toLowerCase()
+          if (d.includes('kid')) inferredPlanKey = 'KIDS_UNLIMITED_UNDER14'
+          else inferredPlanKey = 'WEEKEND_ADULT'
+        } else {
+          inferredPlanKey = match.key
+        }
+      }
     }
 
     return {
@@ -333,7 +397,8 @@ export async function GET(req: NextRequest) {
       lastChargeAt,
       currency,
       lastChargeDescription,
-      inferredNextBillISO
+      inferredNextBillISO,
+      inferredPlanKey
     }
   }))
 

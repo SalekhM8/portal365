@@ -114,6 +114,32 @@ export async function POST(request: NextRequest) {
           } as any
         })
 
+        // Ensure a membership row exists and reflects the plan for UI display
+        const existingMembership = await prisma.membership.findFirst({
+          where: { userId },
+          orderBy: { createdAt: 'desc' }
+        })
+        if (!existingMembership) {
+          await prisma.membership.create({
+            data: {
+              userId,
+              membershipType: it.planKey,
+              monthlyPrice: plan.monthlyPrice,
+              status: 'ACTIVE',
+              startDate: new Date()
+            } as any
+          })
+        } else {
+          await prisma.membership.update({
+            where: { id: existingMembership.id },
+            data: {
+              membershipType: it.planKey,
+              monthlyPrice: plan.monthlyPrice,
+              status: 'ACTIVE'
+            } as any
+          })
+        }
+
         results.push({ stripeCustomerId: it.stripeCustomerId, subscriptionId: sub.id })
       } catch (e: any) {
         results.push({ stripeCustomerId: it.stripeCustomerId, error: e?.message || 'failed' })
