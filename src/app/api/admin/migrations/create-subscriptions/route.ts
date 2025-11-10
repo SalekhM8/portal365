@@ -146,6 +146,7 @@ export async function POST(request: NextRequest) {
         })
         const defaultAccess = JSON.stringify({})
         const defaultScheduleAccess = JSON.stringify({})
+        const ageCategoryValue = (it.planKey && it.planKey.toLowerCase().includes('kids')) ? 'KID' : 'ADULT'
         if (!existingMembership) {
           await prisma.membership.create({
             data: {
@@ -156,7 +157,8 @@ export async function POST(request: NextRequest) {
               startDate: new Date(),
               // Some schemas require a non-null text/JSON field
               accessPermissions: defaultAccess,
-              scheduleAccess: defaultScheduleAccess
+              scheduleAccess: defaultScheduleAccess,
+              ageCategory: ageCategoryValue
             } as any
           })
         } else {
@@ -169,7 +171,8 @@ export async function POST(request: NextRequest) {
               accessPermissions: existingMembership as any && (existingMembership as any).accessPermissions != null
                 ? (existingMembership as any).accessPermissions
                 : defaultAccess,
-              scheduleAccess: (existingMembership as any)?.scheduleAccess ?? defaultScheduleAccess
+              scheduleAccess: (existingMembership as any)?.scheduleAccess ?? defaultScheduleAccess,
+              ageCategory: (existingMembership as any)?.ageCategory ?? ageCategoryValue
             } as any
           })
         }
