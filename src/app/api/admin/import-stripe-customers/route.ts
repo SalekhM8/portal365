@@ -148,6 +148,56 @@ export async function GET(req: NextRequest) {
           inferredNextBillISO = next.toISOString()
         }
 
+        // Fallback: if no charge data yet but we have email, search by email (TeamUp often charged off customer context)
+        try {
+          if ((!lastChargeAmount || !lastChargeAt) && email) {
+            const q = `billing_details.email:'${email}' AND status:'succeeded'`
+            // @ts-ignore Stripe search endpoint
+            const search = await (stripe.charges as any).search({ query: q, limit: 10 })
+            if (search?.data?.length) {
+              const ch = search.data[0]
+              lastChargeAmount = ch.amount || null
+              lastChargeAt = ch.created || null
+              currency = ch.currency || currency
+              lastChargeDescription = (ch.description as string | null) || lastChargeDescription
+              const pmid = (ch.payment_method as string | undefined) || null
+              if (pmid && !suggestedPmId) {
+                suggestedPmId = pmid
+                try {
+                  const pmObj = await stripe.paymentMethods.retrieve(pmid)
+                  // @ts-ignore
+                  suggestedPmBrand = (pmObj as any)?.card?.brand || suggestedPmBrand
+                  // @ts-ignore
+                  suggestedPmLast4 = (pmObj as any)?.card?.last4 || suggestedPmLast4
+                } catch {}
+              }
+            } else {
+              // fallback to PaymentIntent search by email if charges search empty
+              const qPi = `customer_details.email:'${email}' AND status:'succeeded'`
+              // @ts-ignore Stripe search endpoint
+              const piSearch = await (stripe.paymentIntents as any).search({ query: qPi, limit: 10 })
+              if (piSearch?.data?.length) {
+                const pi = piSearch.data[0]
+                lastChargeAmount = (pi.amount_received || pi.amount) || lastChargeAmount
+                lastChargeAt = pi.created || lastChargeAt
+                // @ts-ignore
+                currency = (pi.currency as string | null) || currency
+                const pmFromPi = (pi.payment_method as string | undefined) || null
+                if (pmFromPi && !suggestedPmId) {
+                  suggestedPmId = pmFromPi
+                  try {
+                    const pmObj = await stripe.paymentMethods.retrieve(pmFromPi)
+                    // @ts-ignore
+                    suggestedPmBrand = (pmObj as any)?.card?.brand || suggestedPmBrand
+                    // @ts-ignore
+                    suggestedPmLast4 = (pmObj as any)?.card?.last4 || suggestedPmLast4
+                  } catch {}
+                }
+              }
+            }
+          }
+        } catch {}
+
         // Plan inference
         const fromDesc = inferFromDesc(lastChargeDescription || null)
         if (fromDesc?.planKey) {
