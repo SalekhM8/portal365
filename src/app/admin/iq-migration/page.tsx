@@ -137,7 +137,7 @@ export default function IQMigrationPage() {
                   try {
                     const resp = await fetch('/api/admin/migrations/revert-last-canary', {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ limit: 10, account: 'IQ' })
+                      body: JSON.stringify({ limit: 10, account: 'IQ', hardDelete: true })
                     })
                     const json = await resp.json()
                     if (!resp.ok || !json?.success) throw new Error(json?.error || 'Failed')
