@@ -44,11 +44,10 @@ export async function GET(req: NextRequest) {
         // @ts-ignore
         charges = await (stripe.charges as any).search({
           query: `customer:'${debugCustomerIdEarly}' AND status:'succeeded'`,
-          limit: 10,
-          expand: ['data.payment_method']
+          limit: 10
         })
       } catch {
-        charges = await stripe.charges.list({ customer: debugCustomerIdEarly, limit: 10, expand: ['data.payment_method'] })
+        charges = await stripe.charges.list({ customer: debugCustomerIdEarly, limit: 10 })
       }
       const intents = await stripe.paymentIntents.list({ customer: debugCustomerIdEarly, limit: 10 })
       return NextResponse.json({
