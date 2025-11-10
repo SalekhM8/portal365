@@ -89,7 +89,8 @@ export default function IQMigrationPage() {
     try {
       setError(null)
       const candidates = rows
-        .filter(r => r.inferredNextBillISO && (r.hasAnyPm || r.suggestedPmId))
+        // Allow fallback: if next date is missing, backend will default to 1st of next month
+        .filter(r => (r.hasAnyPm || r.suggestedPmId))
         .slice(0, 10)
         .map(r => {
           const plan = inferPlanKeyFromDescription(r.lastChargeDescription)
