@@ -8,9 +8,9 @@ import { prisma } from '@/lib/prisma'
 // and remove corresponding Portal subscription rows; clean up membership if created recently.
 export async function POST(request: NextRequest) {
 	try {
-		const session = await getServerSession(authOptions as any)
-		if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-		if (!['ADMIN', 'SUPER_ADMIN', 'STAFF'].includes((session.user as any).role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+		const session: any = await getServerSession(authOptions as any)
+		if (!session || !session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+		if (!['ADMIN', 'SUPER_ADMIN', 'STAFF'].includes((session?.user as any)?.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
 		const { limit = 10, account = 'IQ' } = await request.json().catch(() => ({}))
 		const acct = (account as StripeAccountKey) || 'IQ'
