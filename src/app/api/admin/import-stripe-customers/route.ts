@@ -25,9 +25,186 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const accountParam = (searchParams.get('account') || 'SU').toUpperCase() as StripeAccountKey
   const limit = Math.min(Number(searchParams.get('limit') || '50'), 200)
-  const debugCustomerId = searchParams.get('customerId')
+  const filterCustomerId = searchParams.get('customerId')
 
   const stripe = getStripeClient(accountParam)
+  
+  // If a specific customerId is provided, return a single enriched row for that customer
+  if (filterCustomerId) {
+    try {
+      // Try subscriptions for this customer first
+      const subsForCustomer = await stripe.subscriptions.list({ customer: filterCustomerId, status: 'all', limit: 10 })
+      const rows = await Promise.all((subsForCustomer.data.length ? subsForCustomer.data : [null]).map(async (s) => {
+        const stripeCustomerId = filterCustomerId
+        let email: string | null = null
+        let hasInvoiceDefault = false
+        let hasAnyPm = false
+        let suggestedPmId: string | null = null
+        let suggestedPmBrand: string | null = null
+        let suggestedPmLast4: string | null = null
+        let lastChargeAmount: number | null = null
+        let lastChargeAt: number | null = null
+        let currency: string | null = null
+        let lastChargeDescription: string | null = null
+        let inferredNextBillISO: string | null = null
+        let inferredPlanKey: MembershipKey | null = null
+
+        // Customer and default PM
+        try {
+          const cust = await stripe.customers.retrieve(stripeCustomerId)
+          if (!('deleted' in cust)) {
+            email = (cust.email as string | null) || null
+            const invDef = cust.invoice_settings?.default_payment_method
+            hasInvoiceDefault = !!invDef
+            if (invDef) {
+              const dpmId = typeof invDef === 'string' ? invDef : invDef.id
+              suggestedPmId = dpmId
+              try {
+                const pmObj = await stripe.paymentMethods.retrieve(dpmId)
+                // @ts-ignore
+                suggestedPmBrand = (pmObj as any)?.card?.brand || null
+                // @ts-ignore
+                suggestedPmLast4 = (pmObj as any)?.card?.last4 || null
+              } catch {}
+            }
+          }
+        } catch {}
+
+        // Attached PMs
+        try {
+          if (!suggestedPmId) {
+            const pms = await stripe.paymentMethods.list({ customer: stripeCustomerId, type: 'card' })
+            if (pms.data.length > 0) {
+              suggestedPmId = pms.data[0].id
+              suggestedPmBrand = pms.data[0].card?.brand || null
+              suggestedPmLast4 = pms.data[0].card?.last4 || null
+            }
+          }
+        } catch {}
+
+        // Charges and PaymentIntent fallback
+        try {
+          const charges = await stripe.charges.list({ customer: stripeCustomerId, limit: 10, expand: ['data.payment_method'] })
+          const paid = charges.data.find(ch => ch.paid && !ch.refunded && ch.amount > 0)
+          if (paid) {
+            lastChargeAmount = paid.amount
+            lastChargeAt = paid.created
+            currency = paid.currency
+            lastChargeDescription = (paid.description as string | null) || null
+            const pmid = (paid.payment_method as string | undefined) || null
+            if (pmid && !suggestedPmId) {
+              suggestedPmId = pmid
+              const det = (paid as any)?.payment_method_details
+              if (det?.card) {
+                suggestedPmBrand = det.card.brand || null
+                suggestedPmLast4 = det.card.last4 || null
+              }
+            } else if (!pmid && (paid.payment_intent as string | undefined)) {
+              try {
+                const pi = await stripe.paymentIntents.retrieve(paid.payment_intent as string)
+                const pmFromPi = (pi.payment_method as string | undefined) || null
+                if (pmFromPi && !suggestedPmId) {
+                  suggestedPmId = pmFromPi
+                  const pmObj = await stripe.paymentMethods.retrieve(pmFromPi)
+                  // @ts-ignore
+                  suggestedPmBrand = (pmObj as any)?.card?.brand || null
+                  // @ts-ignore
+                  suggestedPmLast4 = (pmObj as any)?.card?.last4 || null
+                }
+              } catch {}
+            }
+          } else {
+            const pis = await stripe.paymentIntents.list({ customer: stripeCustomerId, limit: 10 })
+            const succ = pis.data.find(pi => pi.status === 'succeeded')
+            if (succ) {
+              lastChargeAmount = succ.amount_received || succ.amount || null
+              lastChargeAt = succ.created || null
+              // @ts-ignore
+              currency = (succ.currency as string | null) || null
+              const pmFromPi = (succ.payment_method as string | undefined) || null
+              if (pmFromPi && !suggestedPmId) {
+                suggestedPmId = pmFromPi
+                try {
+                  const pmObj = await stripe.paymentMethods.retrieve(pmFromPi)
+                  // @ts-ignore
+                  suggestedPmBrand = (pmObj as any)?.card?.brand || null
+                  // @ts-ignore
+                  suggestedPmLast4 = (pmObj as any)?.card?.last4 || null
+                } catch {}
+              }
+            }
+          }
+        } catch {}
+
+        hasAnyPm = !!(hasInvoiceDefault || suggestedPmId)
+
+        // Next bill
+        const cpe = (s as any)?.current_period_end || null
+        if (cpe) {
+          inferredNextBillISO = new Date(cpe * 1000).toISOString()
+        } else if (lastChargeAt) {
+          const d = new Date(lastChargeAt * 1000)
+          const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 0, 0, 0))
+          inferredNextBillISO = next.toISOString()
+        }
+
+        // Plan inference
+        const fromDesc = inferFromDesc(lastChargeDescription || null)
+        if (fromDesc?.planKey) {
+          // @ts-ignore
+          inferredPlanKey = normalizeClientKey(fromDesc.planKey) as MembershipKey
+        } else {
+          const amt = Number(lastChargeAmount || 0)
+          const priceToKey: Array<{ minor: number; key: MembershipKey }> = [
+            { minor: MEMBERSHIP_PLANS.FULL_ADULT.monthlyPrice * 100, key: 'FULL_ADULT' },
+            { minor: MEMBERSHIP_PLANS.WOMENS_CLASSES.monthlyPrice * 100, key: 'WOMENS_CLASSES' },
+            { minor: MEMBERSHIP_PLANS.KIDS_WEEKEND_UNDER14.monthlyPrice * 100, key: 'KIDS_WEEKEND_UNDER14' },
+            { minor: MEMBERSHIP_PLANS.KIDS_UNLIMITED_UNDER14.monthlyPrice * 100, key: 'KIDS_UNLIMITED_UNDER14' },
+            { minor: MEMBERSHIP_PLANS.WEEKEND_ADULT.monthlyPrice * 100, key: 'WEEKEND_ADULT' },
+            { minor: MEMBERSHIP_PLANS.MASTERS.monthlyPrice * 100, key: 'MASTERS' },
+            { minor: MEMBERSHIP_PLANS.PERSONAL_TRAINING.monthlyPrice * 100, key: 'PERSONAL_TRAINING' },
+            { minor: MEMBERSHIP_PLANS.WELLNESS_PACKAGE.monthlyPrice * 100, key: 'WELLNESS_PACKAGE' }
+          ]
+          const match = priceToKey.find(p => p.minor === amt)
+          if (match) {
+            if (match.key === 'WEEKEND_ADULT' || match.key === 'KIDS_UNLIMITED_UNDER14') {
+              const d = (lastChargeDescription || '').toLowerCase()
+              if (d.includes('kid')) inferredPlanKey = 'KIDS_UNLIMITED_UNDER14'
+              else inferredPlanKey = 'WEEKEND_ADULT'
+            } else {
+              inferredPlanKey = match.key
+            }
+          }
+        }
+
+        return {
+          mode: s ? 'subscriptions' : 'charges_fallback',
+          stripeSubscriptionId: s?.id || null,
+          stripeCustomerId,
+          status: (s as any)?.status || null,
+          current_period_end: (s as any)?.current_period_end || null,
+          email,
+          hasInvoiceDefault,
+          hasAnyPm,
+          suggestedPmId,
+          suggestedPmBrand,
+          suggestedPmLast4,
+          lastChargeAmount,
+          lastChargeAt,
+          currency,
+          lastChargeDescription,
+          inferredNextBillISO,
+          inferredPlanKey,
+          items: s?.items?.data?.map((i: any) => ({ price: i.price?.unit_amount, currency: i.price?.currency })) || []
+        }
+      }))
+      return NextResponse.json({ success: true, account: accountParam, rows })
+    } catch (e: any) {
+      return NextResponse.json({ success: false, error: e?.message || 'Failed to load customer' }, { status: 500 })
+    }
+  }
+
+  // General account preview (no specific customer)
   const subs = await stripe.subscriptions.list({ status: 'all', limit })
 
   // If there are subscriptions, return subscription-centric preview (but enrich with PM/charge info for UI parity)
@@ -198,7 +375,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, account: accountParam, rows })
   }
 
-  // Optional deep debug for a single customer
+  // Optional deep debug (legacy) – kept for compatibility
+  const debugCustomerId = searchParams.get('debugCustomerId')
   if (debugCustomerId) {
     try {
       const cust = await stripe.customers.retrieve(debugCustomerId)
