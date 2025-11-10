@@ -84,8 +84,21 @@ export async function GET(req: NextRequest) {
 
         // Charges and PaymentIntent fallback
         try {
-          const charges = await stripe.charges.list({ customer: stripeCustomerId, limit: 10, expand: ['data.payment_method'] })
-          const paid = charges.data.find(ch => ch.paid && !ch.refunded && ch.amount > 0)
+          // Prefer search by customer to include older data and ensure teamup charges are found
+          let paid: any = null
+          try {
+            // @ts-ignore search endpoint
+            const search = await (stripe.charges as any).search({
+              query: `customer:'${stripeCustomerId}' AND status:'succeeded'`,
+              limit: 10,
+              expand: ['data.payment_method']
+            })
+            paid = search?.data?.[0] || null
+          } catch {
+            // fallback to list if search not available
+          }
+          const charges = paid ? { data: [paid] } : await stripe.charges.list({ customer: stripeCustomerId, limit: 10, expand: ['data.payment_method'] })
+          paid = paid || charges.data.find(ch => ch.paid && !ch.refunded && ch.amount > 0)
           if (paid) {
             lastChargeAmount = paid.amount
             lastChargeAt = paid.created
@@ -301,8 +314,18 @@ export async function GET(req: NextRequest) {
           suggestedPmLast4 = pms.data[0].card?.last4 || null
         }
         // Charges + PI fallback
-        const charges = await stripe.charges.list({ customer: stripeCustomerId, limit: 5, expand: ['data.payment_method'] })
-        const paid = charges.data.find(ch => ch.paid && !ch.refunded && ch.amount > 0)
+        let paid: any = null
+        try {
+          // @ts-ignore
+          const search = await (stripe.charges as any).search({
+            query: `customer:'${stripeCustomerId}' AND status:'succeeded'`,
+            limit: 5,
+            expand: ['data.payment_method']
+          })
+          paid = search?.data?.[0] || null
+        } catch {}
+        const charges = paid ? { data: [paid] } : await stripe.charges.list({ customer: stripeCustomerId, limit: 5, expand: ['data.payment_method'] })
+        paid = paid || charges.data.find(ch => ch.paid && !ch.refunded && ch.amount > 0)
         if (paid) {
           lastChargeAmount = paid.amount
           lastChargeAt = paid.created
