@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const accountParam = (searchParams.get('account') || 'SU').toUpperCase() as StripeAccountKey
   const limit = Math.min(Number(searchParams.get('limit') || '50'), 200)
+  const debugCustomerId = searchParams.get('customerId')
 
   const stripe = getStripeClient(accountParam)
   const subs = await stripe.subscriptions.list({ status: 'all', limit })
@@ -53,6 +54,32 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, account: accountParam, rows })
   }
 
+  // Optional deep debug for a single customer
+  if (debugCustomerId) {
+    try {
+      const cust = await stripe.customers.retrieve(debugCustomerId)
+      const pms = await stripe.paymentMethods.list({ customer: debugCustomerId, type: 'card' })
+      const charges = await stripe.charges.list({ customer: debugCustomerId, limit: 10, expand: ['data.payment_method'] })
+      // PaymentIntents can reveal pm when charge is legacy
+      const intents = await stripe.paymentIntents.list({ customer: debugCustomerId, limit: 10 })
+      return NextResponse.json({
+        success: true,
+        account: accountParam,
+        debug: {
+          customer: cust,
+          paymentMethodsCount: pms.data.length,
+          latestPaymentMethod: pms.data[0] || null,
+          chargesCount: charges.data.length,
+          latestCharge: charges.data[0] || null,
+          intentsCount: intents.data.length,
+          latestIntent: intents.data[0] || null
+        }
+      })
+    } catch (e: any) {
+      return NextResponse.json({ success: false, error: e?.message || 'Debug fetch failed' }, { status: 500 })
+    }
+  }
+
   // Fallback: charges-only preview for accounts managed by external cron (TeamUp)
   const customers = await stripe.customers.list({ limit })
   const rows = await Promise.all(customers.data.map(async (c) => {
@@ -65,7 +92,7 @@ export async function GET(req: NextRequest) {
     let lastPmLast4: string | null = null
     let lastChargeDescription: string | null = null
     try {
-      const charges = await stripe.charges.list({ customer: c.id, limit: 5 })
+      const charges = await stripe.charges.list({ customer: c.id, limit: 5, expand: ['data.payment_method'] })
       const paid = charges.data.find(ch => ch.paid && !ch.refunded && ch.amount > 0)
       if (paid) {
         lastChargeAmount = paid.amount
@@ -74,18 +101,36 @@ export async function GET(req: NextRequest) {
         // prefer balance transaction description or charge description
         lastChargeDescription = (paid.description as string | null) || null
         // capture pm info if available
-        // @ts-ignore
+        // direct payment_method on charge?
         const pmid = (paid.payment_method as string | undefined) || null
         if (pmid) {
           lastPaymentMethodId = pmid
           try {
-            // @ts-ignore
-            const det = (paid.payment_method_details as any)
+            const det = (paid as any)?.payment_method_details
             if (det?.card) {
               lastPmBrand = det.card.brand || null
               lastPmLast4 = det.card.last4 || null
             }
           } catch {}
+        } else {
+          // if not, try via payment_intent on the charge
+          const piId = (paid.payment_intent as string | undefined) || null
+          if (piId) {
+            try {
+              const pi = await stripe.paymentIntents.retrieve(piId)
+              const pmFromPi = (pi.payment_method as string | undefined) || null
+              if (pmFromPi) {
+                lastPaymentMethodId = pmFromPi
+                try {
+                  const pmObj = await stripe.paymentMethods.retrieve(pmFromPi)
+                  // @ts-ignore
+                  lastPmBrand = (pmObj as any)?.card?.brand || null
+                  // @ts-ignore
+                  lastPmLast4 = (pmObj as any)?.card?.last4 || null
+                } catch {}
+              }
+            } catch {}
+          }
         }
       }
     } catch {}
@@ -114,6 +159,20 @@ export async function GET(req: NextRequest) {
         suggestedPmId = pms.data[0].id
         suggestedPmBrand = pms.data[0].card?.brand || null
         suggestedPmLast4 = pms.data[0].card?.last4 || null
+      } else if (c.invoice_settings?.default_payment_method) {
+        // last fallback: default on customer (retrieve details)
+        const dpm = c.invoice_settings?.default_payment_method as any
+        const dpmId = typeof dpm === 'string' ? dpm : dpm?.id
+        if (dpmId) {
+          suggestedPmId = dpmId
+          try {
+            const pmObj = await stripe.paymentMethods.retrieve(dpmId)
+            // @ts-ignore
+            suggestedPmBrand = (pmObj as any)?.card?.brand || null
+            // @ts-ignore
+            suggestedPmLast4 = (pmObj as any)?.card?.last4 || null
+          } catch {}
+        }
       }
     } catch {}
 
