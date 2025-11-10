@@ -142,7 +142,17 @@ export async function GET(req: NextRequest) {
     }
   }))
 
-  return NextResponse.json({ success: true, account: accountParam, rows })
+  // Prioritize customers that are ready (have PM or recent paid charge)
+  const sorted = rows.sort((a: any, b: any) => {
+    const readyA = (a.hasAnyPm ? 1 : 0)
+    const readyB = (b.hasAnyPm ? 1 : 0)
+    if (readyA !== readyB) return readyB - readyA
+    const atA = a.lastChargeAt || 0
+    const atB = b.lastChargeAt || 0
+    return atB - atA
+  })
+
+  return NextResponse.json({ success: true, account: accountParam, rows: sorted })
 }
 
 
