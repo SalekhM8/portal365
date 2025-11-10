@@ -74,22 +74,80 @@ export async function POST(request: NextRequest) {
         let userId: string
         if (it.email) {
           const existing = await prisma.user.findUnique({ where: { email: it.email } })
+          const localPart = it.email.split('@')[0]
           if (existing) {
             userId = existing.id
+            // If existing has placeholder/empty names, try to backfill from Stripe
+            const needsNameUpdate =
+              !existing.firstName ||
+              !existing.lastName ||
+              existing.firstName.toLowerCase() === localPart.toLowerCase() ||
+              existing.firstName.toLowerCase() === 'member'
+            if (needsNameUpdate) {
+              try {
+                const cust = await stripe.customers.retrieve(it.stripeCustomerId)
+                let fn = existing.firstName || localPart
+                let ln = existing.lastName || ''
+                if (!('deleted' in cust)) {
+                  const rawName = (cust as any)?.name as string | undefined
+                  if (rawName && rawName.trim().length > 0) {
+                    const parts = rawName.trim().split(/\s+/)
+                    if (parts.length > 1) {
+                      fn = parts.slice(0, -1).join(' ')
+                      ln = parts.slice(-1).join(' ')
+                    } else {
+                      fn = rawName.trim()
+                    }
+                  } else {
+                    const dpm = (cust as any)?.invoice_settings?.default_payment_method
+                    if (dpm) {
+                      const pm = await stripe.paymentMethods.retrieve(dpm as string)
+                      const n = (pm as any)?.billing_details?.name as string | undefined
+                      if (n && n.trim().length > 0) {
+                        const parts = n.trim().split(/\s+/)
+                        if (parts.length > 1) {
+                          fn = parts.slice(0, -1).join(' ')
+                          ln = parts.slice(-1).join(' ')
+                        } else {
+                          fn = n.trim()
+                        }
+                      }
+                    }
+                  }
+                }
+                await prisma.user.update({
+                  where: { id: userId },
+                  data: { firstName: fn, lastName: ln }
+                })
+              } catch {
+                // best-effort; keep existing names if update fails
+              }
+            }
           } else {
             // Try to read real name from Stripe
-            let firstName = it.email.split('@')[0]
+            let firstName = localPart
             let lastName = ''
             try {
               const cust = await stripe.customers.retrieve(it.stripeCustomerId)
-              if (!('deleted' in cust) && (cust as any)?.name) {
-                const full = ((cust as any).name as string).trim()
-                const parts = full.split(/\s+/)
-                if (parts.length > 1) {
-                  firstName = parts.slice(0, -1).join(' ')
-                  lastName = parts.slice(-1).join(' ')
-                } else {
-                  firstName = full
+              if (!('deleted' in cust)) {
+                let rawName: string | undefined = (cust as any)?.name
+                if (!rawName && (cust as any)?.invoice_settings?.default_payment_method) {
+                  try {
+                    const pm = await stripe.paymentMethods.retrieve((cust as any).invoice_settings.default_payment_method as string)
+                    const n = (pm as any)?.billing_details?.name as string | undefined
+                    if (n && n.trim().length > 0) {
+                      rawName = n.trim()
+                    }
+                  } catch {}
+                }
+                if (rawName && rawName.trim().length > 0) {
+                  const parts = rawName.trim().split(/\s+/)
+                  if (parts.length > 1) {
+                    firstName = parts.slice(0, -1).join(' ')
+                    lastName = parts.slice(-1).join(' ')
+                  } else {
+                    firstName = rawName.trim()
+                  }
                 }
               }
             } catch {}
