@@ -133,6 +133,30 @@ export async function GET(req: NextRequest) {
           }
         }
       }
+      // If still nothing, fall back to latest succeeded PaymentIntent
+      if (!lastChargeAmount || !lastChargeAt) {
+        try {
+          const pis = await stripe.paymentIntents.list({ customer: c.id, limit: 5 })
+          const succ = pis.data.find(pi => pi.status === 'succeeded')
+          if (succ) {
+            lastChargeAmount = succ.amount_received || succ.amount || null
+            lastChargeAt = succ.created || null
+            // @ts-ignore
+            currency = (succ.currency as string | null) || null
+            const pmFromPi = (succ.payment_method as string | undefined) || null
+            if (pmFromPi) {
+              lastPaymentMethodId = pmFromPi
+              try {
+                const pmObj = await stripe.paymentMethods.retrieve(pmFromPi)
+                // @ts-ignore
+                lastPmBrand = (pmObj as any)?.card?.brand || null
+                // @ts-ignore
+                lastPmLast4 = (pmObj as any)?.card?.last4 || null
+              } catch {}
+            }
+          }
+        } catch {}
+      }
     } catch {}
 
     // Determine default PM presence
@@ -143,10 +167,13 @@ export async function GET(req: NextRequest) {
     let suggestedPmBrand: string | null = null
     let suggestedPmLast4: string | null = null
     try {
-      hasInvoiceDefault = !!c.invoice_settings?.default_payment_method
+      // Retrieve full customer to ensure invoice_settings is present
+      const cust = await stripe.customers.retrieve(c.id)
+      const invDef = !('deleted' in cust) ? cust.invoice_settings?.default_payment_method : null
+      hasInvoiceDefault = !!invDef
       // Legacy source (older APIs)
       // @ts-ignore
-      defaultSource = (c as any)?.default_source || null
+      defaultSource = !('deleted' in cust) ? (cust as any)?.default_source || null : null
       // Any attached card payment methods
       const pms = await stripe.paymentMethods.list({ customer: c.id, type: 'card' })
       hasAnyPm = hasInvoiceDefault || !!defaultSource || pms.data.length > 0 || !!lastPaymentMethodId
@@ -159,9 +186,9 @@ export async function GET(req: NextRequest) {
         suggestedPmId = pms.data[0].id
         suggestedPmBrand = pms.data[0].card?.brand || null
         suggestedPmLast4 = pms.data[0].card?.last4 || null
-      } else if (c.invoice_settings?.default_payment_method) {
+      } else if (invDef) {
         // last fallback: default on customer (retrieve details)
-        const dpm = c.invoice_settings?.default_payment_method as any
+        const dpm = invDef as any
         const dpmId = typeof dpm === 'string' ? dpm : dpm?.id
         if (dpmId) {
           suggestedPmId = dpmId
