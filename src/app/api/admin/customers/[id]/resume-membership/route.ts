@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 
 /**
  * RESUME MEMBERSHIP - Enterprise-grade implementation
@@ -123,8 +123,10 @@ export async function POST(
     // 🚀 RESUME STRIPE SUBSCRIPTION
     let stripeOperationSuccess = false
     try {
+      // Use correct Stripe account for this subscription
+      const stripeClient = getStripeClient((pausedSubscription as any).stripeAccountKey || 'SU')
       // For paused collections, we need to use update() not resume()
-      const updatedStripeSubscription = await stripe.subscriptions.update(
+      const updatedStripeSubscription = await stripeClient.subscriptions.update(
         pausedSubscription.stripeSubscriptionId,
         {
           pause_collection: null, // Remove the pause collection
@@ -134,10 +136,10 @@ export async function POST(
 
       // Attempt to pay any open invoice created while paused
       try {
-        const upcoming = await stripe.invoices.list({ customer: updatedStripeSubscription.customer as string, limit: 1 })
+        const upcoming = await stripeClient.invoices.list({ customer: updatedStripeSubscription.customer as string, limit: 1 })
         const openInv = upcoming.data.find(i => i.status === 'open')
         if (openInv && openInv.id) {
-          await stripe.invoices.pay(openInv.id as string)
+          await stripeClient.invoices.pay(openInv.id as string)
         }
       } catch {}
 
@@ -219,7 +221,7 @@ export async function POST(
       // 🔄 ROLLBACK STRIPE OPERATION (only if we actually resumed it)
       if (stripeOperationSuccess) {
         try {
-          await stripe.subscriptions.update(pausedSubscription.stripeSubscriptionId, {
+          await stripeClient.subscriptions.update(pausedSubscription.stripeSubscriptionId, {
             pause_collection: { behavior: 'void' }
           })
           console.log(`✅ [${operationId}] Stripe operation rolled back successfully`)

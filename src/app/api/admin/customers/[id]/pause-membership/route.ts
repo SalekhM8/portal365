@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 
 /**
  * PAUSE MEMBERSHIP - Enterprise-grade implementation
@@ -124,13 +124,15 @@ export async function POST(
     // 🚀 PAUSE STRIPE SUBSCRIPTION
     let stripeOperationSuccess = false
     try {
+      // Select correct Stripe account (SU or IQ) based on the subscription row
+      const stripeClient = getStripeClient((activeSubscription as any).stripeAccountKey || 'SU')
       const pauseConfig = {
         pause_collection: {
           behavior: pauseBehavior as 'void' | 'keep_as_draft' | 'mark_uncollectible'
         }
       }
 
-      const updatedStripeSubscription = await stripe.subscriptions.update(
+      const updatedStripeSubscription = await stripeClient.subscriptions.update(
         activeSubscription.stripeSubscriptionId,
         pauseConfig
       )
@@ -138,10 +140,10 @@ export async function POST(
       // If behavior is 'void', proactively void any open invoice
       if (pauseBehavior === 'void') {
         try {
-          const invoices = await stripe.invoices.list({ customer: updatedStripeSubscription.customer as string, limit: 3 })
+          const invoices = await stripeClient.invoices.list({ customer: updatedStripeSubscription.customer as string, limit: 3 })
           for (const inv of invoices.data) {
             if (inv.status === 'open') {
-              await stripe.invoices.voidInvoice(inv.id as string)
+              await stripeClient.invoices.voidInvoice(inv.id as string)
             }
           }
         } catch {}
