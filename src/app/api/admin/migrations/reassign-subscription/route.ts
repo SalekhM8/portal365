@@ -75,23 +75,22 @@ export async function POST(req: NextRequest) {
     })
 
     // Ensure the target user has a matching membership row
-    const nextBill = sub.next?.getTime ? sub.next : (sub as any).nextBillingDate || firstOfNextMonthUTC()
+    const nextBill = sub.nextBillingDate || firstOfNextMonthUTC()
     const existingTargetMembership = await prisma.membership.findFirst({
       where: { userId: targetUser.id, membershipType: sub.membershipType }
     })
     if (existingTargetMembership) {
-      await prisma.meeting?.deleteMany?.({ where: { userId: targetUser.id, membershipType: sub.membershipType } })
       await prisma.membership.update({
         where: { id: existingTargetMembership.id },
         data: {
           status: 'ACTIVE',
-          monthlyPrice: sub.monthlyPrice,
+          monthlyPrice: Number(sub.monthlyPrice as any),
           billingDay: 1,
           nextBillingDate: nextBill as Date
         }
       })
     } else {
-      const m = projectMembershipFields(sub.membershipType as string, sub.monthlyPrice || 0, nextBill as Date)
+      const m = projectMembershipFields(sub.membershipType as string, Number((sub.monthlyPrice as any) || 0), nextBill as Date)
       await prisma.membership.create({
         data: {
           userId: targetUser.id,
@@ -101,7 +100,7 @@ export async function POST(req: NextRequest) {
           monthlyPrice: m.monthlyPrice,
           billingDay: m.billingDay,
           nextBillingDate: m.nextBillingDate,
-          accessPermissions: m.accessibility || m.accessPermissions,
+          accessPermissions: m.accessPermissions,
           scheduleAccess: m.scheduleAccess,
           ageCategory: m.ageCategory
         }
