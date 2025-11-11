@@ -123,9 +123,9 @@ export async function POST(
 
     // 🚀 PAUSE STRIPE SUBSCRIPTION
     let stripeOperationSuccess = false
+    // Select correct Stripe account (SU or IQ) based on the subscription row
+    const stripeClient = getStripeClient((activeSubscription as any).stripeAccountKey || 'SU')
     try {
-      // Select correct Stripe account (SU or IQ) based on the subscription row
-      const stripeClient = getStripeClient((activeSubscription as any).stripeAccountKey || 'SU')
       const pauseConfig = {
         pause_collection: {
           behavior: pauseBehavior as 'void' | 'keep_as_draft' | 'mark_uncollectible'
@@ -233,7 +233,8 @@ export async function POST(
       // 🔄 ROLLBACK STRIPE OPERATION (only if we actually paused it)
       if (stripeOperationSuccess) {
         try {
-          await stripe.subscriptions.resume(activeSubscription.stripeSubscriptionId)
+          // Remove pause_collection to roll back
+          await stripeClient.subscriptions.update(activeSubscription.stripeSubscriptionId, { pause_collection: null, proration_behavior: 'none' })
           console.log(`✅ [${operationId}] Stripe operation rolled back successfully`)
         } catch (rollbackError) {
           console.error(`❌ [${operationId}] CRITICAL: Rollback failed:`, rollbackError)

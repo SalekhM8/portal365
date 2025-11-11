@@ -122,9 +122,9 @@ export async function POST(
 
     // 🚀 RESUME STRIPE SUBSCRIPTION
     let stripeOperationSuccess = false
+    // Use correct Stripe account for this subscription (available to try and rollback scopes)
+    const stripeClient = getStripeClient((pausedSubscription as any).stripeAccountKey || 'SU')
     try {
-      // Use correct Stripe account for this subscription
-      const stripeClient = getStripeClient((pausedSubscription as any).stripeAccountKey || 'SU')
       // For paused collections, we need to use update() not resume()
       const updatedStripeSubscription = await stripeClient.subscriptions.update(
         pausedSubscription.stripeSubscriptionId,
