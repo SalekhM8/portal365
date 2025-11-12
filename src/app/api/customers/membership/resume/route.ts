@@ -51,7 +51,8 @@ export async function POST(_request: NextRequest) {
           return NextResponse.json({
             mode: 'payment_intent',
             subscriptionId: subscription.id,
-            clientSecret: existing.client_secret
+            clientSecret: existing.client_secret,
+            publishableKey: getPublishableKey((subscription as any).stripeAccountKey || 'SU')
           })
         }
       } catch {}
