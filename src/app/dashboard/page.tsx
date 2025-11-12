@@ -210,10 +210,11 @@ function DashboardContent() {
                     alert(json?.error || 'Unable to resume payment, please try again.')
                     return
                   }
+                  const pkParam = json.publishableKey ? `&pk=${encodeURIComponent(json.publishableKey)}` : ''
                   if (json.mode === 'payment_intent') {
-                    router.push(`/register/payment?subscription_id=${encodeURIComponent(json.subscriptionId)}&client_secret=${encodeURIComponent(json.clientSecret)}`)
+                    router.push(`/register/payment?subscription_id=${encodeURIComponent(json.subscriptionId)}&client_secret=${encodeURIComponent(json.clientSecret)}${pkParam}`)
                   } else if (json.mode === 'setup_intent') {
-                    router.push(`/dashboard/payment-methods?sub=${encodeURIComponent(json.subscriptionId)}&client_secret=${encodeURIComponent(json.clientSecret)}`)
+                    router.push(`/dashboard/payment-methods?sub=${encodeURIComponent(json.subscriptionId)}&client_secret=${encodeURIComponent(json.clientSecret)}${pkParam}`)
                   } else {
                     alert('Unsupported resume mode')
                   }

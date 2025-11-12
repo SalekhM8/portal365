@@ -16,6 +16,7 @@ function PaymentMethodsInner() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pkParam = searchParams.get('pk')
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -33,6 +34,10 @@ function PaymentMethodsInner() {
     const familySub = searchParams.get('family_sub')
     const genericSub = searchParams.get('sub')
     const clientSecretFromLink = searchParams.get('client_secret')
+    // If a client_secret is supplied in URL (resume path), seed local state so Elements can render even if API excludes pending subscriptions
+    if (clientSecretFromLink && !clientSecret) {
+      setClientSecret(clientSecretFromLink)
+    }
     if (setupIntentId && redirectStatus === 'succeeded') {
       // finalize by informing backend to set default payment method
       finalizePaymentMethod(setupIntentId)
@@ -116,6 +121,8 @@ function PaymentMethodsInner() {
         if (data.publishableKey) {
           // Preload the Stripe instance for this account
           await loadStripe(data.publishableKey)
+        } else if (pkParam) {
+          await loadStripe(pkParam)
         }
       } else {
         setError(data.error || 'Failed to load payment methods')
@@ -203,6 +210,7 @@ function PaymentMethodsInner() {
             <Elements
               // elements will lazy-init with the pk that matches the client secret
               stripe={(async () => {
+                if (pkParam) return loadStripe(pkParam)
                 const pk = (await fetch('/api/customers/payment-methods').then(r => r.json()).catch(() => ({})))?.publishableKey
                 return pk ? loadStripe(pk) : null as any
               })() as any}
