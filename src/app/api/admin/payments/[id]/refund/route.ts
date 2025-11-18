@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 
 // Minimal, forward-only refunds: parse [pi:...] or [inv:...] from payment.description
 
@@ -42,7 +42,10 @@ export async function POST(
     if (!paymentIntentId) {
       const invoiceId = extractTag(payment.description || undefined, 'inv')
       if (invoiceId) {
-        const inv = await stripe.invoices.retrieve(invoiceId)
+        // Resolve account first to use correct Stripe client
+        const subForInvoice = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
+        const s = getStripeClient((subForInvoice as any)?.stripeAccountKey || 'SU')
+        const inv = await s.invoices.retrieve(invoiceId)
         // Cast to any to avoid Stripe TS helper Response<T> property access issue during build
         paymentIntentId = ((inv as any).payment_intent as string) || null
       }
@@ -58,6 +61,7 @@ export async function POST(
       // Find a Stripe customer for this user
       const sub = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
       const stripeCustomerId = sub?.stripeCustomerId
+      const s = getStripeClient((sub as any)?.stripeAccountKey || 'SU')
 
       if (stripeCustomerId) {
         const targetTs = payment.processedAt || payment.createdAt
@@ -68,7 +72,7 @@ export async function POST(
         try {
           // Prefer invoices (paid) close to the payment time and matching amount
           const ts = Math.floor(new Date(targetTs).getTime() / 1000)
-          const invList: any = await stripe.invoices.list({ customer: stripeCustomerId, status: 'paid', created: { gte: ts - 60 * 24 * 60 * 60, lte: ts + 60 * 24 * 60 * 60 }, limit: 100 })
+          const invList: any = await s.invoices.list({ customer: stripeCustomerId, status: 'paid', created: { gte: ts - 60 * 24 * 60 * 60, lte: ts + 60 * 24 * 60 * 60 }, limit: 100 })
           const candidates = invList.data.filter((inv: any) => Number(inv.amount_paid || 0) === targetMinor)
           if (candidates.length) {
             // Pick the closest by paid_at/created timestamp
@@ -86,7 +90,7 @@ export async function POST(
         if (!resolvedPi) {
           try {
             const ts = Math.floor(new Date(targetTs).getTime() / 1000)
-            const chList: any = await stripe.charges.list({ customer: stripeCustomerId, created: { gte: ts - 60 * 24 * 60 * 60, lte: ts + 60 * 24 * 60 * 60 }, limit: 100 })
+            const chList: any = await s.charges.list({ customer: stripeCustomerId, created: { gte: ts - 60 * 24 * 60 * 60, lte: ts + 60 * 24 * 60 * 60 }, limit: 100 })
             const ch = chList.data.find((c: any) => Number(c.amount || 0) === targetMinor)
             if (ch) {
               resolvedPi = (ch as any).payment_intent || null
@@ -114,7 +118,9 @@ export async function POST(
     const amountInPence = amountPounds !== undefined ? Math.round(amountPounds * 100) : undefined
 
     // Execute refund
-    const refund = await stripe.refunds.create({
+    const subForRefund = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
+    const sFinal = getStripeClient((subForRefund as any)?.stripeAccountKey || 'SU')
+    const refund = await sFinal.refunds.create({
       payment_intent: paymentIntentId,
       amount: amountInPence,
       reason: 'requested_by_customer'

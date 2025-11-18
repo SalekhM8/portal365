@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 
 export async function POST(
   request: NextRequest,
@@ -25,11 +25,12 @@ export async function POST(
     const subscription = await prisma.subscription.findFirst({ where: { userId: childId }, orderBy: { createdAt: 'desc' } })
     if (!subscription) return NextResponse.json({ error: 'No subscription found' }, { status: 404 })
 
-    const updated = await stripe.subscriptions.update(subscription.stripeSubscriptionId, { pause_collection: null, proration_behavior: 'none' })
+    const s = getStripeClient((subscription as any)?.stripeAccountKey || 'SU')
+    const updated = await s.subscriptions.update(subscription.stripeSubscriptionId, { pause_collection: null, proration_behavior: 'none' })
     try {
-      const invoices = await stripe.invoices.list({ customer: updated.customer as string, limit: 1 })
+      const invoices = await s.invoices.list({ customer: updated.customer as string, limit: 1 })
       const open = invoices.data.find(i => i.status === 'open')
-      if (open && open.id) await stripe.invoices.pay(open.id as string)
+      if (open && open.id) await s.invoices.pay(open.id as string)
     } catch {}
 
     await prisma.$transaction(async (tx) => {

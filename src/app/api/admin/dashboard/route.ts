@@ -704,8 +704,16 @@ export async function GET() {
     // Build payment items with a stable key per billing artifact to dedupe and auto-hide on success
     const paymentItemsRaw = payments.map((payment: any) => {
       const desc: string = payment.description || ''
+      const subMatch = desc.match(/\[sub:([^\]]+)\]/)
       const invMatch = desc.match(/\[inv:([^\]]+)\]/)
-      const key = invMatch?.[1] || `${payment.userId}:${payment.createdAt.toISOString().slice(0,7)}` // fallback: user-month
+      // New grouping:
+      // 1) Prefer invoice id when present (group per-invoice)
+      // 2) Else group per subscription-month (stable monthly bucket)
+      const monthKey = payment.createdAt.toISOString().slice(0,7)
+      const key = invMatch?.[1]
+        ? `INV:${invMatch[1]}`
+        : (subMatch?.[1] ? `SUBMON:${subMatch[1]}:${monthKey}` : `USERMON:${payment.userId}:${monthKey}`)
+      const invoiceId = invMatch?.[1] || null
       return {
         id: payment.id,
         customerName: `${payment.user.firstName} ${payment.user.lastName}`,
@@ -722,6 +730,7 @@ export async function GET() {
         confidence: payment.routing?.confidence || 'MEDIUM',
         membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown',
         _key: key,
+        _invoiceId: invoiceId,
         _ts: payment.createdAt.getTime()
       }
     })
@@ -743,7 +752,11 @@ export async function GET() {
       if (candidate) picked.push(candidate)
     }
 
-    const paymentTodos = picked.map(({ _key, _ts, ...rest }) => rest)
+    const paymentTodos = picked.map(({ _key, _ts, _invoiceId, ...rest }) => ({
+      ...rest,
+      groupKey: _key,
+      invoiceId: _invoiceId
+    }))
 
     const payments_full = payments.map((payment: any) => ({
       id: payment.id,

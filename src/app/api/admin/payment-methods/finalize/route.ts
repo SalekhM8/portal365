@@ -22,6 +22,15 @@ export async function POST(request: NextRequest) {
     const pm = si.payment_method as string
     await stripe.customers.update(stripeCustomerId, { invoice_settings: { default_payment_method: pm } })
 
+    // Try to pay newest open overdue invoice immediately (parity with customer flow)
+    try {
+      const invoices = await stripe.invoices.list({ customer: stripeCustomerId, limit: 5 })
+      const openOverdue = invoices.data.find(i => i.status === 'open' || i.status === 'uncollectible' || i.status === 'draft')
+      if (openOverdue && openOverdue.id && openOverdue.status === 'open') {
+        try { await stripe.invoices.pay(openOverdue.id as string) } catch {}
+      }
+    } catch {}
+
     return NextResponse.json({ success: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Failed to finalize payment method' }, { status: 500 })

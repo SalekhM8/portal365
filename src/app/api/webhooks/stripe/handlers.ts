@@ -84,6 +84,20 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
         console.log(`✅ [${operationId}] Found subscription via memberUserId: ${subscription.id}`)
       }
     }
+    // STEP 3b: Fallback for family flows – accept childUserId as memberUserId
+    if (!subscription && meta?.childUserId) {
+      const childUserId = meta.childUserId as string
+      const subForChild = await prisma.subscription.findFirst({
+        where: { userId: childUserId },
+        orderBy: { createdAt: 'desc' },
+        include: { user: true }
+      })
+      if (subForChild) {
+        subscription = subForChild
+        mappingMethod = 'INVOICE_METADATA_CHILD_USER_ID'
+        console.log(`✅ [${operationId}] Found subscription via childUserId: ${subscription.id}`)
+      }
+    }
     
     // STEP 4: CUSTOMER FALLBACK - last resort; only if nothing else mapped
     if (!subscription && invoice.customer) {
@@ -157,11 +171,11 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
         return
       }
       // Backfill missing payment for already-recorded invoice
-      const userIdForBackfill = meta?.memberUserId || subscription.userId
+      const userIdForBackfill = (meta?.memberUserId as string | undefined) || (meta?.childUserId as string | undefined) || subscription.userId
       const paymentDescriptionBackfill = invoice.billing_reason === 'subscription_create' 
         ? 'Initial subscription payment (prorated)'
         : 'Monthly membership payment'
-      const taggedBackfill = `${paymentDescriptionBackfill} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForBackfill}]`
+      const taggedBackfill = `${paymentDescriptionBackfill} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForBackfill}] [sub:${subscription.id}]`
       // Final guard before creating
       const dupGuard = await prisma.payment.findFirst({ where: { status: 'CONFIRMED', description: { contains: `[inv:${invoice.id}]` } } })
       if (dupGuard) {
@@ -227,10 +241,10 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
       : 'Monthly membership payment'
       
     // Decide the correct member to attribute this payment to
-    const userIdForPayment = (invoice.metadata && (invoice.metadata as any).memberUserId) || subscription.userId
+    const userIdForPayment = (invoice.metadata && ((invoice.metadata as any).memberUserId || (invoice.metadata as any).childUserId)) || subscription.userId
 
     // Tag description with identifiers including member id for precise attribution display
-    const taggedDescription = `${paymentDescription} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForPayment}]`
+    const taggedDescription = `${paymentDescription} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForPayment}] [sub:${subscription.id}]`
 
     // Idempotency guard (invoice-scoped) before creating normal payment
     const alreadyByInvoice = await prisma.payment.findFirst({
@@ -396,7 +410,7 @@ export async function handlePaymentFailed(invoice: any, account?: StripeAccountK
       }
     } catch {}
 
-    const failedDescription = `Failed monthly membership payment [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''}`
+    const failedDescription = `Failed monthly membership payment [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [sub:${subscription.id}]`
 
     await prisma.payment.create({ 
       data: { 
@@ -623,30 +637,34 @@ export async function activateFromPaymentIntent(pi: any, account?: StripeAccount
   }
   if (!dbSub) return
 
-  // Idempotency: if already has a real Stripe sub, skip
-  if (dbSub.stripeSubscriptionId && (dbSub.stripeSubscriptionId as string).startsWith('sub_')) return
+  // Determine if a real Stripe subscription already exists (e.g., created via confirm-payment)
+  const hasRealStripeSub = !!(dbSub.stripeSubscriptionId && (dbSub.stripeSubscriptionId as string).startsWith('sub_'))
 
-  // Build price and create Stripe subscription starting next billing
-  const membershipType = dbSub.membershipType
-  const nextBilling = new Date(dbSub.nextBillingDate)
-  const trialEndTimestamp = Math.floor(nextBilling.getTime() / 1000)
+  // If no real Stripe subscription yet, create it now (account-aware price fetch)
+  if (!hasRealStripeSub) {
+    // Build price and create Stripe subscription starting next billing
+    const membershipType = dbSub.membershipType
+    const nextBilling = new Date(dbSub.nextBillingDate)
+    const trialEndTimestamp = Math.floor(nextBilling.getTime() / 1000)
 
-  // Get price via lightweight helper from confirm-payment handler
-  const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any
-  const priceId = await getOrCreatePrice({ monthlyPrice: Number(dbSub.monthlyPrice), name: membershipType })
+    // Get price via lightweight helper from confirm-payment handler (must be account-aware)
+    const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any
+    const accountForPrice = (dbSub as any).stripeAccountKey || account || 'SU'
+    const priceId = await getOrCreatePrice({ monthlyPrice: Number(dbSub.monthlyPrice), name: membershipType }, accountForPrice)
 
-  const stripeSubscription = await stripe.subscriptions.create({
-    customer: pi.customer as string,
-    items: [{ price: priceId }],
-    collection_method: 'charge_automatically',
-    trial_end: trialEndTimestamp,
-    proration_behavior: 'none',
-    payment_behavior: 'default_incomplete',
-    metadata: { userId: dbSub.userId, membershipType: dbSub.membershipType, routedEntityId: dbSub.routedEntityId, dbSubscriptionId: dbSub.id }
-  }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
+    const stripeSubscription = await stripe.subscriptions.create({
+      customer: pi.customer as string,
+      items: [{ price: priceId }],
+      collection_method: 'charge_automatically',
+      trial_end: trialEndTimestamp,
+      proration_behavior: 'none',
+      payment_behavior: 'default_incomplete',
+      metadata: { userId: dbSub.userId, membershipType: dbSub.membershipType, routedEntityId: dbSub.routedEntityId, dbSubscriptionId: dbSub.id }
+    }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
 
-  await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
-  await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+    await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
+    await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+  }
 
   // Write initial prorated payment row if missing (idempotent)
   try {
@@ -673,7 +691,7 @@ export async function activateFromPaymentIntent(pi: any, account?: StripeAccount
             amount: amountPounds,
             currency,
             status: 'CONFIRMED',
-            description: `Initial subscription payment (prorated) [pi:${pi?.id}]`,
+            description: `Initial subscription payment (prorated) [pi:${pi?.id}] [sub:${dbSub.id}]`,
             routedEntityId: dbSub.routedEntityId,
             processedAt: new Date()
           }

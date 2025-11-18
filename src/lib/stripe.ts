@@ -117,9 +117,27 @@ export class SubscriptionProcessor {
       // 2b. Choose Stripe account for this signup
       // Safe default: route only to SU unless STRIPE_IQ_ENABLED === 'true'
       const iqEnabled = process.env.STRIPE_IQ_ENABLED === 'true'
-      const stripeAccount: StripeAccountKey = iqEnabled
-        ? (Math.random() < 0.5 ? 'SU' : 'IQ')
-        : 'SU'
+      // Default selection (non-family flows)
+      let stripeAccount: StripeAccountKey = iqEnabled ? (Math.random() < 0.5 ? 'SU' : 'IQ') : 'SU'
+
+      // If creating under a parent's payer account, prefer the parent's existing Stripe account
+      if (request.payerUserId) {
+        try {
+          // Prefer the parent's most recently updated, active-like subscription that has a Stripe customer
+          const payerSub = await prisma.subscription.findFirst({
+            where: { 
+              userId: request.payerUserId,
+              status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE'] }
+            },
+            orderBy: { updatedAt: 'desc' }
+          })
+          const payerAccount = (payerSub as any)?.stripeAccountKey as StripeAccountKey | undefined
+          if (payerAccount === 'SU' || payerAccount === 'IQ') {
+            stripeAccount = payerAccount
+          }
+        } catch {}
+      }
+
       const stripeClient = getStripeClient(stripeAccount)
 
       // 3. Create or reuse Stripe customer
@@ -184,7 +202,30 @@ export class SubscriptionProcessor {
         })
         // If parent already has a default payment method, immediately create the Stripe subscription
         try {
-          const cust = await stripeClient.customers.retrieve(customerIdToUse)
+          let cust: any
+          try {
+            cust = await stripeClient.customers.retrieve(customerIdToUse)
+          } catch (e: any) {
+            // If the stored customer belongs to the other account, retry there and switch accounts
+            const otherAccount: StripeAccountKey = stripeAccount === 'SU' ? 'IQ' : 'SU'
+            try {
+              const otherClient = getStripeClient(otherAccount)
+              const retry = await otherClient.customers.retrieve(customerIdToUse)
+              // Switch to the correct account for the rest of this flow
+              stripeAccount = otherAccount
+              customerIdToUse = (retry as any).id
+              cust = retry
+              // Reflect the account switch in the DB placeholder so future admin ops (pause/resume/cancel) use the right account
+              try {
+                await prisma.subscription.update({
+                  where: { id: dbSubscription.id },
+                  data: { stripeAccountKey: stripeAccount }
+                })
+              } catch {}
+            } catch {
+              throw e
+            }
+          }
           const hasDefault = !('deleted' in cust) && !!(cust as any)?.invoice_settings?.default_payment_method
           if (hasDefault) {
             // Compute prorated amount for the remainder of this month
@@ -196,6 +237,7 @@ export class SubscriptionProcessor {
 
             if (proratedAmountPence > 0) {
               // Create prorated invoice item and invoice; attempt immediate charge using default PM
+              const stripe = getStripeClient(stripeAccount)
               await stripe.invoiceItems.create({
                 customer: customerIdToUse,
                 amount: proratedAmountPence,
@@ -221,7 +263,7 @@ export class SubscriptionProcessor {
               // Best-effort wait and check
               await new Promise(r => setTimeout(r, 3000))
               try {
-              const inv2 = inv.id ? await stripe.invoices.retrieve(inv.id) : inv
+              const inv2 = inv.id ? await getStripeClient(stripeAccount).invoices.retrieve(inv.id) : inv
                 if ((inv2 as any).status === 'open' || (inv2 as any).amount_paid === 0) {
                   console.warn('Prorated invoice not yet paid; activation will proceed but webhook may suspend if payment fails')
                 }
@@ -230,7 +272,7 @@ export class SubscriptionProcessor {
 
             const priceIdImmediate = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name }, stripeAccount)
             const trialEndTs = Math.floor(startDate.getTime() / 1000)
-            const childStripeSub = await stripeClient.subscriptions.create({
+            const childStripeSub = await getStripeClient(stripeAccount).subscriptions.create({
               customer: customerIdToUse,
               items: [{ price: priceIdImmediate }],
               collection_method: 'charge_automatically',

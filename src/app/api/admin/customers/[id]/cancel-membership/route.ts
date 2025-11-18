@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 
 /**
  * CANCEL MEMBERSHIP - Enterprise-grade implementation
@@ -158,11 +158,12 @@ export async function POST(
     // 🚀 CANCEL STRIPE SUBSCRIPTION
     let stripeOperationSuccess = false
     let stripeResult: any = null
+    const s = getStripeClient((activeSubscription as any)?.stripeAccountKey || 'SU')
     
     try {
       if (cancelationType === 'immediate') {
         // Immediate cancellation
-        stripeResult = await stripe.subscriptions.cancel(
+        stripeResult = await s.subscriptions.cancel(
           activeSubscription.stripeSubscriptionId,
           {
             prorate: prorate
@@ -170,7 +171,7 @@ export async function POST(
         )
       } else {
         // Schedule cancellation at period end
-        stripeResult = await stripe.subscriptions.update(
+        stripeResult = await s.subscriptions.update(
           activeSubscription.stripeSubscriptionId,
           {
             cancel_at_period_end: true
@@ -200,11 +201,11 @@ export async function POST(
         if (cancelationType === 'immediate') {
           // Void any open invoice to avoid accidental collection
           try {
-            const sub = await stripe.subscriptions.retrieve(activeSubscription.stripeSubscriptionId)
-            const invoices = await stripe.invoices.list({ customer: sub.customer as string, limit: 3 })
+            const sub = await s.subscriptions.retrieve(activeSubscription.stripeSubscriptionId)
+            const invoices = await s.invoices.list({ customer: sub.customer as string, limit: 3 })
             for (const inv of invoices.data) {
               if (inv.status === 'open') {
-                await stripe.invoices.voidInvoice(inv.id as string)
+                await s.invoices.voidInvoice(inv.id as string)
               }
             }
           } catch {}
@@ -315,7 +316,7 @@ export async function POST(
             console.error(`❌ [${operationId}] CRITICAL: Cannot rollback immediate cancellation`)
           } else {
             // Rollback scheduled cancellation
-            await stripe.subscriptions.update(activeSubscription.stripeSubscriptionId, {
+            await s.subscriptions.update(activeSubscription.stripeSubscriptionId, {
               cancel_at_period_end: false
             })
             console.log(`✅ [${operationId}] Stripe scheduled cancellation rolled back successfully`)

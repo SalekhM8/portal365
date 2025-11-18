@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getStripeClient } from '@/lib/stripe'
 
 // GET: list dependents (children) for the logged-in parent
 export async function GET() {
@@ -22,7 +23,9 @@ export async function GET() {
     try {
       const latestParentSub = await prisma.subscription.findFirst({ where: { userId: parent.id }, orderBy: { createdAt: 'desc' } })
       if (latestParentSub?.stripeCustomerId) {
-        const sc = await (await import('@/lib/stripe')).stripe.customers.retrieve(latestParentSub.stripeCustomerId)
+        const account = (latestParentSub as any)?.stripeAccountKey || 'SU'
+        const stripe = getStripeClient(account)
+        const sc = await stripe.customers.retrieve(latestParentSub.stripeCustomerId)
         parentHasDefaultPm = !!(!("deleted" in sc) && (sc as any)?.invoice_settings?.default_payment_method)
       }
     } catch {}

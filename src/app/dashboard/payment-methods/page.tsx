@@ -244,6 +244,8 @@ function PaymentMethodForm({ onSuccess }: { onSuccess: () => void }) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : undefined
+  const familySubParam = params?.get('family_sub') || null
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -257,7 +259,8 @@ function PaymentMethodForm({ onSuccess }: { onSuccess: () => void }) {
       const result = await stripe.confirmSetup({
         elements,
         confirmParams: {
-          return_url: `${window.location.origin}/dashboard/payment-methods?updated=true`,
+          // Preserve family_sub so the page can finalize child activation after redirect
+          return_url: `${window.location.origin}/dashboard/payment-methods?updated=true${familySubParam ? `&family_sub=${encodeURIComponent(familySubParam)}` : ''}`,
         },
         redirect: 'if_required'
       })
@@ -273,6 +276,16 @@ function PaymentMethodForm({ onSuccess }: { onSuccess: () => void }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ setupIntentId })
           })
+          // If this update originated from family activation, finalize the child subscription now
+          if (familySubParam) {
+            try {
+              await fetch('/api/confirm-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ setupIntentId, subscriptionId: familySubParam })
+              })
+            } catch {}
+          }
         }
         setSuccess(true)
         setTimeout(() => {

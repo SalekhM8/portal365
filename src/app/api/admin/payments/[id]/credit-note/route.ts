@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 
 /**
  * Create a customer credit to be applied to the user's next invoice.
@@ -37,6 +37,7 @@ export async function POST(
     if (!sub?.stripeCustomerId) {
       return NextResponse.json({ error: 'Customer not found on Stripe for this user' }, { status: 400 })
     }
+    const s = getStripeClient((sub as any)?.stripeAccountKey || 'SU')
 
     // Amount to credit: default full amount if not specified
     const creditMinor = Math.round((amountPounds != null ? amountPounds : Number(payment.amount)) * 100)
@@ -45,7 +46,7 @@ export async function POST(
     }
 
     // Create customer balance transaction (negative => credit) – idempotent
-    const balanceTx = await stripe.customers.createBalanceTransaction(
+    const balanceTx = await s.customers.createBalanceTransaction(
       sub.stripeCustomerId,
       {
         amount: -creditMinor,

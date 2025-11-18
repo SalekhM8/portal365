@@ -67,7 +67,9 @@ export async function POST(request: NextRequest) {
         scheduleAccess: JSON.stringify({}),
         ageCategory: planKey.includes('KIDS') ? 'YOUTH' : 'ADULT',
         billingDay: 1,
-        nextBillingDate: next1st
+        nextBillingDate: next1st,
+        familyGroupId: parent.id,
+        isPrimaryMember: false
       }
     })
 
@@ -93,12 +95,12 @@ export async function POST(request: NextRequest) {
         amount: proratedMinor,
         currency: 'gbp',
         description: `Prorated ${plan.name} for ${now.toISOString().slice(0,10)} → ${next1st.toISOString().slice(0,10)}`,
-        metadata: { childUserId: child.id, reason: 'family_prorated_first_period' }
+        metadata: { childUserId: child.id, memberUserId: child.id, reason: 'family_prorated_first_period' }
       })
       const inv = await stripe.invoices.create({
         customer: stripeCustomerId,
         auto_advance: true,
-        metadata: { childUserId: child.id, reason: 'family_prorated_first_period' }
+        metadata: { childUserId: child.id, memberUserId: child.id, reason: 'family_prorated_first_period' }
       })
       // optional: best-effort pay (guard type)
       const invId = (inv as any)?.id as string | undefined

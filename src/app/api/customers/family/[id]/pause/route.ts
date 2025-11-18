@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient } from '@/lib/stripe'
 
 export async function POST(
   request: NextRequest,
@@ -27,10 +27,11 @@ export async function POST(
     if (!subscription) return NextResponse.json({ error: 'No subscription found' }, { status: 404 })
 
     // Pause in Stripe (void any open invoice)
-    const updated = await stripe.subscriptions.update(subscription.stripeSubscriptionId, { pause_collection: { behavior: 'void' } })
+    const s = getStripeClient((subscription as any)?.stripeAccountKey || 'SU')
+    const updated = await s.subscriptions.update(subscription.stripeSubscriptionId, { pause_collection: { behavior: 'void' } })
     try {
-      const invoices = await stripe.invoices.list({ customer: updated.customer as string, limit: 3 })
-      for (const inv of invoices.data) { if (inv.status === 'open' && inv.id) await stripe.invoices.voidInvoice(inv.id as string) }
+      const invoices = await s.invoices.list({ customer: updated.customer as string, limit: 3 })
+      for (const inv of invoices.data) { if (inv.status === 'open' && inv.id) await s.invoices.voidInvoice(inv.id as string) }
     } catch {}
 
     // Update DB optimistically
