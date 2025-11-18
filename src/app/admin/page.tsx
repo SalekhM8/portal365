@@ -1192,7 +1192,7 @@ function AdminDashboardContent() {
                         </td>
                         <td className="p-4 border-r border-white/5">
                           <Badge variant="secondary" className="text-xs">
-                            {(customer.account === 'IQ' ? 'IQ' : 'SU')}
+                            {customer.account === 'IQ' ? 'IQ' : (customer.account === 'SU' ? 'SU' : '—')}
                           </Badge>
                         </td>
                         <td className="p-4 border-r border-white/5">
