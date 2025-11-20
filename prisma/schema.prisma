@@ -422,6 +422,7 @@ model Subscription {
   routing      SubscriptionRouting[] // Routing audit trail
   invoices     Invoice[] // Billing history
   auditLogs    SubscriptionAuditLog[] // Operation audit trail
+  pauseWindows SubscriptionPauseWindow[] // Scheduled pause windows
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -530,4 +531,28 @@ model MembershipPlan {
   updatedAt            DateTime @updatedAt
 
   @@map("membership_plans")
+}
+
+// ============================================================================
+// SCHEDULED PAUSE WINDOWS (Month-level control for pause/resume automation)
+// ============================================================================
+
+model SubscriptionPauseWindow {
+  id              String   @id @default(cuid())
+  subscriptionId  String
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  year            Int
+  month           Int        // 1..12 (UTC month to pause)
+  pauseBehavior   String     @default("void") // 'void' | 'keep_as_draft' | 'mark_uncollectible'
+  openEnded       Boolean    @default(false) // if true, applies from this month indefinitely until closed
+  closedAt        DateTime?
+  // Idempotency markers for automation runs
+  appliedPauseAt  DateTime?
+  appliedResumeAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([subscriptionId, year, month])
+  @@index([year, month])
+  @@map("subscription_pause_windows")
 }

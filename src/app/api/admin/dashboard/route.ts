@@ -453,6 +453,26 @@ export async function GET() {
       take: 500
     })
 
+    // Prefetch upcoming pause windows for all listed subscriptions
+    const subIds = customers.map((c: any) => c.subscriptions?.[0]?.id).filter((x: any) => !!x)
+    const upcomingWindows = subIds.length
+      ? await (prisma as any).subscriptionPauseWindow.findMany({
+          where: {
+            subscriptionId: { in: subIds as string[] },
+            OR: [
+              { appliedPauseAt: null },
+              { openEnded: true, closedAt: null }
+            ]
+          }
+        })
+      : []
+    const winsBySubId: Record<string, any[]> = {}
+    for (const w of upcomingWindows) {
+      const key = (w as any).subscriptionId as string
+      if (!winsBySubId[key]) winsBySubId[key] = []
+      winsBySubId[key].push(w)
+    }
+
     // Lifetime total paid per customer (all confirmed payments)
     const totals = await prisma.payment.groupBy({
       by: ['userId'],
@@ -630,6 +650,28 @@ export async function GET() {
       const lastConfirmedPayment = customer.payments.find((p: any) => p.status === 'CONFIRMED')
       const lastPaidAmount = lastConfirmedPayment ? Number(lastConfirmedPayment.amount) : null
 
+      // Build upcoming pause label from subscription.pauseWindows (if any)
+      let pauseScheduleLabel: string | null = null
+      const wins = subscription?.id ? (winsBySubId[subscription.id] || []) : []
+      if (wins.length > 0) {
+        const upcoming = wins.filter(w => (w.appliedPauseAt == null) || (w.openEnded && !w.closedAt))
+        if (upcoming.length > 0) {
+          const sorted = [...upcoming].sort((a,b) => (a.year - b.year) || (a.month - b.month))
+          const first = sorted[0]
+          const last = sorted[sorted.length - 1]
+          const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+          const firstLabel = `${monthNames[(first.month||1)-1]} ${first.year}`
+          if (sorted.some(w => w.openEnded && !w.closedAt)) {
+            pauseScheduleLabel = `from ${firstLabel}`
+          } else {
+            const lastLabel = `${monthNames[(last.month||1)-1]} ${last.year}`
+            pauseScheduleLabel = (first.year === last.year && first.month === last.month)
+              ? firstLabel
+              : `${firstLabel}–${lastLabel}`
+          }
+        }
+      }
+
       return {
         id: customer.id,
         account: (subscription?.stripeAccountKey as any) ?? null,
@@ -647,6 +689,7 @@ export async function GET() {
         routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
         nextBilling: nextBillingIso,
         startsOn,
+        pauseScheduleLabel,
         emergencyContact: customer.emergencyContact ? JSON.parse(customer.emergencyContact) : { name: '', phone: '', relationship: '' },
         accessHistory: {
           lastAccess: 'N/A',

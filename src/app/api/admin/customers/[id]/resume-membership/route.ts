@@ -215,6 +215,14 @@ export async function POST(
       })
       console.log(`🔍 [${operationId}] Updated subscription status: ${updatedSubscription?.status}`)
 
+      // Close any open-ended pause masters so future months do not auto-pause
+      try {
+        await prisma.subscriptionPauseWindow.updateMany({
+          where: { subscriptionId: pausedSubscription.id, openEnded: true, closedAt: null },
+          data: { closedAt: new Date() }
+        })
+      } catch {}
+
     } catch (dbError: any) {
       console.error(`❌ [${operationId}] Database update failed:`, dbError)
       

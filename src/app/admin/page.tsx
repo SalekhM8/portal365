@@ -88,6 +88,7 @@ interface CustomerDetail {
   routedEntity: string
   nextBilling: string
   startsOn?: string
+  pauseScheduleLabel?: string
   emergencyContact: {
     name: string
     phone: string
@@ -214,6 +215,10 @@ function AdminDashboardContent() {
   const [cancelationType, setCancelationType] = useState<'immediate' | 'end_of_period'>('end_of_period')
   const [pauseBehavior, setPauseBehavior] = useState<'void' | 'keep_as_draft' | 'mark_uncollectible'>('void')
   const [showMembershipActionModal, setShowMembershipActionModal] = useState(false)
+  // Pause scheduling
+  const [pauseMode, setPauseMode] = useState<'immediate' | 'schedule'>('immediate')
+  const [pauseStartMonth, setPauseStartMonth] = useState<string>('') // YYYY-MM
+  const [pauseEndMonth, setPauseEndMonth] = useState<string>('')     // YYYY-MM
   // Dismissed To-Do items (client-side only)
   const [dismissedTodoIds, setDismissedTodoIds] = useState<string[]>([])
   // NEW: Change Plan modal state
@@ -505,7 +510,9 @@ function AdminDashboardContent() {
     }
 
     const confirmMessage = {
-      pause: 'Are you sure you want to PAUSE this customer\'s membership? They will lose access immediately.',
+      pause: pauseMode === 'schedule'
+        ? 'Schedule a pause for the selected months? (Automation will apply before month start)'
+        : 'Are you sure you want to PAUSE this customer\'s membership? They will lose access immediately.',
       resume: 'Are you sure you want to RESUME this customer\'s membership? Billing will restart.',
       cancel: cancelationType === 'immediate' 
         ? 'Are you sure you want to IMMEDIATELY CANCEL this membership? This cannot be undone.'
@@ -519,12 +526,33 @@ function AdminDashboardContent() {
     setMembershipActionLoading(true)
 
     try {
-      const endpoint = `/api/admin/customers/${selectedCustomer.id}/${membershipAction}-membership`
+      let endpoint = `/api/admin/customers/${selectedCustomer.id}/${membershipAction}-membership`
       const requestBody: any = { reason: membershipActionReason.trim() }
 
       // Add action-specific parameters
       if (membershipAction === 'pause') {
-        requestBody.pauseBehavior = pauseBehavior
+        if (pauseMode === 'schedule') {
+          // Call schedule endpoint instead of immediate pause
+          endpoint = `/api/admin/customers/${selectedCustomer.id}/pause-membership/schedule`
+          if (!pauseStartMonth || !pauseEndMonth) {
+            // Support open-ended: only start required
+            const isOpenEnded = !!(window as any).__pauseOpenEnded
+            if (!isOpenEnded) {
+              alert('Please select start and end months (YYYY-MM) or choose open-ended')
+              setMembershipActionLoading(false)
+              return
+            }
+          }
+          requestBody.pauseBehavior = pauseBehavior
+          requestBody.startMonth = pauseStartMonth
+          if ((window as any).__pauseOpenEnded) {
+            requestBody.openEnded = true
+          } else {
+            requestBody.endMonth = pauseEndMonth
+          }
+        } else {
+          requestBody.pauseBehavior = pauseBehavior
+        }
       } else if (membershipAction === 'cancel') {
         requestBody.cancelationType = cancelationType
         requestBody.prorate = true
@@ -544,10 +572,8 @@ function AdminDashboardContent() {
 
       if (result.success) {
         // ✅ INDUSTRY STANDARD: Optimistic update with immediate DB refresh
-
-        
         // Determine expected status based on action
-        const expectedStatus = membershipAction === 'pause' ? 'PAUSED' : 
+        const expectedStatus = membershipAction === 'pause' && pauseMode === 'immediate' ? 'PAUSED' : 
                               membershipAction === 'resume' ? 'ACTIVE' : 'CANCELLED'
         
         // Optimistically update the customer list immediately
@@ -575,12 +601,15 @@ function AdminDashboardContent() {
           await fetchAdminData()
         }, 500)
         
-        alert(`✅ ${membershipAction.toUpperCase()} successful: ${result.message}`)
+        alert(`✅ ${membershipAction === 'pause' && pauseMode === 'schedule' ? 'PAUSE SCHEDULED' : membershipAction.toUpperCase()} successful: ${result.message || ''}`)
         
         // Close modals and reset state
         setShowMembershipActionModal(false)
         setMembershipAction(null)
         setMembershipActionReason('')
+        setPauseMode('immediate')
+        setPauseStartMonth('')
+        setPauseEndMonth('')
         
         console.log(`✅ Membership ${membershipAction} successful for ${selectedCustomer.email}`)
       } else {
@@ -1168,7 +1197,14 @@ function AdminDashboardContent() {
                       <tr key={customer.id} className="border-b border-white/10 hover:bg-white/5 cursor-pointer" onClick={() => setSelectedCustomer(customer)}>
                         <td className="p-4 border-r border-white/5">
                           <div>
-                            <p className="font-medium text-white">{customer.name}</p>
+                            <p className="font-medium text-white flex items-center gap-2">
+                              {customer.name}
+                              {customer.pauseScheduleLabel ? (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-700/40 text-green-200 border border-green-600/40">
+                                  pause scheduled: {customer.pauseScheduleLabel}
+                                </span>
+                              ) : null}
+                            </p>
                             <div className="flex items-center gap-2 text-sm text-white/60">
                               <Mail className="h-3 w-3" />
                               <span>{customer.email}</span>
@@ -2128,6 +2164,24 @@ function AdminDashboardContent() {
 
             {membershipAction === 'pause' && (
               <div className="mb-4">
+                <Label className="text-white mb-2 block">Pause Mode</Label>
+                <div className="flex gap-2 mb-3">
+                  <Button
+                    variant={pauseMode === 'immediate' ? 'default' : 'outline'}
+                    className={pauseMode === 'immediate' ? '' : 'border-white/20 text-white'}
+                    onClick={() => setPauseMode('immediate')}
+                  >
+                    Pause now
+                  </Button>
+                  <Button
+                    variant={pauseMode === 'schedule' ? 'default' : 'outline'}
+                    className={pauseMode === 'schedule' ? '' : 'border-white/20 text-white'}
+                    onClick={() => setPauseMode('schedule')}
+                  >
+                    Schedule months
+                  </Button>
+                </div>
+
                 <Label htmlFor="pauseBehavior" className="text-white mb-2 block">Pause Behavior</Label>
                 <Select value={pauseBehavior} onValueChange={(value: any) => setPauseBehavior(value)}>
                   <SelectTrigger className="bg-white/5 border-white/20 text-white">
@@ -2142,6 +2196,47 @@ function AdminDashboardContent() {
                 <p className="text-xs text-white/60 mt-1">
                   Void: Cancels pending invoices. Draft: Keeps for manual collection. Uncollectible: Marks as bad debt.
                 </p>
+
+                {pauseMode === 'schedule' && (
+                  <div className="mt-4 grid gap-3">
+                    <div>
+                      <Label className="text-white mb-1 block">Start month (YYYY-MM)</Label>
+                      <input
+                        type="month"
+                        value={pauseStartMonth}
+                        onChange={(e) => setPauseStartMonth(e.target.value)}
+                        className="w-full p-2 bg-white/5 border border-white/20 rounded text-white"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="openEnded"
+                        type="checkbox"
+                        className="h-4 w-4"
+                        onChange={(e) => {
+                          const checked = e.target.checked
+                          if (checked) setPauseEndMonth('')
+                          ;(window as any).__pauseOpenEnded = checked
+                        }}
+                      />
+                      <Label htmlFor="openEnded" className="text-white">Pause indefinitely from start month</Label>
+                    </div>
+                    {!(window as any).__pauseOpenEnded && (
+                      <div>
+                        <Label className="text-white mb-1 block">End month (inclusive)</Label>
+                        <input
+                          type="month"
+                          value={pauseEndMonth}
+                          onChange={(e) => setPauseEndMonth(e.target.value)}
+                          className="w-full p-2 bg-white/5 border border-white/20 rounded text-white"
+                        />
+                      </div>
+                    )}
+                    <p className="text-xs text-white/60">
+                      The subscription will be paused for each selected month. For indefinite pauses, automation applies from your start month and keeps pausing every month until you manually resume.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
