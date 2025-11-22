@@ -66,20 +66,28 @@ function PaymentMethodsInner() {
           window.history.replaceState({}, '', url.toString())
         })
     } else if (clientSecretFromLink && (familySub || genericSub)) {
-      // Family prorate SCA: confirm PaymentIntent and then finalize
+      // Family prorate SCA: confirm PaymentIntent using parent's default PM if present; else fall back to collecting a new card
       (async () => {
         try {
-          const pk = (await fetch('/api/customers/payment-methods').then(r => r.json()).catch(() => ({})))?.publishableKey
+          const pmResp = await fetch('/api/customers/payment-methods').then(r => r.json()).catch(() => null as any)
+          const pk = pmResp?.publishableKey
+          const defaultPmId = pmResp?.currentPaymentMethod?.id as string | undefined
           const stripeJs = pk ? await loadStripe(pk) : null
           if (!stripeJs) return
-          const result = await stripeJs.confirmCardPayment(clientSecretFromLink)
-          if (result.error) {
-            setError(result.error.message || 'Payment confirmation failed')
-          } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-            await fetch('/api/confirm-payment', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ paymentIntentId: result.paymentIntent.id, subscriptionId: familySub || genericSub })
-            })
+          // If default payment method exists, confirm with it (will trigger 3DS if needed)
+          if (defaultPmId) {
+            const result = await stripeJs.confirmCardPayment(clientSecretFromLink, { payment_method: defaultPmId })
+            if (result.error) {
+              setError(result.error.message || 'Payment confirmation failed')
+            } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+              await fetch('/api/confirm-payment', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentIntentId: result.paymentIntent.id, subscriptionId: familySub || genericSub })
+              })
+            }
+          } else {
+            // No default PM: leave the page rendered so user can add card via SetupIntent form
+            setError('No saved card found. Please add a card to complete activation.')
           }
         } catch (e) {
           // swallow
