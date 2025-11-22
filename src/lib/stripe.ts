@@ -200,7 +200,8 @@ export class SubscriptionProcessor {
             nextBillingDate: startDate
           }
         })
-        // If parent already has a default payment method, immediately create the Stripe subscription
+        // Retrieve customer to determine if a default PM exists and ensure account alignment
+        let hasDefaultPm = false
         try {
           let cust: any
           try {
@@ -208,117 +209,125 @@ export class SubscriptionProcessor {
           } catch (e: any) {
             // If the stored customer belongs to the other account, retry there and switch accounts
             const otherAccount: StripeAccountKey = stripeAccount === 'SU' ? 'IQ' : 'SU'
+            const otherClient = getStripeClient(otherAccount)
+            const retry = await otherClient.customers.retrieve(customerIdToUse)
+            stripeAccount = otherAccount
+            customerIdToUse = (retry as any).id
+            cust = retry
             try {
-              const otherClient = getStripeClient(otherAccount)
-              const retry = await otherClient.customers.retrieve(customerIdToUse)
-              // Switch to the correct account for the rest of this flow
-              stripeAccount = otherAccount
-              customerIdToUse = (retry as any).id
-              cust = retry
-              // Reflect the account switch in the DB placeholder so future admin ops (pause/resume/cancel) use the right account
-              try {
-                await prisma.subscription.update({
-                  where: { id: dbSubscription.id },
-                  data: { stripeAccountKey: stripeAccount }
-                })
-              } catch {}
-            } catch {
-              throw e
-            }
+              await prisma.subscription.update({
+                where: { id: dbSubscription.id },
+                data: { stripeAccountKey: stripeAccount }
+              })
+            } catch {}
           }
-          const hasDefault = !('deleted' in cust) && !!(cust as any)?.invoice_settings?.default_payment_method
-          if (hasDefault) {
-            // Compute prorated amount for the remainder of this month
-            let proratedAmountPence = 0
-            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-            const daysRemaining = daysInMonth - now.getDate() + 1
-            const fullAmountPence = membershipDetails.monthlyPrice * 100
-            proratedAmountPence = Math.round(fullAmountPence * (daysRemaining / daysInMonth))
-
-            if (proratedAmountPence > 0) {
-              // Create prorated invoice item and invoice; attempt immediate charge using default PM
-              const stripe = getStripeClient(stripeAccount)
-              await stripe.invoiceItems.create({
-                customer: customerIdToUse,
-                amount: proratedAmountPence,
-                currency: 'gbp',
-                description: `Prorated membership (${now.toISOString().split('T')[0]} → ${startDate.toISOString().split('T')[0]})`,
-                metadata: {
-                  dbSubscriptionId: dbSubscription.id,
-                  reason: 'prorated_first_period',
-                  memberUserId: request.userId
-                }
-              }, { idempotencyKey: `prorate-item:${dbSubscription.id}:${startDate.toISOString().split('T')[0]}` })
-
-              const inv = await stripe.invoices.create({
-                customer: customerIdToUse,
-                auto_advance: true,
-                metadata: {
-                  dbSubscriptionId: dbSubscription.id,
-                  reason: 'prorated_first_period',
-                  memberUserId: request.userId
-                }
-              }, { idempotencyKey: `prorate-invoice:${dbSubscription.id}:${startDate.toISOString().split('T')[0]}` })
-
-              // Best-effort wait and check
-              await new Promise(r => setTimeout(r, 3000))
-              try {
-              const inv2 = inv.id ? await getStripeClient(stripeAccount).invoices.retrieve(inv.id) : inv
-                if ((inv2 as any).status === 'open' || (inv2 as any).amount_paid === 0) {
-                  console.warn('Prorated invoice not yet paid; activation will proceed but webhook may suspend if payment fails')
-                }
-              } catch {}
-            }
-
-            const priceIdImmediate = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name }, stripeAccount)
-            const trialEndTs = Math.floor(startDate.getTime() / 1000)
-            const childStripeSub = await getStripeClient(stripeAccount).subscriptions.create({
-              customer: customerIdToUse,
-              items: [{ price: priceIdImmediate }],
-              collection_method: 'charge_automatically',
-              trial_end: trialEndTs,
-              metadata: {
-                userId: request.userId,
-                membershipType: request.membershipType,
-                routedEntityId: routing.selectedEntityId,
-                  dbSubscriptionId: dbSubscription.id
-              }
-            }, { idempotencyKey: `admin-child-sub:${dbSubscription.id}:${trialEndTs}` })
-
-            await prisma.subscription.update({
-              where: { id: dbSubscription.id },
-              data: { stripeSubscriptionId: childStripeSub.id, status: 'ACTIVE' }
-            })
-
-            await prisma.subscriptionRouting.create({
-              data: {
-                subscriptionId: dbSubscription.id,
-                selectedEntityId: routing.selectedEntityId,
-                availableEntities: JSON.stringify(routing.availableEntities),
-                routingReason: routing.routingReason,
-                routingMethod: routing.routingMethod,
-                confidence: routing.confidence,
-                vatPositionSnapshot: JSON.stringify(routing.availableEntities),
-                thresholdDistance: routing.thresholdDistance,
-                decisionTimeMs: routing.decisionTimeMs
-              }
-            })
-
-            console.log('✅ Child subscription created using existing parent PM:', childStripeSub.id)
-
-            return {
-              subscription: dbSubscription,
-              clientSecret: undefined as any,
-              routing,
-              proratedAmount: 0,
-              nextBillingDate: startDate.toISOString().split('T')[0]
-            }
-          }
-        } catch (e) {
-          console.warn('Parent customer retrieval failed; falling back to SetupIntent path', e)
+          hasDefaultPm = !('deleted' in cust) && !!(cust as any)?.invoice_settings?.default_payment_method
+        } catch {
+          // If we cannot determine, assume no default PM to force on-session
+          hasDefaultPm = false
         }
 
-        // Else: Create SetupIntent to collect and save card
+        // Compute prorated amount for the remainder of this month
+        let proratedAmountPence = 0
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+        const daysRemaining = daysInMonth - now.getDate() + 1
+        const fullAmountPence = membershipDetails.monthlyPrice * 100
+        proratedAmountPence = Math.round(fullAmountPence * (daysRemaining / daysInMonth))
+
+        // If there is a non-zero prorate, ALWAYS collect on-session with a PaymentIntent (3DS if needed)
+        if (proratedAmountPence > 0) {
+          const pi = await getStripeClient(stripeAccount).paymentIntents.create({
+            amount: proratedAmountPence,
+            currency: 'gbp',
+            customer: customerIdToUse,
+            ...(process.env.CARD_ONLY_FOR_NEW_SIGNUPS === 'true'
+              ? { payment_method_types: ['card'] as any }
+              : { automatic_payment_methods: { enabled: true } }),
+            setup_future_usage: 'off_session',
+            metadata: {
+              userId: request.userId,
+              membershipType: request.membershipType,
+              routedEntityId: routing.selectedEntityId,
+              nextBillingDate: startDate.toISOString().split('T')[0],
+              reason: 'prorated_first_period',
+              dbSubscriptionId: dbSubscription.id,
+              familyActivation: 'true'
+            }
+          })
+
+          // Record routing snapshot (for diagnostics)
+          await prisma.subscriptionRouting.create({
+            data: {
+              subscriptionId: dbSubscription.id,
+              selectedEntityId: routing.selectedEntityId,
+              availableEntities: JSON.stringify(routing.availableEntities),
+              routingReason: routing.routingReason,
+              routingMethod: routing.routingMethod,
+              confidence: routing.confidence,
+              vatPositionSnapshot: JSON.stringify(routing.availableEntities),
+              thresholdDistance: routing.thresholdDistance,
+              decisionTimeMs: routing.decisionTimeMs
+            }
+          })
+
+          console.log('✅ Admin child activation using on-session PaymentIntent:', pi.id)
+          return {
+            subscription: dbSubscription,
+            clientSecret: pi.client_secret!,
+            routing,
+            proratedAmount: proratedAmountPence / 100,
+            nextBillingDate: startDate.toISOString().split('T')[0]
+          }
+        }
+
+        // If prorate is zero: create the subscription immediately when a default PM exists,
+        // otherwise create a SetupIntent to collect a card on-session.
+        if (hasDefaultPm) {
+          const priceIdImmediate = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name }, stripeAccount)
+          const trialEndTs = Math.floor(startDate.getTime() / 1000)
+          const childStripeSub = await getStripeClient(stripeAccount).subscriptions.create({
+            customer: customerIdToUse,
+            items: [{ price: priceIdImmediate }],
+            collection_method: 'charge_automatically',
+            trial_end: trialEndTs,
+            metadata: {
+              userId: request.userId,
+              membershipType: request.membershipType,
+              routedEntityId: routing.selectedEntityId,
+              dbSubscriptionId: dbSubscription.id
+            }
+          }, { idempotencyKey: `admin-child-sub:${dbSubscription.id}:${trialEndTs}` })
+
+          await prisma.subscription.update({
+            where: { id: dbSubscription.id },
+            data: { stripeSubscriptionId: childStripeSub.id, status: 'ACTIVE' }
+          })
+
+          await prisma.subscriptionRouting.create({
+            data: {
+              subscriptionId: dbSubscription.id,
+              selectedEntityId: routing.selectedEntityId,
+              availableEntities: JSON.stringify(routing.availableEntities),
+              routingReason: routing.routingReason,
+              routingMethod: routing.routingMethod,
+              confidence: routing.confidence,
+              vatPositionSnapshot: JSON.stringify(routing.availableEntities),
+              thresholdDistance: routing.thresholdDistance,
+              decisionTimeMs: routing.decisionTimeMs
+            }
+          })
+
+          console.log('✅ Child subscription created (zero prorate, default PM present):', childStripeSub.id)
+          return {
+            subscription: dbSubscription,
+            clientSecret: undefined as any,
+            routing,
+            proratedAmount: 0,
+            nextBillingDate: startDate.toISOString().split('T')[0]
+          }
+        }
+
+        // No default PM and zero prorate → collect card with SetupIntent (on-session)
         const setupIntent = await stripeClient.setupIntents.create({
           customer: customerIdToUse,
           usage: 'off_session',
@@ -346,7 +355,7 @@ export class SubscriptionProcessor {
           }
         })
 
-        console.log('✅ SetupIntent created for admin flow:', setupIntent.id)
+        console.log('✅ SetupIntent created for admin flow (zero prorate, no default PM):', setupIntent.id)
 
         return {
           subscription: dbSubscription,
