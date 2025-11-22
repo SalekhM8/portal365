@@ -41,7 +41,11 @@ function PaymentMethodsInner() {
     if (setupIntentId && redirectStatus === 'succeeded') {
       // finalize by informing backend to set default payment method
       finalizePaymentMethod(setupIntentId)
-        .then(() => fetchPaymentMethods())
+        .then(async () => {
+          await fetchPaymentMethods()
+          // After finalizing payment method and (if familySub) child activation, return to dashboard
+          router.push('/dashboard')
+        })
         .finally(() => {
           // optional: clean URL params
           const url = new URL(window.location.href)
@@ -80,10 +84,17 @@ function PaymentMethodsInner() {
             if (result.error) {
               setError(result.error.message || 'Payment confirmation failed')
             } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-              await fetch('/api/confirm-payment', {
+              const resp = await fetch('/api/confirm-payment', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ paymentIntentId: result.paymentIntent.id, subscriptionId: familySub || genericSub })
               })
+              if (resp.ok) {
+                // Navigate back to dashboard immediately after successful activation
+                router.push('/dashboard')
+                return
+              } else {
+                setError('Activation finalized but server confirmation failed. Please refresh.')
+              }
             }
           } else {
             // No default PM: leave the page rendered so user can add card via SetupIntent form
@@ -92,6 +103,7 @@ function PaymentMethodsInner() {
         } catch (e) {
           // swallow
         } finally {
+          setLoading(false)
           const url = new URL(window.location.href)
           url.searchParams.delete('client_secret')
           if (familySub) url.searchParams.delete('family_sub')
