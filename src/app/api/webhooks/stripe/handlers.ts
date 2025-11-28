@@ -358,6 +358,7 @@ export async function handlePaymentFailed(invoice: any, account?: StripeAccountK
       const manageUrl = `${baseUrl || ''}/dashboard/payment-methods`
       const userPhone = subscription.user?.phone || null
       const userEmail = subscription.user?.email || null
+      const hosted = (invoice as any)?.hosted_invoice_url || null
 
       if (attempt >= 3) {
         if (isAutoSuspendEnabled()) {
@@ -373,7 +374,8 @@ export async function handlePaymentFailed(invoice: any, account?: StripeAccountK
         await sendSuspendedEmail({ to: userEmail, manageUrl: manageUrl, invoiceId })
       } else {
         await sendDunningAttemptSms({ userPhone, attempt, totalAttempts: 3, nextRetryDateISO: nextAttemptAtISO, managePaymentUrl: manageUrl, invoiceId })
-        await sendDunningAttemptEmail({ to: userEmail, attempt, total: 3, nextRetryISO: nextAttemptAtISO, manageUrl: manageUrl, invoiceId })
+        // Include hosted invoice link (if present) so member can resolve without logging in
+        await sendDunningAttemptEmail({ to: userEmail, attempt, total: 3, nextRetryISO: nextAttemptAtISO, manageUrl: manageUrl, hostedUrl: hosted, invoiceId })
       }
     } catch (e) {
       console.warn('Dunning notification failed (non-fatal)', e)

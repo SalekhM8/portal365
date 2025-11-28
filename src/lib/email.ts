@@ -101,6 +101,7 @@ export async function sendDunningAttemptEmail(opts: {
   total: number
   nextRetryISO?: string | null
   manageUrl: string
+  hostedUrl?: string | null
   invoiceId: string
 }): Promise<void> {
   if (!isDunningEmailEnabled() || !opts.to) return
@@ -111,14 +112,16 @@ export async function sendDunningAttemptEmail(opts: {
   const next = opts.nextRetryISO ? new Date(opts.nextRetryISO).toLocaleDateString('en-GB') : 'tomorrow'
   const subject = `Payment failed (${opts.attempt}/${opts.total})`
   const text = `Hi,\n\nYour membership payment failed (attempt ${opts.attempt}/${opts.total}). We'll retry on ${next}.\n\nPlease update your card here: ${opts.manageUrl}\n\nIf you have questions, call 07825 443 999.\n\nThank you,\nAura MMA`
+  // Prefer hosted invoice link when available so the member can pay/3DS without logging in
+  const link = opts.hostedUrl || opts.manageUrl
   const html = renderHtml({
     title: 'Payment attempt failed',
     paragraphs: [
       `We couldn’t process your membership payment (attempt ${opts.attempt} of ${opts.total}).`,
-      `We’ll try again on ${next}. To avoid service interruption, please update your card details now.`,
+      `We’ll try again on ${next}. To avoid service interruption, please complete payment or update your card now.`,
     ],
-    ctaLabel: 'Update payment method',
-    ctaUrl: opts.manageUrl
+    ctaLabel: 'Resolve payment',
+    ctaUrl: link
   })
   await sendMail(opts.to, subject, text, html)
 }

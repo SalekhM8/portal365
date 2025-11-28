@@ -791,7 +791,11 @@ export async function GET() {
       const list = grouped[key]
       const hasConfirmed = list.some(i => i.status === 'CONFIRMED')
       if (hasConfirmed) continue
-      const candidate = list.find(i => i.status === 'FAILED' && i.failureReason !== 'DISMISSED_ADMIN')
+      const candidate = list.find(i => {
+        if (i.status !== 'FAILED') return false
+        const reason = i.failureReason || ''
+        return !['DISMISSED_ADMIN', 'VOIDED_INVOICE'].includes(reason)
+      })
       if (candidate) picked.push(candidate)
     }
 

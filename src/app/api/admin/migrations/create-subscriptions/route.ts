@@ -119,6 +119,22 @@ export async function POST(request: NextRequest) {
           where: { userId },
           orderBy: { createdAt: 'desc' }
         })
+        // Minimal membership profile (required non-null fields)
+        const isKid = String(it.planKey || '').includes('KIDS')
+        const access = isKid
+          ? { kids_classes: true, martialArts: false, womensClasses: false, personalTraining: false, wellness: false }
+          : {
+              martialArts: it.planKey !== 'WOMENS_CLASSES' && it.planKey !== 'WELLNESS_PACKAGE' && it.planKey !== 'PERSONAL_TRAINING',
+              womensClasses: it.planKey === 'WOMENS_CLASSES',
+              personalTraining: it.planKey === 'PERSONAL_TRAINING',
+              wellness: it.planKey === 'WELLNESS_PACKAGE',
+              kids_classes: false
+            }
+        const schedule =
+          isKid ? (String(it.planKey).includes('WEEKEND') ? 'KIDS_WEEKEND' : 'KIDS_WEEKLY')
+                : (String(it.planKey).includes('WEEKEND') ? 'WEEKEND_ONLY' : 'FULL_WEEK')
+        const ageCategory = isKid ? 'UNDER_14' : 'ADULT'
+
         if (!existingMembership) {
           await prisma.membership.create({
             data: {
@@ -126,7 +142,12 @@ export async function POST(request: NextRequest) {
               membershipType: it.planKey,
               monthlyPrice: plan.monthlyPrice,
               status: 'ACTIVE',
-              startDate: new Date()
+              startDate: new Date(),
+              billingDay: 1,
+              nextBillingDate: new Date(trialEnd * 1000),
+              accessPermissions: JSON.stringify(access),
+              scheduleAccess: schedule,
+              ageCategory
             } as any
           })
         } else {
@@ -135,7 +156,13 @@ export async function POST(request: NextRequest) {
             data: {
               membershipType: it.planKey,
               monthlyPrice: plan.monthlyPrice,
-              status: 'ACTIVE'
+              status: 'ACTIVE',
+              billingDay: 1,
+              nextBillingDate: new Date(trialEnd * 1000),
+              // Keep existing values if already set; otherwise apply defaults
+              accessPermissions: existingMembership.accessPermissions ? undefined : JSON.stringify(access),
+              scheduleAccess: existingMembership.scheduleAccess ? undefined : schedule,
+              ageCategory: (existingMembership as any).ageCategory ? undefined : ageCategory
             } as any
           })
         }

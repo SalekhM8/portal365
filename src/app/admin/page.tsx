@@ -463,6 +463,38 @@ function AdminDashboardContent() {
     }
   }
 
+  const handleVoidTodoPayment = async (payment: any) => {
+    try {
+      if (payment?.invoiceId) {
+        const res = await fetch('/api/admin/payments/void-open-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoiceId: payment.invoiceId, customerId: payment.customerId })
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(json?.error || 'Failed to void invoice in Stripe')
+        }
+      } else if ((payment as any)?.groupKey && String((payment as any).groupKey).startsWith('SUBMON:')) {
+        const parts = String((payment as any).groupKey).split(':') // SUBMON:sub_XXX:YYYY-MM
+        const subId = parts[1]
+        const yearMonth = parts[2]
+        await fetch('/api/admin/payments/delete-by-sub-month', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subId, yearMonth })
+        })
+      } else {
+        await fetch(`/api/admin/payments/${payment.id}/dismiss`, { method: 'POST' })
+      }
+    } catch (error: any) {
+      alert(error?.message || 'Unable to void payment')
+      throw error
+    } finally {
+      await fetchAdminData()
+    }
+  }
+
   const handlePasswordReset = async (customerId: string) => {
     if (!confirm('Are you sure you want to reset this customer\'s password? They will need to use the new temporary password to log in.')) {
       return
@@ -891,34 +923,11 @@ function AdminDashboardContent() {
                                       <DropdownMenuItem onClick={() => handleRetryLatestInvoice(p.customerId)}>Retry</DropdownMenuItem>
                                     )}
                                     <DropdownMenuItem onClick={() => openCustomerModal(p.customerId)}>Contact</DropdownMenuItem>
-                                    {p.status === 'INCOMPLETE_SIGNUP' ? (
-                                      <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Void</DropdownMenuItem>
-                                    ) : (
-                                      <DropdownMenuItem onClick={async () => {
-                                        try {
-                                          if ((p as any).invoiceId) {
-                                            await fetch('/api/admin/payments/delete-by-invoice', {
-                                              method: 'POST',
-                                              headers: { 'Content-Type': 'application/json' },
-                                              body: JSON.stringify({ invoiceId: (p as any).invoiceId })
-                                            })
-                                          } else if ((p as any).groupKey && String((p as any).groupKey).startsWith('SUBMON:')) {
-                                            const parts = String((p as any).groupKey).split(':') // SUBMON:sub_XXX:YYYY-MM
-                                            const subId = parts[1]
-                                            const yearMonth = parts[2]
-                                            await fetch('/api/admin/payments/delete-by-sub-month', {
-                                              method: 'POST',
-                                              headers: { 'Content-Type': 'application/json' },
-                                              body: JSON.stringify({ subId, yearMonth })
-                                            })
-                                          } else {
-                                            await fetch(`/api/admin/payments/${p.id}/dismiss`, { method: 'POST' })
-                                          }
-                                        } finally {
-                                          await fetchAdminData()
-                                        }
-                                      }}>Void</DropdownMenuItem>
-                                    )}
+                                {p.status === 'INCOMPLETE_SIGNUP' ? (
+                                  <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Void</DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem onClick={async () => { await handleVoidTodoPayment(p) }}>Void</DropdownMenuItem>
+                                )}
                                     {p.status !== 'INCOMPLETE_SIGNUP' && (
                                       <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
                                     )}
@@ -1012,30 +1021,7 @@ function AdminDashboardContent() {
                                 {p.status === 'INCOMPLETE_SIGNUP' ? (
                                   <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Void</DropdownMenuItem>
                                 ) : (
-                                  <DropdownMenuItem onClick={async () => {
-                                    try {
-                                      if ((p as any).invoiceId) {
-                                        await fetch('/api/admin/payments/delete-by-invoice', {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ invoiceId: (p as any).invoiceId })
-                                        })
-                                      } else if ((p as any).groupKey && String((p as any).groupKey).startsWith('SUBMON:')) {
-                                        const parts = String((p as any).groupKey).split(':') // SUBMON:sub_XXX:YYYY-MM
-                                        const subId = parts[1]
-                                        const yearMonth = parts[2]
-                                        await fetch('/api/admin/payments/delete-by-sub-month', {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ subId, yearMonth })
-                                        })
-                                      } else {
-                                        await fetch(`/api/admin/payments/${p.id}/dismiss`, { method: 'POST' })
-                                      }
-                                    } finally {
-                                      await fetchAdminData()
-                                    }
-                                  }}>Void</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={async () => { await handleVoidTodoPayment(p) }}>Void</DropdownMenuItem>
                                 )}
                                 {p.status !== 'INCOMPLETE_SIGNUP' && (
                                   <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
