@@ -4,6 +4,21 @@ import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActi
 import { isAutoSuspendEnabled, isPauseCollectionEnabled } from '@/lib/flags'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
+function resolveNotificationEmail(user?: { email?: string | null; communicationPrefs?: string | null }): string | null {
+  if (!user) return null
+  const email = user.email || null
+  if (!email) return null
+  const isPlaceholder = /(@member\.local|@local)$/i.test(email)
+  if (!isPlaceholder) return email
+  if (!user.communicationPrefs) return email
+  try {
+    const prefs = JSON.parse(user.communicationPrefs)
+    return prefs?.guardianEmail || email
+  } catch {
+    return email
+  }
+}
+
 export async function handlePaymentSucceeded(invoice: any, account?: StripeAccountKey) {
   const stripe = getStripeClient(account || 'SU')
   const invoiceId = invoice.id
@@ -279,7 +294,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     // Dunning success notifications if user was previously suspended
     try {
       const userPhone = subscription.user?.phone || null
-      const userEmail = subscription.user?.email || null
+      const userEmail = resolveNotificationEmail(subscription.user)
       await sendSuccessSms({ userPhone })
       await sendSuccessEmail({ to: userEmail })
       try { await prisma.systemSetting.delete({ where: { key: `dunning:suspended:${subscription.id}` } }) } catch {}
@@ -458,7 +473,7 @@ export async function handlePaymentActionRequired(invoice: any, account?: Stripe
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.FRONTEND_BASE_URL || process.env.NEXTAUTH_URL || ''
     const manageUrl = `${baseUrl || ''}/dashboard/payment-methods`
     const userPhone = subscription?.user?.phone || null
-    const userEmail = subscription?.user?.email || null
+    const userEmail = resolveNotificationEmail(subscription?.user)
     const hosted = (invoice as any)?.hosted_invoice_url || null
     await sendActionRequiredSms({ userPhone, hostedInvoiceUrl: hosted, managePaymentUrl: manageUrl, invoiceId, attempt, totalAttempts: 3 })
     await sendActionRequiredEmail({ to: userEmail, hostedUrl: hosted, manageUrl, invoiceId, attempt })

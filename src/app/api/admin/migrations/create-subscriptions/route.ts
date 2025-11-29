@@ -5,6 +5,24 @@ import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
 import { MEMBERSHIP_PLANS, type MembershipKey } from '@/config/memberships'
 
+function shouldStoreGuardian(email?: string | null): boolean {
+  if (!email) return false
+  return /(@member\.local|@local)$/i.test(email)
+}
+
+async function upsertGuardianEmail(userId: string, guardianEmail?: string | null) {
+  if (!guardianEmail) return
+  const existing = await prisma.user.findUnique({ where: { id: userId }, select: { communicationPrefs: true } })
+  try {
+    const next = existing?.communicationPrefs ? JSON.parse(existing.communicationPrefs) : {}
+    if (next.guardianEmail === guardianEmail) return
+    next.guardianEmail = guardianEmail
+    await prisma.user.update({ where: { id: userId }, data: { communicationPrefs: JSON.stringify(next) } })
+  } catch {
+    await prisma.user.update({ where: { id: userId }, data: { communicationPrefs: JSON.stringify({ guardianEmail }) } })
+  }
+}
+
 // Create Stripe subscriptions in IQ for migrated customers and write shadow users/subscriptions in DB.
 // POST body: { items: Array<{ stripeCustomerId: string; email: string | null; planKey: MembershipKey; trialEndISO: string; suggestedPmId?: string | null }> }
 export async function POST(request: NextRequest) {
@@ -72,10 +90,12 @@ export async function POST(request: NextRequest) {
 
         // Find or create shadow user by email
         let userId: string
+        let userEmail = it.email || null
         if (it.email) {
           const existing = await prisma.user.findUnique({ where: { email: it.email } })
-          if (existing) userId = existing.id
-          else {
+          if (existing) {
+            userId = existing.id
+          } else {
             const u = await prisma.user.create({ data: { email: it.email, firstName: it.email.split('@')[0], lastName: '', role: 'CUSTOMER', status: 'ACTIVE' } })
             userId = u.id
           }
@@ -83,6 +103,11 @@ export async function POST(request: NextRequest) {
           // Fallback: create placeholder user
           const u = await prisma.user.create({ data: { email: `migrated_${Date.now()}_${Math.random().toString(36).slice(2)}@local`, firstName: 'Member', lastName: 'Migrated', role: 'CUSTOMER', status: 'ACTIVE' } })
           userId = u.id
+          userEmail = u.email
+        }
+
+        if (shouldStoreGuardian(userEmail) && it.guardianEmail) {
+          await upsertGuardianEmail(userId, it.guardianEmail)
         }
 
         // Write subscription in Portal365 DB (upsert by stripeSubscriptionId)

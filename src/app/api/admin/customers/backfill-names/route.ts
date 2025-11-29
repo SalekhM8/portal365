@@ -6,7 +6,21 @@ import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 type Item = {
   email?: string | null
-  customerId: string
+  customerId?: string
+  firstName?: string | null
+  lastName?: string | null
+  guardianEmail?: string | null
+}
+
+function mergeGuardianPrefs(existing: string | null | undefined, guardianEmail?: string | null): string | null | undefined {
+  if (!guardianEmail) return existing
+  try {
+    const parsed = existing ? JSON.parse(existing) : {}
+    if (parsed.guardianEmail === guardianEmail) return existing
+    return JSON.stringify({ ...parsed, guardianEmail })
+  } catch {
+    return JSON.stringify({ guardianEmail })
+  }
 }
 
 function splitName(full?: string | null): { firstName: string; lastName: string } {
@@ -42,12 +56,16 @@ export async function POST(request: NextRequest) {
 
     for (const it of items) {
       try {
-        const cust = await stripe.customers.retrieve(it.customerId)
-        if ('deleted' in cust) {
-          results.push({ customerId: it.customerId, email: it.email as any, ok: false, error: 'customer_deleted' })
+        if (!it.customerId && !it.email) {
+          results.push({ customerId: it.customerId || 'unknown', email: it.email || null, ok: false, error: 'missing_identifiers' })
           continue
         }
-        const { firstName, lastName } = splitName((cust as any).name || null)
+        let firstName: string | undefined
+        let lastName: string | undefined
+        if (it.firstName || it.lastName) {
+          firstName = (it.firstName || '').trim() || undefined
+          lastName = (it.lastName || '').trim() || undefined
+        }
 
         // Resolve the local user: prefer email if provided; else via subscription by stripeCustomerId
         let userId: string | null = null
@@ -56,6 +74,10 @@ export async function POST(request: NextRequest) {
           if (u) userId = u.id
         }
         if (!userId) {
+          if (!it.customerId) {
+            results.push({ customerId: it.customerId || 'unknown', email: it.email || null, ok: false, error: 'user_not_found' })
+            continue
+          }
           const sub = await prisma.subscription.findFirst({
             where: { stripeCustomerId: it.customerId },
             orderBy: { updatedAt: 'desc' },
@@ -64,18 +86,49 @@ export async function POST(request: NextRequest) {
           if (sub?.userId) userId = sub.userId
         }
         if (!userId) {
-          results.push({ customerId: it.customerId, email: (cust as any).email || it.email || null, ok: false, error: 'user_not_found' })
+          results.push({ customerId: it.customerId || 'unknown', email: it.email || null, ok: false, error: 'user_not_found' })
           continue
         }
 
+        const existingUser = await prisma.user.findUnique({ where: { id: userId }, select: { communicationPrefs: true, email: true } })
+
+        // Fetch Stripe customer only if we still need name metadata
+        if ((!firstName || !lastName) && it.customerId) {
+          const cust = await stripe.customers.retrieve(it.customerId)
+          if ('deleted' in cust) {
+            results.push({ customerId: it.customerId, email: it.email as any, ok: false, error: 'customer_deleted' })
+            continue
+          }
+          const derived = splitName((cust as any).name || (cust as any).email || existingUser?.email || null)
+          firstName = firstName || derived.firstName
+          lastName = lastName || derived.lastName
+        } else {
+          const fallback = splitName(existingUser?.email || it.email || null)
+          firstName = firstName || fallback.firstName
+          lastName = lastName || fallback.lastName
+        }
+
+        const guardianPrefs = mergeGuardianPrefs(existingUser?.communicationPrefs, it.guardianEmail)
+
         await prisma.user.update({
           where: { id: userId },
-          data: { firstName, lastName }
+          data: {
+            firstName,
+            lastName,
+            communicationPrefs: guardianPrefs
+          }
         })
 
-        results.push({ customerId: it.customerId, email: (cust as any).email || it.email || null, ok: true, userId, firstName, lastName })
+        results.push({
+          customerId: it.customerId || 'unknown',
+          email: it.email || existingUser?.email || null,
+          ok: true,
+          userId,
+          firstName,
+          lastName
+        })
       } catch (e: any) {
-        results.push({ customerId: it.customerId, email: it.email || null, ok: false, error: e?.message || 'failed' })
+        results.push({ customerId: it.customerId || 'unknown', email: it.email || null, ok: false, error: e?.message || 'failed' })
       }
     }
 

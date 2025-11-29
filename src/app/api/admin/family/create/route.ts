@@ -51,7 +51,16 @@ export async function POST(request: NextRequest) {
 
     // Create child user (shadow) with synthetic email (no login)
     const syntheticEmail = `${childFirstName.toLowerCase()}.${Date.now()}+child@member.local`
-    const child = await prisma.user.create({ data: { email: syntheticEmail, firstName: childFirstName, lastName: childLastName || '', role: 'CUSTOMER', status: 'ACTIVE' } })
+    const child = await prisma.user.create({
+      data: {
+        email: syntheticEmail,
+        firstName: childFirstName,
+        lastName: childLastName || '',
+        role: 'CUSTOMER',
+        status: 'ACTIVE',
+        communicationPrefs: JSON.stringify({ guardianEmail: parentEmail })
+      }
+    })
 
     // Create membership row
     const next1st = firstOfNextMonthUTC()
