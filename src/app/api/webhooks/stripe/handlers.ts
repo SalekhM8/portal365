@@ -168,10 +168,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     if (existingInvoice) {
       // Invoice already recorded – ensure a CONFIRMED payment exists for this invoice id regardless of user attribution
       const existingPaymentAnyUser = await prisma.payment.findFirst({
-        where: {
-          status: 'CONFIRMED',
-          description: { contains: `[inv:${invoice.id}]` }
-        }
+        where: { stripeInvoiceId: invoice.id }
       })
       if (existingPaymentAnyUser) {
         // Optional attribution correction: if metadata has memberUserId and differs, reattribute
@@ -192,7 +189,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
         : 'Monthly membership payment'
       const taggedBackfill = `${paymentDescriptionBackfill} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForBackfill}] [sub:${subscription.id}]`
       // Final guard before creating
-      const dupGuard = await prisma.payment.findFirst({ where: { status: 'CONFIRMED', description: { contains: `[inv:${invoice.id}]` } } })
+      const dupGuard = await prisma.payment.findFirst({ where: { stripeInvoiceId: invoice.id } })
       if (dupGuard) {
         console.log(`ℹ️ [${operationId}] Detected duplicate just before backfill, skipping`)
         return
@@ -205,7 +202,8 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
           status: 'CONFIRMED',
           description: taggedBackfill,
           routedEntityId: subscription.routedEntityId,
-          processedAt: new Date()
+          processedAt: new Date(),
+          stripeInvoiceId: invoice.id
         }
       })
       console.log(`✅ [${operationId}] Backfilled missing payment ${created.id} for existing invoice ${existingInvoice.id}`)
@@ -263,7 +261,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
 
     // Idempotency guard (invoice-scoped) before creating normal payment
     const alreadyByInvoice = await prisma.payment.findFirst({
-      where: { status: 'CONFIRMED', description: { contains: `[inv:${invoice.id}]` } }
+      where: { stripeInvoiceId: invoice.id }
     })
     if (alreadyByInvoice) {
       // Optional attribution correction
@@ -285,7 +283,8 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
         status: 'CONFIRMED', 
         description: taggedDescription, 
         routedEntityId: subscription.routedEntityId, 
-        processedAt: new Date()
+        processedAt: new Date(),
+        stripeInvoiceId: invoice.id
       } 
     })
     
@@ -438,7 +437,8 @@ export async function handlePaymentFailed(invoice: any, account?: StripeAccountK
         description: failedDescription, 
         routedEntityId: subscription.routedEntityId, 
         failureReason, 
-        processedAt: new Date() 
+        processedAt: new Date(),
+        stripeInvoiceId: invoice.id 
       } 
     })
     

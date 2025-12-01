@@ -75,10 +75,16 @@ export async function POST(request: NextRequest) {
     const client = getStripeClient(stripeAccount)
     const voided = await client.invoices.voidInvoice(invoiceId)
 
-    // Mark related payment rows as voided (keeps audit trail but hides from To-Do)
+    // Mark related payment rows as voided (handles both new + legacy rows)
     const paymentUpdates = await prisma.payment.updateMany({
-      where: { description: { contains: `[inv:${invoiceId}]` } },
-      data: { failureReason: 'VOIDED_INVOICE' }
+      where: {
+        status: 'FAILED',
+        OR: [
+          { stripeInvoiceId: invoiceId },
+          { description: { contains: `[inv:${invoiceId}]` } }
+        ]
+      },
+      data: { status: 'VOIDED', failureReason: 'VOIDED_INVOICE' }
     })
 
     // Update local invoice record if present

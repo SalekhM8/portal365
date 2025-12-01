@@ -175,7 +175,8 @@ export async function POST(request: NextRequest) {
               status: 'CONFIRMED', 
               description: paymentDescription, 
               routedEntityId: subscription.routedEntityId, 
-              processedAt: new Date(invoice.status_transitions?.paid_at ? invoice.status_transitions.paid_at * 1000 : Date.now())
+              processedAt: new Date(invoice.status_transitions?.paid_at ? invoice.status_transitions.paid_at * 1000 : Date.now()),
+              stripeInvoiceId: invoice.id
             } 
           })
 

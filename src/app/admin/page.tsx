@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
@@ -463,35 +464,71 @@ function AdminDashboardContent() {
     }
   }
 
-  const handleVoidTodoPayment = async (payment: any) => {
+  const [resolveInvoiceTarget, setResolveInvoiceTarget] = useState<any | null>(null)
+  const [resolveLoading, setResolveLoading] = useState(false)
+  const [resolveLoadingAction, setResolveLoadingAction] = useState<'mark' | 'void' | null>(null)
+
+  const openResolveInvoice = (payment: any) => {
+    if (!payment?.invoiceId) {
+      alert('No Stripe invoice attached to this payment.')
+      return
+    }
+    setResolveInvoiceTarget(payment)
+  }
+
+  const closeResolveDialog = (open: boolean) => {
+    if (open) return
+    if (resolveLoading) return
+    setResolveInvoiceTarget(null)
+  }
+
+  const handleMarkInvoicePaid = async () => {
+    if (!resolveInvoiceTarget) return
+    setResolveLoading(true)
+    setResolveLoadingAction('mark')
     try {
-      if (payment?.invoiceId) {
-        const res = await fetch('/api/admin/payments/void-open-invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ invoiceId: payment.invoiceId, customerId: payment.customerId })
-        })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          throw new Error(json?.error || 'Failed to void invoice in Stripe')
-        }
-      } else if ((payment as any)?.groupKey && String((payment as any).groupKey).startsWith('SUBMON:')) {
-        const parts = String((payment as any).groupKey).split(':') // SUBMON:sub_XXX:YYYY-MM
-        const subId = parts[1]
-        const yearMonth = parts[2]
-        await fetch('/api/admin/payments/delete-by-sub-month', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ subId, yearMonth })
-        })
-      } else {
-        await fetch(`/api/admin/payments/${payment.id}/dismiss`, { method: 'POST' })
+      const res = await fetch('/api/admin/payments/mark-invoice-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId: resolveInvoiceTarget.invoiceId })
+      })
+      const json = await res.json()
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Failed to mark invoice paid')
       }
-    } catch (error: any) {
-      alert(error?.message || 'Unable to void payment')
-      throw error
-    } finally {
+      alert('Invoice marked as paid outside Stripe.')
+      setResolveInvoiceTarget(null)
       await fetchAdminData()
+    } catch (error: any) {
+      alert(error?.message || 'Unable to mark invoice paid')
+    } finally {
+      setResolveLoading(false)
+      setResolveLoadingAction(null)
+    }
+  }
+
+  const handleVoidInvoice = async () => {
+    if (!resolveInvoiceTarget) return
+    setResolveLoading(true)
+    setResolveLoadingAction('void')
+    try {
+      const res = await fetch('/api/admin/payments/void-open-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId: resolveInvoiceTarget.invoiceId, customerId: resolveInvoiceTarget.customerId })
+      })
+      const json = await res.json()
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || 'Failed to void invoice in Stripe')
+      }
+      alert('Invoice voided and retries stopped.')
+      setResolveInvoiceTarget(null)
+      await fetchAdminData()
+    } catch (error: any) {
+      alert(error?.message || 'Unable to void invoice')
+    } finally {
+      setResolveLoading(false)
+      setResolveLoadingAction(null)
     }
   }
 
@@ -926,7 +963,7 @@ function AdminDashboardContent() {
                                 {p.status === 'INCOMPLETE_SIGNUP' ? (
                                   <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Void</DropdownMenuItem>
                                 ) : (
-                                  <DropdownMenuItem onClick={async () => { await handleVoidTodoPayment(p) }}>Void</DropdownMenuItem>
+  <DropdownMenuItem onClick={() => openResolveInvoice(p)}>Resolve…</DropdownMenuItem>
                                 )}
                                     {p.status !== 'INCOMPLETE_SIGNUP' && (
                                       <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
@@ -1021,7 +1058,7 @@ function AdminDashboardContent() {
                                 {p.status === 'INCOMPLETE_SIGNUP' ? (
                                   <DropdownMenuItem onClick={async () => { await handleRemovePendingSignup(p.customerId) }}>Void</DropdownMenuItem>
                                 ) : (
-                                  <DropdownMenuItem onClick={async () => { await handleVoidTodoPayment(p) }}>Void</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => openResolveInvoice(p)}>Resolve</DropdownMenuItem>
                                 )}
                                 {p.status !== 'INCOMPLETE_SIGNUP' && (
                                   <DropdownMenuItem onClick={() => openCancelFromTodo(p.customerId)} variant="destructive">Cancel Membership</DropdownMenuItem>
@@ -2412,6 +2449,45 @@ function AdminDashboardContent() {
           </div>
         </div>
       )}
+
+  <Dialog open={!!resolveInvoiceTarget} onOpenChange={closeResolveDialog}>
+    <DialogContent className="bg-black border-white/20 text-white max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Resolve failed invoice</DialogTitle>
+        <DialogDescription className="text-white/70">
+          {resolveInvoiceTarget ? (
+            <>
+              {resolveInvoiceTarget.customerName} • £{resolveInvoiceTarget.amount} • {resolveInvoiceTarget.membershipType}
+              <br />
+              Invoice ID: {resolveInvoiceTarget.invoiceId}
+            </>
+          ) : (
+            'Choose how you want to resolve this invoice.'
+          )}
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4">
+        <div className="border border-white/10 rounded-lg p-4 bg-white/5">
+          <p className="font-semibold text-white">Mark Paid</p>
+          <p className="text-sm text-white/70">
+            You collected payment outside Stripe (cash/bank transfer). This marks the invoice paid so the member stays active and future renewals continue.
+          </p>
+          <Button className="mt-3 w-full" disabled={resolveLoading} onClick={handleMarkInvoicePaid}>
+            {resolveLoadingAction === 'mark' ? 'Processing…' : 'Mark as Paid'}
+          </Button>
+        </div>
+        <div className="border border-white/10 rounded-lg p-4 bg-white/5">
+          <p className="font-semibold text-white">Void / Forgive</p>
+          <p className="text-sm text-white/70">
+            Stop Stripe retries for this invoice (member not paying / admin error). The subscription remains active, so the next month will still bill unless you cancel it.
+          </p>
+          <Button variant="outline" className="mt-3 w-full border-white/30 text-red-300 hover:bg-white/10" disabled={resolveLoading} onClick={handleVoidInvoice}>
+            {resolveLoadingAction === 'void' ? 'Processing…' : 'Void Invoice'}
+          </Button>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
     </div>
   )
 } 

@@ -92,7 +92,8 @@ export async function POST(request: NextRequest) {
                     status: 'CONFIRMED',
                     description: `Monthly membership payment (imported) [inv:${inv.id}]`,
                     routedEntityId: sub.routedEntityId,
-                    processedAt: paidAt
+                processedAt: paidAt,
+                stripeInvoiceId: inv.id
                   }
                 })
               }
@@ -142,7 +143,8 @@ export async function POST(request: NextRequest) {
                 status: 'CONFIRMED',
                 description: `Monthly membership payment (imported) [inv:${inv.id}]`,
                 routedEntityId: sub.routedEntityId,
-                processedAt: paidAtCreate
+                processedAt: paidAtCreate,
+                stripeInvoiceId: inv.id
               }
             })
           }
@@ -196,8 +198,9 @@ export async function POST(request: NextRequest) {
                         currency: (inv.currency || 'gbp').toUpperCase(),
                         status: 'CONFIRMED',
                         description: `Monthly membership payment (imported) [inv:${inv.id}]`,
-                        routedEntityId: targetSub?.routedEntityId || subs[0]?.routedEntityId,
-                        processedAt: paidAt
+                    routedEntityId: targetSub?.routedEntityId || subs[0]?.routedEntityId,
+                    processedAt: paidAt,
+                    stripeInvoiceId: inv.id
                       }
                     })
                   }
@@ -244,7 +247,8 @@ export async function POST(request: NextRequest) {
                     status: 'CONFIRMED',
                     description: `Monthly membership payment (imported) [inv:${inv.id}]`,
                     routedEntityId: targetSub.routedEntityId,
-                    processedAt: paidAt2
+                    processedAt: paidAt2,
+                    stripeInvoiceId: inv.id
                   }
                 })
               }

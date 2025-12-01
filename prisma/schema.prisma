@@ -163,6 +163,7 @@ model Payment {
   amount      Decimal @db.Decimal(10, 2)
   currency    String  @default("GBP")
   description String
+  stripeInvoiceId String? @unique
 
   // GoCardless integration
   goCardlessPaymentId String? @unique
