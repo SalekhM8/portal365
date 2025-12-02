@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,7 +42,8 @@ import {
   AlertCircle,
   LogOut,
   X,
-  Key
+  Key,
+  Loader2
 } from 'lucide-react'
 import { loadStripe } from '@stripe/stripe-js'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
@@ -168,6 +169,9 @@ function AdminDashboardContent() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [revenueMonths, setRevenueMonths] = useState<Array<{ month: string; totalNet: number; charges: number; refunds: number }>>([])
   const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'ALL'>('SU')
+  const [revenueLoading, setRevenueLoading] = useState(false)
+  const [revenueUpdatedAt, setRevenueUpdatedAt] = useState<string | null>(null)
+  const revenueAbortRef = useRef<AbortController | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -273,29 +277,52 @@ function AdminDashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  // Fetch monthly revenue when Analytics tab is active
-  async function loadRevenueMonths() {
+  const loadRevenueMonths = useCallback(async (account: 'SU' | 'IQ' | 'ALL') => {
     try {
-      const res = await fetch(`/api/admin/analytics/revenue?months=12&account=${revenueAccount}`, { cache: 'no-store' })
+      revenueAbortRef.current?.abort()
+      const controller = new AbortController()
+      revenueAbortRef.current = controller
+      setRevenueLoading(true)
+      const res = await fetch(`/api/admin/analytics/revenue?months=12&account=${account}`, {
+        cache: 'no-store',
+        signal: controller.signal
+      })
       const j = await res.json()
-      if (j?.ok && Array.isArray(j.months)) setRevenueMonths(j.months)
-    } catch {}
-  }
-
-  // Load once on mount so the section is populated immediately
-  useEffect(() => {
-    loadRevenueMonths()
+      if (j?.ok && Array.isArray(j.months)) {
+        setRevenueMonths(j.months)
+        setRevenueUpdatedAt(j.updatedAt ?? null)
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return
+      console.error('Failed to load revenue analytics', err)
+    } finally {
+      setRevenueLoading(false)
+    }
   }, [])
 
-  // Also reload when the Analytics tab is focused
   useEffect(() => {
-    if (activeTab === 'analytics') loadRevenueMonths()
-  }, [activeTab])
+    if (activeTab === 'analytics') {
+      loadRevenueMonths(revenueAccount)
+    }
+  }, [activeTab, revenueAccount, loadRevenueMonths])
 
-  // reload when switching SU/IQ/ALL
   useEffect(() => {
-    if (activeTab === 'analytics') loadRevenueMonths()
-  }, [revenueAccount])
+    return () => revenueAbortRef.current?.abort()
+  }, [])
+
+  const formatMoney = (value: number) =>
+    `£${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  const formatUpdatedAgo = (iso: string | null) => {
+    if (!iso) return null
+    const diff = Date.now() - new Date(iso).getTime()
+    if (diff < 60000) return 'just now'
+    if (diff < 3600000) return `${Math.round(diff / 60000)} min ago`
+    if (diff < 86400000) return `${Math.round(diff / 3600000)} hr ago`
+    return new Date(iso).toLocaleDateString()
+  }
+
+  const revenueSyncLabel = formatUpdatedAgo(revenueUpdatedAt)
 
   const fetchAdminData = async () => {
     try {
@@ -1592,51 +1619,73 @@ function AdminDashboardContent() {
           </div>
 
       {/* Monthly Revenue (Stripe Net) */}
-      <Card className="mt-6">
+      <Card className="mt-6 border border-white/15 bg-white/[0.03] backdrop-blur-xl shadow-2xl">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <CardTitle>Monthly Revenue (Stripe Net)</CardTitle>
-              <CardDescription>Exact Stripe Net volume per month (succeeded charges minus refunds)</CardDescription>
+              <CardDescription>Exact Stripe net volume per month (succeeded charges minus refunds)</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-white/70">Account</span>
-              <select className="bg-transparent border border-white/20 rounded px-2 py-1 text-sm"
-                value={revenueAccount} onChange={(e)=>setRevenueAccount(e.target.value as any)}>
-                <option value="SU">SU</option>
-                <option value="IQ">IQ</option>
-                <option value="ALL">All</option>
-              </select>
+            <div className="flex flex-col items-end gap-1 text-xs text-white/70">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-white/70">Account</span>
+                <select
+                  className="bg-black/40 border border-white/20 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/40"
+                  value={revenueAccount}
+                  onChange={(e) => setRevenueAccount(e.target.value as any)}
+                >
+                  <option value="SU">SU</option>
+                  <option value="IQ">IQ</option>
+                  <option value="ALL">All</option>
+                </select>
+              </div>
+              <div className="text-[11px] text-white/60 min-h-[16px] flex items-center gap-1">
+                {revenueLoading ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Refreshing…
+                  </>
+                ) : revenueSyncLabel ? (
+                  <>Synced {revenueSyncLabel}</>
+                ) : (
+                  <>Awaiting sync…</>
+                )}
+              </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          {revenueMonths.length === 0 ? (
-            <div className="text-white/70">No data yet.</div>
+        <CardContent className="p-0">
+          {revenueLoading && revenueMonths.length === 0 ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div key={idx} className="flex items-center justify-between gap-4 animate-pulse">
+                  <span className="h-4 w-20 rounded bg-white/10" />
+                  <span className="h-4 w-24 rounded bg-white/10" />
+                  <span className="h-4 w-24 rounded bg-white/10" />
+                  <span className="h-4 w-24 rounded bg-white/10" />
+                </div>
+              ))}
+            </div>
+          ) : revenueMonths.length === 0 ? (
+            <div className="p-6 text-white/70">No data yet.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b border-white/10">
-                    <th className="py-2">Month</th>
-                    <th className="py-2">Total Net</th>
-                    <th className="py-2">Charges</th>
-                    <th className="py-2">Refunds</th>
+            <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.02]">
+              <table className="w-full text-sm text-white/90">
+                <thead className="bg-white/[0.04]">
+                  <tr className="text-left uppercase tracking-wide text-[11px] text-white/60">
+                    <th className="py-3 px-4">Month</th>
+                    <th className="py-3 px-4">Total Net</th>
+                    <th className="py-3 px-4">Charges</th>
+                    <th className="py-3 px-4">Refunds</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(() => {
-                    // Show months starting from the first non-zero totalNet and most recent first
-                    const firstNonZeroIdx = revenueMonths.findIndex(m => (m.totalNet || 0) > 0)
-                    const sliced = firstNonZeroIdx >= 0 ? revenueMonths.slice(firstNonZeroIdx) : revenueMonths
-                    const sorted = [...sliced].reverse()
-                    return sorted
-                  })().map((m) => (
-                    <tr key={m.month} className="border-b border-white/5">
-                      <td className="py-2">{m.month}</td>
-                      <td className="py-2">£{(m.totalNet || 0).toLocaleString()}</td>
-                      <td className="py-2">£{(m.charges || 0).toLocaleString()}</td>
-                      <td className="py-2">£{(m.refunds || 0).toLocaleString()}</td>
+                  {revenueMonths.map((m) => (
+                    <tr key={m.month} className="border-t border-white/5 hover:bg-white/[0.03] transition-colors">
+                      <td className="py-3 px-4 font-medium text-white">{m.month}</td>
+                      <td className="py-3 px-4">{formatMoney(m.totalNet || 0)}</td>
+                      <td className="py-3 px-4">{formatMoney(m.charges || 0)}</td>
+                      <td className="py-3 px-4 text-red-300">{formatMoney(m.refunds || 0)}</td>
                     </tr>
                   ))}
                 </tbody>

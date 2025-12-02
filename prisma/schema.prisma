@@ -196,6 +196,19 @@ model Payment {
   @@map("payments")
 }
 
+model MonthlyStripeMetric {
+  id            String   @id @default(cuid())
+  account       String   // 'SU' | 'IQ' | 'ALL'
+  month         String   // YYYY-MM in UTC
+  totalNet      Decimal  @db.Decimal(12, 2)
+  charges       Decimal  @db.Decimal(12, 2)
+  refunds       Decimal  @db.Decimal(12, 2)
+  lastUpdatedAt DateTime @default(now())
+
+  @@unique([account, month])
+  @@map("monthly_stripe_metrics")
+}
+
 // ============================================================================
 // PAYMENT ROUTING INTELLIGENCE
 // ============================================================================
