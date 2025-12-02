@@ -23,6 +23,16 @@ async function upsertGuardianEmail(userId: string, guardianEmail?: string | null
   }
 }
 
+function splitName(full?: string | null): { firstName: string; lastName: string } {
+  const safe = (full || '').trim()
+  if (!safe) return { firstName: 'Member', lastName: '' }
+  const parts = safe.split(/\s+/)
+  if (parts.length === 1) return { firstName: parts[0], lastName: '' }
+  const firstName = parts[0]
+  const lastName = parts.slice(1).join(' ')
+  return { firstName, lastName }
+}
+
 // Create Stripe subscriptions in IQ for migrated customers and write shadow users/subscriptions in DB.
 // POST body: { items: Array<{ stripeCustomerId: string; email: string | null; planKey: MembershipKey; trialEndISO: string; suggestedPmId?: string | null }> }
 export async function POST(request: NextRequest) {
@@ -50,6 +60,18 @@ export async function POST(request: NextRequest) {
       try {
         const plan = MEMBERSHIP_PLANS[it.planKey as MembershipKey]
         if (!plan) throw new Error(`Unknown plan ${it.planKey}`)
+
+        let stripeCustomer: any = null
+        try {
+          stripeCustomer = await stripe.customers.retrieve(it.stripeCustomerId)
+        } catch (err: any) {
+          throw new Error(`Unable to retrieve Stripe customer ${it.stripeCustomerId}: ${err?.message || err}`)
+        }
+        if (!stripeCustomer || (stripeCustomer as any).deleted) {
+          throw new Error(`Stripe customer ${it.stripeCustomerId} not found or deleted`)
+        }
+        const derivedName = splitName(stripeCustomer.name || (stripeCustomer.email ?? it.email ?? null))
+
         let trialEnd = Math.floor(new Date(it.trialEndISO).getTime() / 1000)
         const nowSec = Math.floor(Date.now() / 1000)
         // Clamp trial_end to the future. If inferred is past, use 1st of next month
@@ -91,19 +113,52 @@ export async function POST(request: NextRequest) {
         // Find or create shadow user by email
         let userId: string
         let userEmail = it.email || null
+        const fallbackFirst = (it.email || '').split('@')[0]
         if (it.email) {
-          const existing = await prisma.user.findUnique({ where: { email: it.email } })
+          const existing = await prisma.user.findUnique({ where: { email: it.email }, select: { id: true, firstName: true, lastName: true, email: true } })
           if (existing) {
             userId = existing.id
+            const shouldUpdateName =
+              !existing.firstName ||
+              existing.firstName === 'Member' ||
+              existing.firstName.toLowerCase() === fallbackFirst.toLowerCase() ||
+              (!existing.lastName && !!derivedName.lastName)
+
+            if (shouldUpdateName) {
+              await prisma.user.update({
+                where: { id: existing.id },
+                data: { firstName: derivedName.firstName, lastName: derivedName.lastName }
+              })
+            }
           } else {
-            const u = await prisma.user.create({ data: { email: it.email, firstName: it.email.split('@')[0], lastName: '', role: 'CUSTOMER', status: 'ACTIVE' } })
+            const u = await prisma.user.create({
+              data: {
+                email: it.email,
+                firstName: derivedName.firstName,
+                lastName: derivedName.lastName,
+                role: 'CUSTOMER',
+                status: 'ACTIVE'
+              }
+            })
             userId = u.id
           }
         } else {
           // Fallback: create placeholder user
-          const u = await prisma.user.create({ data: { email: `migrated_${Date.now()}_${Math.random().toString(36).slice(2)}@local`, firstName: 'Member', lastName: 'Migrated', role: 'CUSTOMER', status: 'ACTIVE' } })
+          const u = await prisma.user.create({
+            data: {
+              email: `migrated_${Date.now()}_${Math.random().toString(36).slice(2)}@local`,
+              firstName: derivedName.firstName || 'Member',
+              lastName: derivedName.lastName || 'Migrated',
+              role: 'CUSTOMER',
+              status: 'ACTIVE'
+            }
+          })
           userId = u.id
           userEmail = u.email
+        }
+
+        if (!it.email && stripeCustomer.email && !userEmail) {
+          userEmail = stripeCustomer.email
         }
 
         if (shouldStoreGuardian(userEmail) && it.guardianEmail) {
