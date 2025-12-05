@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { sendDunningAttemptSms, sendSuspendedSms, sendSuccessSms, sendActionRequiredSms } from '@/lib/notify'
 import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActionRequiredEmail } from '@/lib/email'
@@ -16,6 +17,73 @@ function resolveNotificationEmail(user?: { email?: string | null; communicationP
     return prefs?.guardianEmail || email
   } catch {
     return email
+  }
+}
+
+export async function persistSuccessfulPayment({
+  invoiceId,
+  userIdForPayment,
+  amountPaid,
+  currency,
+  description,
+  routedEntityId,
+  operationId
+}: {
+  invoiceId: string
+  userIdForPayment: string
+  amountPaid: number
+  currency: string
+  description: string
+  routedEntityId: string
+  operationId: string
+}) {
+  const paymentData = {
+    userId: userIdForPayment,
+    amount: amountPaid,
+    currency,
+    status: 'CONFIRMED',
+    description,
+    routedEntityId,
+    failureReason: null as string | null,
+    processedAt: new Date()
+  }
+
+  const writeUpdate = async (paymentId: string) => {
+    const updated = await prisma.payment.update({
+      where: { id: paymentId },
+      data: paymentData
+    })
+    console.log(`♻️ [${operationId}] Updated payment ${updated.id} for invoice ${invoiceId}`)
+    return updated
+  }
+
+  const existingPayment = await prisma.payment.findFirst({
+    where: { stripeInvoiceId: invoiceId }
+  })
+  if (existingPayment) {
+    return writeUpdate(existingPayment.id)
+  }
+
+  try {
+    const created = await prisma.payment.create({
+      data: {
+        ...paymentData,
+        stripeInvoiceId: invoiceId
+      }
+    })
+    console.log(`✅ [${operationId}] Created payment record ${created.id} for invoice ${invoiceId}`)
+    return created
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      console.warn(`⚠️ [${operationId}] Duplicate payment detected for invoice ${invoiceId}, updating existing row`)
+      const conflict = await prisma.payment.findFirst({
+        where: { stripeInvoiceId: invoiceId }
+      })
+      if (conflict) {
+        return writeUpdate(conflict.id)
+      }
+    }
+    throw error
   }
 }
 
@@ -248,7 +316,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     
     console.log(`✅ [${operationId}] Updated ${updatedMemberships.count} memberships to ACTIVE`)
     
-    // STEP 10: Create payment record with explicit member tag to aid admin/customer UI
+    // STEP 10: Create or update payment record with explicit member tag to aid admin/customer UI
     const paymentDescription = invoice.billing_reason === 'subscription_create' 
       ? 'Initial subscription payment (prorated)' 
       : 'Monthly membership payment'
@@ -259,36 +327,15 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     // Tag description with identifiers including member id for precise attribution display
     const taggedDescription = `${paymentDescription} [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [member:${userIdForPayment}] [sub:${subscription.id}]`
 
-    // Idempotency guard (invoice-scoped) before creating normal payment
-    const alreadyByInvoice = await prisma.payment.findFirst({
-      where: { stripeInvoiceId: invoice.id }
+    await persistSuccessfulPayment({
+      invoiceId: invoice.id,
+      userIdForPayment,
+      amountPaid,
+      currency: invoice.currency.toUpperCase(),
+      description: taggedDescription,
+      routedEntityId: subscription.routedEntityId,
+      operationId
     })
-    if (alreadyByInvoice) {
-      // Optional attribution correction
-      try {
-        if (alreadyByInvoice.userId !== userIdForPayment) {
-          await prisma.payment.update({ where: { id: alreadyByInvoice.id }, data: { userId: userIdForPayment } })
-          console.log(`♻️ [${operationId}] Reattributed existing payment ${alreadyByInvoice.id} to user ${userIdForPayment}`)
-        }
-      } catch {}
-      console.log(`ℹ️ [${operationId}] Payment already exists for invoice ${invoice.id}, skipping create`)
-      return
-    }
-
-    const paymentRecord = await prisma.payment.create({ 
-      data: { 
-        userId: userIdForPayment, 
-        amount: amountPaid, 
-        currency: invoice.currency.toUpperCase(), 
-        status: 'CONFIRMED', 
-        description: taggedDescription, 
-        routedEntityId: subscription.routedEntityId, 
-        processedAt: new Date(),
-        stripeInvoiceId: invoice.id
-      } 
-    })
-    
-    console.log(`✅ [${operationId}] Created payment record: ${paymentRecord.id} for £${amountPaid}`)
 
     // Dunning success notifications if user was previously suspended
     try {
@@ -428,21 +475,44 @@ export async function handlePaymentFailed(invoice: any, account?: StripeAccountK
 
     const failedDescription = `Failed monthly membership payment [inv:${invoice.id}]${invoice.payment_intent ? ` [pi:${invoice.payment_intent}]` : ''} [sub:${subscription.id}]`
 
-    await prisma.payment.create({ 
-      data: { 
-        userId: subscription.userId, 
-        amount: amountDue, 
-        currency: invoice.currency.toUpperCase(), 
-        status: 'FAILED', 
-        description: failedDescription, 
-        routedEntityId: subscription.routedEntityId, 
-        failureReason, 
-        processedAt: new Date(),
-        stripeInvoiceId: invoice.id 
-      } 
+    const existingFailedPayment = await prisma.payment.findFirst({
+      where: { stripeInvoiceId: invoice.id }
     })
-    
-    console.log(`✅ [${operationId}] Processed failed payment for ${subscription.user.email}`)
+
+    if (existingFailedPayment) {
+      await prisma.payment.update({
+        where: { id: existingFailedPayment.id },
+        data: {
+          amount: amountDue,
+          currency: invoice.currency.toUpperCase(),
+          status: 'FAILED',
+          description: failedDescription,
+          routedEntityId: subscription.routedEntityId,
+          failureReason,
+          processedAt: new Date(),
+          retryCount: {
+            increment: 1
+          }
+        }
+      })
+      console.log(`♻️ [${operationId}] Updated existing failed payment ${existingFailedPayment.id} for invoice ${invoice.id}`)
+    } else {
+      await prisma.payment.create({ 
+        data: { 
+          userId: subscription.userId, 
+          amount: amountDue, 
+          currency: invoice.currency.toUpperCase(), 
+          status: 'FAILED', 
+          description: failedDescription, 
+          routedEntityId: subscription.routedEntityId, 
+          failureReason, 
+          processedAt: new Date(),
+          stripeInvoiceId: invoice.id,
+          retryCount: attempt
+        } 
+      })
+      console.log(`✅ [${operationId}] Recorded failed payment for ${subscription.user.email}`)
+    }
     
   } catch (error) {
     console.error(`❌ [${operationId || 'unknown'}] Failed payment webhook processing failed:`, error)
