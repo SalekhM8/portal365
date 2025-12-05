@@ -29,7 +29,7 @@ export async function POST(
     }) as any
     if (!user) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
 
-    const hasActiveLike = user.subscriptions.some((s: any) => ['ACTIVE','TRIALING','PAST_DUE','PAUSED'].includes(s.status))
+    const hasActiveLike = user.subscriptions.some((s: any) => ['ACTIVE','TRIALING'].includes(s.status))
     const hasPaidInvoice = (user.subscriptions || []).some((s: any) =>
       (s.invoices || []).some((inv: any) => inv.status === 'paid')
     )
