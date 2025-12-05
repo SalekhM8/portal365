@@ -30,18 +30,14 @@ export async function POST(
     if (!user) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
 
     const hasActiveLike = user.subscriptions.some((s: any) => ['ACTIVE','TRIALING'].includes(s.status))
-    const hasPaidInvoice = (user.subscriptions || []).some((s: any) =>
-      (s.invoices || []).some((inv: any) => inv.status === 'paid')
-    )
-    const hasConfirmedPayment = (user.payments || []).some((p: any) => p.status === 'CONFIRMED')
 
-    if (hasActiveLike || hasPaidInvoice || hasConfirmedPayment) {
-      return NextResponse.json({ error: 'Cannot delete customer with active subscriptions or confirmed payments' }, { status: 400 })
+    if (hasActiveLike) {
+      return NextResponse.json({ error: 'Cannot delete customer with active subscriptions' }, { status: 400 })
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.payment.deleteMany({ where: { userId: id, status: { in: ['FAILED','PENDING'] } } })
-      await tx.invoice.deleteMany({ where: { subscription: { userId: id }, status: { in: ['open','void','draft','uncollectible'] } } })
+      await tx.payment.deleteMany({ where: { userId: id } })
+      await tx.invoice.deleteMany({ where: { subscription: { userId: id } } })
       await tx.subscription.deleteMany({ where: { userId: id } })
       await tx.membership.deleteMany({ where: { userId: id } })
       await tx.user.delete({ where: { id } })
