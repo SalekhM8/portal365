@@ -480,6 +480,10 @@ export async function handlePaymentFailed(invoice: any, account?: StripeAccountK
     })
 
     if (existingFailedPayment) {
+      if (['CONFIRMED', 'VOIDED'].includes(existingFailedPayment.status)) {
+        console.log(`ℹ️ [${operationId}] Invoice ${invoice.id} already resolved as ${existingFailedPayment.status}, ignoring failure replay`)
+        return
+      }
       await prisma.payment.update({
         where: { id: existingFailedPayment.id },
         data: {
