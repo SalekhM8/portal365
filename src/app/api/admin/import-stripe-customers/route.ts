@@ -13,7 +13,7 @@ import { inferPlanKeyFromDescription as inferFromDesc, normalizePlanKey as norma
  * Admin: Preview or import existing Stripe customers/subscriptions into local DB
  *
  * GET ?account=SU|IQ&limit=50 → preview list of active subs and customer emails
- * POST body { account: 'SU'|'IQ', mode: 'import'|'preview', defaultPlanKey?: string }
+ * POST body { account: 'SU'|'IQ'|'AURA', mode: 'import'|'preview', defaultPlanKey?: string }
  *   - preview: returns what would be created
  *   - import: creates missing users (no password), membership (PENDING_PAYMENT by default), and subscription rows
  */

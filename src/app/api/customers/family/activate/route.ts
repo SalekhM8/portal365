@@ -35,7 +35,18 @@ export async function POST(request: NextRequest) {
       payerUserId: parent.id
     })
 
-    return NextResponse.json({ success: true, subscription: subResult.subscription, clientSecret: subResult.clientSecret })
+    // Check if payment already succeeded (no further action needed)
+    const paymentStatus = (subResult as any).paymentStatus || 'unknown'
+    const paymentSucceeded = paymentStatus === 'succeeded' || 
+                             subResult.subscription.status === 'ACTIVE' ||
+                             subResult.subscription.status === 'TRIALING'
+
+    return NextResponse.json({ 
+      success: true, 
+      subscription: subResult.subscription, 
+      clientSecret: subResult.clientSecret,
+      paymentSucceeded // If true, no need to redirect to payment-methods
+    })
 
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Failed to activate child membership' }, { status: 500 })

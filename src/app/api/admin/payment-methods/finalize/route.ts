@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 // Finalize admin PM update: set customer's default_payment_method from a succeeded SetupIntent
-// POST body: { account: 'SU' | 'IQ', setupIntentId: string, stripeCustomerId: string }
+// POST body: { account: 'SU' | 'IQ' | 'AURA', setupIntentId: string, stripeCustomerId: string }
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions) as any

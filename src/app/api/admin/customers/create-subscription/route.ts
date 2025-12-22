@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 import { getPlan } from '@/config/memberships'
 
 // Reuse price helper from confirm-payment handlers
-async function getOrCreatePriceLocal(membershipDetails: { monthlyPrice: number; name: string }): Promise<string> {
+async function getOrCreatePriceLocal(membershipDetails: { monthlyPrice: number; name: string }, stripe: ReturnType<typeof getStripeClient>): Promise<string> {
   const existingPrices = await stripe.prices.list({ limit: 100, active: true, type: 'recurring', currency: 'gbp' })
   const existingPrice = existingPrices.data.find(price => price.unit_amount === membershipDetails.monthlyPrice * 100 && price.recurring?.interval === 'month')
   if (existingPrice) return existingPrice.id
@@ -35,10 +35,14 @@ export async function POST(request: NextRequest) {
     if (!admin || !['ADMIN', 'SUPER_ADMIN'].includes(admin.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const body = await request.json()
-    const { email, membershipType, monthlyPrice, stripeCustomerId, nextBillingDate, routedEntityId } = body || {}
+    const { email, membershipType, monthlyPrice, stripeCustomerId, nextBillingDate, routedEntityId, account } = body || {}
     if (!email || !membershipType || !stripeCustomerId) {
       return NextResponse.json({ error: 'email, membershipType, stripeCustomerId are required' }, { status: 400 })
     }
+
+    // Use specified account or default to AURA for new subscriptions
+    const stripeAccount: StripeAccountKey = (account as StripeAccountKey) || 'AURA'
+    const stripe = getStripeClient(stripeAccount)
 
     const user = await prisma.user.findUnique({ where: { email } })
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
     // Resolve price/name
     const plan = getPlan(membershipType)
     const effectivePrice = typeof monthlyPrice === 'number' ? monthlyPrice : plan.monthlyPrice
-    const priceId = await getOrCreatePriceLocal({ monthlyPrice: effectivePrice, name: plan.name })
+    const priceId = await getOrCreatePriceLocal({ monthlyPrice: effectivePrice, name: plan.name }, stripe)
 
     // Determine next billing date
     const now = new Date()
@@ -111,6 +115,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         stripeSubscriptionId: stripeSub.id,
         stripeCustomerId,
+        stripeAccountKey: stripeAccount,
         routedEntityId: entityId!,
         membershipType,
         monthlyPrice: effectivePrice,

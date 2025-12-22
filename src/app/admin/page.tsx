@@ -49,7 +49,7 @@ import { loadStripe } from '@stripe/stripe-js'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
+// Stripe is loaded dynamically per-transaction based on account
 
 function normalizeForWhatsApp(raw: string): string {
   if (!raw) return ''
@@ -168,7 +168,7 @@ function AdminDashboardContent() {
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [revenueMonths, setRevenueMonths] = useState<Array<{ month: string; totalNet: number; charges: number; refunds: number }>>([])
-  const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'ALL'>('SU')
+  const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'AURA'|'ALL'>('AURA')
   const [revenueLoading, setRevenueLoading] = useState(false)
   const [revenueUpdatedAt, setRevenueUpdatedAt] = useState<string | null>(null)
   const revenueAbortRef = useRef<AbortController | null>(null)
@@ -201,6 +201,7 @@ function AdminDashboardContent() {
   const [addCustomerError, setAddCustomerError] = useState('')
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentClientSecret, setPaymentClientSecret] = useState('')
+  const [paymentPublishableKey, setPaymentPublishableKey] = useState('')
   const [createdSubscriptionId, setCreatedSubscriptionId] = useState('')
   const [resetPasswordLoading, setResetPasswordLoading] = useState(false)
   const [paymentsTodo, setPaymentsTodo] = useState<any[]>([])
@@ -277,7 +278,7 @@ function AdminDashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  const loadRevenueMonths = useCallback(async (account: 'SU' | 'IQ' | 'ALL') => {
+  const loadRevenueMonths = useCallback(async (account: 'SU' | 'IQ' | 'AURA' | 'ALL') => {
     try {
       revenueAbortRef.current?.abort()
       const controller = new AbortController()
@@ -401,6 +402,7 @@ function AdminDashboardContent() {
       if (result.success && result.subscription?.clientSecret) {
         // Customer created successfully, now collect payment
         setPaymentClientSecret(result.subscription.clientSecret)
+        setPaymentPublishableKey(result.subscription.publishableKey || process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
         setCreatedSubscriptionId(result.subscription.id)
         setShowAddCustomer(false)
         setShowPaymentModal(true)
@@ -420,6 +422,7 @@ function AdminDashboardContent() {
   const handlePaymentSuccess = () => {
     setShowPaymentModal(false)
     setPaymentClientSecret('')
+    setPaymentPublishableKey('')
     setCreatedSubscriptionId('')
     
     // Reset form
@@ -1278,7 +1281,7 @@ function AdminDashboardContent() {
                         </td>
                         <td className="p-4 border-r border-white/5">
                           <Badge variant="secondary" className="text-xs">
-                            {customer.account === 'IQ' ? 'IQ' : (customer.account === 'SU' ? 'SU' : '—')}
+                            {customer.account === 'AURA' ? 'AURA' : customer.account === 'IQ' ? 'IQ' : (customer.account === 'SU' ? 'SU' : '—')}
                           </Badge>
                         </td>
                         <td className="p-4 border-r border-white/5">
@@ -1634,6 +1637,7 @@ function AdminDashboardContent() {
                   value={revenueAccount}
                   onChange={(e) => setRevenueAccount(e.target.value as any)}
                 >
+                  <option value="AURA">AURA</option>
                   <option value="SU">SU</option>
                   <option value="IQ">IQ</option>
                   <option value="ALL">All</option>
@@ -1780,7 +1784,7 @@ function AdminDashboardContent() {
                 <p className="text-white text-base font-semibold">{selectedCustomer.name}</p>
                 <p className="text-white/80 text-sm">
                   {selectedCustomer.membershipType} • {selectedCustomer.status}
-                  {selectedCustomer.account && <> • {(selectedCustomer.account === 'IQ' ? 'IQ' : 'SU')}</>}
+                  {selectedCustomer.account && <> • {selectedCustomer.account}</>}
                 </p>
                 {selectedCustomer.phone && (
                   <div className="flex flex-wrap gap-2 mt-2">
@@ -2196,7 +2200,7 @@ function AdminDashboardContent() {
               </div>
             </div>
 
-            <Elements stripe={stripePromise} options={{ clientSecret: paymentClientSecret, appearance: { theme: 'stripe' } }}>
+            <Elements stripe={paymentPublishableKey ? loadStripe(paymentPublishableKey) : null} options={{ clientSecret: paymentClientSecret, appearance: { theme: 'stripe' } }}>
               <AdminSetupForm 
                 subscriptionId={createdSubscriptionId}
                 onSuccess={handlePaymentSuccess}

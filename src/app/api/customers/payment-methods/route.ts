@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       where: { email: session.user.email },
       include: {
         subscriptions: {
-          where: { status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE','INCOMPLETE','INCOMPLETE_EXPIRED'] } },
+          where: { status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE','INCOMPLETE','INCOMPLETE_EXPIRED','PENDING_PAYMENT'] } },
           orderBy: { updatedAt: 'desc' },
           take: 1
         }

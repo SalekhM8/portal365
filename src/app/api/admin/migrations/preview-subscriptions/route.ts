@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
               const iqEntity = await prisma.businessEntity.upsert({
                 where: { name: account },
                 update: {},
-                create: { name: account, displayName: account === 'IQ' ? 'IQ Learning Centre' : 'Sporting U', description: `${account} entity`, vatYearStart: new Date(new Date().getFullYear(), 3, 1), vatYearEnd: new Date(new Date().getFullYear()+1, 2, 31) }
+                create: { name: account, displayName: account === 'IQ' ? 'IQ Learning Centre' : account === 'AURA' ? 'Aura MMA' : 'Sporting U', description: `${account} entity`, vatYearStart: new Date(new Date().getFullYear(), 3, 1), vatYearEnd: new Date(new Date().getFullYear()+1, 2, 31) }
               })
               const monthlyPrice = Number(MEMBERSHIP_PLANS[inferredPlanKey!].monthlyPrice)
               const nextBill = new Date(out.trialEndISO!)

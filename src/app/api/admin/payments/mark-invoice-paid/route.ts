@@ -9,7 +9,7 @@ type MarkPaidBody = {
   invoiceId?: string
 }
 
-const STRIPE_ACCOUNTS: StripeAccountKey[] = ['SU', 'IQ']
+const STRIPE_ACCOUNTS: StripeAccountKey[] = ['SU', 'IQ', 'AURA']
 
 export async function POST(request: NextRequest) {
   try {

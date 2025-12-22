@@ -331,9 +331,9 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
       invoiceId: invoice.id,
       userIdForPayment,
       amountPaid,
-      currency: invoice.currency.toUpperCase(),
-      description: taggedDescription,
-      routedEntityId: subscription.routedEntityId,
+        currency: invoice.currency.toUpperCase(), 
+        description: taggedDescription, 
+        routedEntityId: subscription.routedEntityId, 
       operationId
     })
 
@@ -501,20 +501,20 @@ export async function handlePaymentFailed(invoice: any, account?: StripeAccountK
       })
       console.log(`♻️ [${operationId}] Updated existing failed payment ${existingFailedPayment.id} for invoice ${invoice.id}`)
     } else {
-      await prisma.payment.create({ 
-        data: { 
-          userId: subscription.userId, 
-          amount: amountDue, 
-          currency: invoice.currency.toUpperCase(), 
-          status: 'FAILED', 
-          description: failedDescription, 
-          routedEntityId: subscription.routedEntityId, 
-          failureReason, 
-          processedAt: new Date(),
+    await prisma.payment.create({ 
+      data: { 
+        userId: subscription.userId, 
+        amount: amountDue, 
+        currency: invoice.currency.toUpperCase(), 
+        status: 'FAILED', 
+        description: failedDescription, 
+        routedEntityId: subscription.routedEntityId, 
+        failureReason, 
+        processedAt: new Date(),
           stripeInvoiceId: invoice.id,
           retryCount: attempt
-        } 
-      })
+      } 
+    })
       console.log(`✅ [${operationId}] Recorded failed payment for ${subscription.user.email}`)
     }
     

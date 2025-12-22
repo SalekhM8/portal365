@@ -9,7 +9,7 @@ export const revalidate = 0
 export const fetchCache = 'force-no-store'
 export const runtime = 'nodejs'
 
-type AccountFilter = 'SU' | 'IQ' | 'ALL'
+type AccountFilter = 'SU' | 'IQ' | 'AURA' | 'ALL'
 type MonthlyMetricRow = {
   month: string
   totalNet: Prisma.Decimal

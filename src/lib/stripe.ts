@@ -7,7 +7,7 @@ import { getPlanDbFirst } from '@/lib/plans'
 // Multi-account Stripe manager
 // =============================================================================
 
-export type StripeAccountKey = 'SU' | 'IQ'
+export type StripeAccountKey = 'SU' | 'IQ' | 'AURA'
 
 type StripeAccountConfig = {
   secretKey?: string
@@ -28,6 +28,12 @@ const STRIPE_ACCOUNTS: Record<StripeAccountKey, StripeAccountConfig> = {
     publishableKey: process.env.NEXT_PUBLIC_STRIPE_IQ_PUBLISHABLE_KEY,
     webhookSecret: process.env.STRIPE_IQ_WEBHOOK_SECRET,
     label: 'IQ Learning Centre'
+  },
+  AURA: {
+    secretKey: process.env.STRIPE_AURA_SECRET_KEY,
+    publishableKey: process.env.NEXT_PUBLIC_STRIPE_AURA_PUBLISHABLE_KEY,
+    webhookSecret: process.env.STRIPE_AURA_WEBHOOK_SECRET,
+    label: 'Aura MMA'
   }
 }
 
@@ -85,6 +91,7 @@ export interface SubscriptionResult {
   routing: any
   proratedAmount: number
   nextBillingDate: string
+  paymentStatus?: string // 'succeeded', 'requires_action', 'requires_payment_method', etc.
 }
 
 export class SubscriptionProcessor {
@@ -115,12 +122,13 @@ export class SubscriptionProcessor {
       console.log('✅ VAT routing decision:', routing)
 
       // 2b. Choose Stripe account for this signup
-      // Safe default: route only to SU unless STRIPE_IQ_ENABLED === 'true'
-      const iqEnabled = process.env.STRIPE_IQ_ENABLED === 'true'
-      // Default selection (non-family flows)
-      let stripeAccount: StripeAccountKey = iqEnabled ? (Math.random() < 0.5 ? 'SU' : 'IQ') : 'SU'
+      // Default: ALL new signups go to AURA (as of Dec 2024)
+      // Set STRIPE_DEFAULT_ACCOUNT env var to override (e.g., 'SU' or 'IQ' for legacy)
+      const defaultAccount = (process.env.STRIPE_DEFAULT_ACCOUNT as StripeAccountKey) || 'AURA'
+      let stripeAccount: StripeAccountKey = defaultAccount
 
       // If creating under a parent's payer account, prefer the parent's existing Stripe account
+      // (so family members stay on the same account as the parent)
       if (request.payerUserId) {
         try {
           // Prefer the parent's most recently updated, active-like subscription that has a Stripe customer
@@ -132,7 +140,7 @@ export class SubscriptionProcessor {
             orderBy: { updatedAt: 'desc' }
           })
           const payerAccount = (payerSub as any)?.stripeAccountKey as StripeAccountKey | undefined
-          if (payerAccount === 'SU' || payerAccount === 'IQ') {
+          if (payerAccount === 'SU' || payerAccount === 'IQ' || payerAccount === 'AURA') {
             stripeAccount = payerAccount
           }
         } catch {}
@@ -207,19 +215,25 @@ export class SubscriptionProcessor {
           try {
             cust = await stripeClient.customers.retrieve(customerIdToUse)
           } catch (e: any) {
-            // If the stored customer belongs to the other account, retry there and switch accounts
-            const otherAccount: StripeAccountKey = stripeAccount === 'SU' ? 'IQ' : 'SU'
-            const otherClient = getStripeClient(otherAccount)
-            const retry = await otherClient.customers.retrieve(customerIdToUse)
-            stripeAccount = otherAccount
-            customerIdToUse = (retry as any).id
-            cust = retry
-            try {
-              await prisma.subscription.update({
-                where: { id: dbSubscription.id },
-                data: { stripeAccountKey: stripeAccount }
-              })
-            } catch {}
+            // If the stored customer belongs to another account, try all other accounts
+            const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA']
+            const otherAccounts = allAccounts.filter(a => a !== stripeAccount)
+            for (const otherAccount of otherAccounts) {
+              try {
+                const otherClient = getStripeClient(otherAccount)
+                const retry = await otherClient.customers.retrieve(customerIdToUse)
+                stripeAccount = otherAccount
+                customerIdToUse = (retry as any).id
+                cust = retry
+                try {
+                  await prisma.subscription.update({
+                    where: { id: dbSubscription.id },
+                    data: { stripeAccountKey: stripeAccount }
+                  })
+                } catch {}
+                break
+              } catch {}
+            }
           }
           hasDefaultPm = !('deleted' in cust) && !!(cust as any)?.invoice_settings?.default_payment_method
         } catch {
@@ -236,13 +250,25 @@ export class SubscriptionProcessor {
 
         // If there is a non-zero prorate, ALWAYS collect on-session with a PaymentIntent (3DS if needed)
         if (proratedAmountPence > 0) {
+          // Get default payment method if available - we'll confirm immediately
+          let defaultPm: string | undefined
+          if (hasDefaultPm) {
+            try {
+              const cust = await getStripeClient(stripeAccount).customers.retrieve(customerIdToUse)
+              if (cust && !cust.deleted) {
+                defaultPm = cust.invoice_settings?.default_payment_method as string | undefined
+              }
+            } catch {}
+          }
+
           const pi = await getStripeClient(stripeAccount).paymentIntents.create({
             amount: proratedAmountPence,
             currency: 'gbp',
             customer: customerIdToUse,
+            ...(defaultPm ? { payment_method: defaultPm, confirm: true } : {}),
             ...(process.env.CARD_ONLY_FOR_NEW_SIGNUPS === 'true'
               ? { payment_method_types: ['card'] as any }
-              : { automatic_payment_methods: { enabled: true } }),
+              : { automatic_payment_methods: { enabled: true, allow_redirects: 'never' } }),
             setup_future_usage: 'off_session',
             metadata: {
               userId: request.userId,
@@ -270,13 +296,14 @@ export class SubscriptionProcessor {
             }
           })
 
-          console.log('✅ Admin child activation using on-session PaymentIntent:', pi.id)
+          console.log('✅ Admin child activation using on-session PaymentIntent:', pi.id, 'status:', pi.status)
           return {
             subscription: dbSubscription,
             clientSecret: pi.client_secret!,
             routing,
             proratedAmount: proratedAmountPence / 100,
-            nextBillingDate: startDate.toISOString().split('T')[0]
+            nextBillingDate: startDate.toISOString().split('T')[0],
+            paymentStatus: pi.status // 'succeeded', 'requires_action', 'requires_payment_method', etc.
           }
         }
 

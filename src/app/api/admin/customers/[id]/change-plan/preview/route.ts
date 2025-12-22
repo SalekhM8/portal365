@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 import { getPlan } from '@/config/memberships'
 
 export async function POST(
@@ -25,6 +25,10 @@ export async function POST(
 
     const sub = await prisma.subscription.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } })
     if (!sub) return NextResponse.json({ error: 'No subscription' }, { status: 404 })
+
+    // Use the correct Stripe account for this subscription
+    const stripeAccount = ((sub as any).stripeAccountKey as StripeAccountKey) || 'SU'
+    const stripe = getStripeClient(stripeAccount)
 
     const stripeSub = await stripe.subscriptions.retrieve(sub.stripeSubscriptionId)
     const stripeStatus = (stripeSub as any).status as string

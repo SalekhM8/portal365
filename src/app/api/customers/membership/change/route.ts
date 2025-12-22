@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 import { getPlan } from '@/config/memberships'
 
 export async function POST(request: NextRequest) {
@@ -47,11 +47,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You are already on this plan' }, { status: 400 })
     }
 
+    // Use the correct Stripe account for this subscription
+    const stripeAccount = ((subscription as any).stripeAccountKey as StripeAccountKey) || 'SU'
+    const stripe = getStripeClient(stripeAccount)
+
     // Update Stripe subscription
     const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId)
     
     // Get or create the new price in Stripe
-    const newPriceId = await getOrCreatePrice({ monthlyPrice: newDetails.monthlyPrice, name: newDetails.name })
+    const newPriceId = await getOrCreatePrice({ monthlyPrice: newDetails.monthlyPrice, name: newDetails.name }, stripe)
     
     // Update the subscription in Stripe to the new price
     await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
@@ -104,7 +108,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function getOrCreatePrice(membershipDetails: { monthlyPrice: number; name: string }): Promise<string> {
+async function getOrCreatePrice(membershipDetails: { monthlyPrice: number; name: string }, stripe: ReturnType<typeof getStripeClient>): Promise<string> {
   // Reuse existing prices
   const existingPrices = await stripe.prices.list({
     limit: 100,

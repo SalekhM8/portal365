@@ -17,7 +17,7 @@ function PaymentMethodsInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pkParam = searchParams.get('pk')
-  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [clientSecret, setClientSecret] = useState<string | null>(null) // For SetupIntent form only
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,10 +34,6 @@ function PaymentMethodsInner() {
     const familySub = searchParams.get('family_sub')
     const genericSub = searchParams.get('sub')
     const clientSecretFromLink = searchParams.get('client_secret')
-    // If a client_secret is supplied in URL (resume path), seed local state so Elements can render even if API excludes pending subscriptions
-    if (clientSecretFromLink && !clientSecret) {
-      setClientSecret(clientSecretFromLink)
-    }
     if (setupIntentId && redirectStatus === 'succeeded') {
       // finalize by informing backend to set default payment method
       finalizePaymentMethod(setupIntentId)
@@ -76,12 +72,44 @@ function PaymentMethodsInner() {
           const pmResp = await fetch('/api/customers/payment-methods').then(r => r.json()).catch(() => null as any)
           const pk = pmResp?.publishableKey
           const defaultPmId = pmResp?.currentPaymentMethod?.id as string | undefined
+          // Get SetupIntent for the form in case user needs to add a new card
+          if (pmResp?.setupIntentClientSecret) {
+            setClientSecret(pmResp.setupIntentClientSecret)
+          }
+          if (pmResp?.currentPaymentMethod) {
+            setCurrentPaymentMethod(pmResp.currentPaymentMethod)
+          }
           const stripeJs = pk ? await loadStripe(pk) : null
-          if (!stripeJs) return
+          if (!stripeJs) {
+            // If we can't load Stripe but have a client_secret, just redirect to dashboard
+            // The payment may have already succeeded
+            router.push('/dashboard')
+            return
+          }
+          
+          // First check if the PaymentIntent already succeeded
+          const piId = clientSecretFromLink.split('_secret_')[0]
+          if (piId.startsWith('pi_')) {
+            try {
+              const piResult = await stripeJs.retrievePaymentIntent(clientSecretFromLink)
+              if (piResult.paymentIntent?.status === 'succeeded') {
+                // Already paid, just go to dashboard
+                router.push('/dashboard')
+                return
+              }
+            } catch {}
+          }
           // If default payment method exists, confirm with it (will trigger 3DS if needed)
           if (defaultPmId) {
             const result = await stripeJs.confirmCardPayment(clientSecretFromLink, { payment_method: defaultPmId })
             if (result.error) {
+              // Check if this is a "already succeeded" error - if so, treat as success
+              if (result.error.code === 'payment_intent_unexpected_state' || 
+                  (result as any).paymentIntent?.status === 'succeeded') {
+                // Payment already succeeded, redirect to dashboard
+                router.push('/dashboard')
+                return
+              }
               setError(result.error.message || 'Payment confirmation failed')
             } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
               const resp = await fetch('/api/confirm-payment', {
@@ -95,6 +123,9 @@ function PaymentMethodsInner() {
               } else {
                 setError('Activation finalized but server confirmation failed. Please refresh.')
               }
+            } else if (result.paymentIntent?.status === 'requires_action') {
+              // 3DS required - let Stripe handle it
+              setError(null) // Clear any error, Stripe will handle redirect
             }
           } else {
             // No default PM: leave the page rendered so user can add card via SetupIntent form

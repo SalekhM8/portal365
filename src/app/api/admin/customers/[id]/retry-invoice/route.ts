@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
  * RETRY LATEST INVOICE PAYMENT
@@ -46,6 +46,10 @@ export async function POST(
     }
 
     const subscription = customer.subscriptions[0]
+
+    // Use the correct Stripe account for this subscription
+    const stripeAccount = ((subscription as any).stripeAccountKey as StripeAccountKey) || 'SU'
+    const stripe = getStripeClient(stripeAccount)
 
     // Get latest open invoice for this Stripe customer
     const openInvoices = await stripe.invoices.list({

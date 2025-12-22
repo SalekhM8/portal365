@@ -110,8 +110,17 @@ export default function FamilyPage() {
       })
       const data = await res.json()
       if (res.ok && data.success) {
+        // If payment already succeeded, go straight to dashboard (no payment-methods redirect needed)
+        if (data.paymentSucceeded) {
+          setShowSuccess({ name: (children.find(c => c.childId === childId)?.childName) || 'Child' })
+          setTimeout(async () => {
+            await fetchChildren()
+            router.push('/dashboard')
+          }, 1200)
+          return
+        }
+        // Only redirect to payment-methods if payment requires action (3DS) or failed
         if (data.clientSecret && data.subscription?.id) {
-          // Send user to Payment Methods to confirm SetupIntent, then finalize
           router.push(`/dashboard/payment-methods?client_secret=${encodeURIComponent(data.clientSecret)}&family_sub=${encodeURIComponent(data.subscription.id)}`)
           return
         }

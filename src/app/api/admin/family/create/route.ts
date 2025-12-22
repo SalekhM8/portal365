@@ -82,11 +82,12 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // Ensure BusinessEntity exists for SU/IQ
+    // Ensure BusinessEntity exists for SU/IQ/AURA
+    const displayNames: Record<string, string> = { SU: 'Sporting U', IQ: 'IQ Learning Centre', AURA: 'Aura MMA' }
     const entity = await prisma.businessEntity.upsert({
       where: { name: acct },
       update: {},
-      create: { name: acct, displayName: acct === 'IQ' ? 'IQ Learning Centre' : 'Sporting U', description: `${acct} entity`, vatYearStart: new Date(new Date().getFullYear(), 3, 1), vatYearEnd: new Date(new Date().getFullYear()+1, 2, 31) }
+      create: { name: acct, displayName: displayNames[acct] || acct, description: `${acct} entity`, vatYearStart: new Date(new Date().getFullYear(), 3, 1), vatYearEnd: new Date(new Date().getFullYear()+1, 2, 31) }
     })
 
     // Price

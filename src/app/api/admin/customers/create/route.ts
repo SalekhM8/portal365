@@ -4,7 +4,7 @@ import { authOptions, hasPermission } from '@/lib/auth'
 import { z } from 'zod'
 import * as bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
-import { SubscriptionProcessor } from '@/lib/stripe'
+import { SubscriptionProcessor, getPublishableKey, type StripeAccountKey } from '@/lib/stripe'
 
 // Validation schema for admin customer creation
 const adminCreateCustomerSchema = z.object({
@@ -194,6 +194,10 @@ export async function POST(request: NextRequest) {
 
       console.log('✅ Admin subscription created successfully')
 
+      // Get publishable key for the assigned account
+      const accountKey = (subscriptionResult.subscription as any).stripeAccountKey as StripeAccountKey || 'AURA'
+      const publishableKey = getPublishableKey(accountKey)
+
       // Return same format as registration
       return NextResponse.json({
         success: true,
@@ -218,7 +222,8 @@ export async function POST(request: NextRequest) {
           confidence: subscriptionResult.routing.confidence,
           proratedAmount: subscriptionResult.proratedAmount, // Should be 0 for admin
           nextBillingDate: subscriptionResult.nextBillingDate,
-          paymentRequired: true
+          paymentRequired: true,
+          publishableKey
         }
       })
 

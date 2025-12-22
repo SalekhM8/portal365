@@ -129,9 +129,10 @@ export async function GET(_req: NextRequest) {
     }
 
     const windows = buildMonthWindows(MONTH_LOOKBACK)
-    const [suBuckets, iqBuckets] = await Promise.all([
+    const [suBuckets, iqBuckets, auraBuckets] = await Promise.all([
       collectMonthlyBuckets('SU', windows),
-      collectMonthlyBuckets('IQ', windows)
+      collectMonthlyBuckets('IQ', windows),
+      collectMonthlyBuckets('AURA', windows)
     ])
 
     const now = new Date()
@@ -141,7 +142,8 @@ export async function GET(_req: NextRequest) {
         const key = window.key
         const suVals = bucketToDecimal(suBuckets.get(key))
         const iqVals = bucketToDecimal(iqBuckets.get(key))
-        const allVals = bucketToDecimal(mergeBuckets(suBuckets.get(key), iqBuckets.get(key)))
+        const auraVals = bucketToDecimal(auraBuckets.get(key))
+        const allVals = bucketToDecimal(mergeBuckets(mergeBuckets(suBuckets.get(key), iqBuckets.get(key)), auraBuckets.get(key)))
 
         await monthlyMetrics.upsert({
           where: { account_month: { account: 'SU', month: key } },
@@ -152,6 +154,11 @@ export async function GET(_req: NextRequest) {
           where: { account_month: { account: 'IQ', month: key } },
           update: { ...iqVals, lastUpdatedAt: now },
           create: { account: 'IQ', month: key, ...iqVals, lastUpdatedAt: now }
+        })
+        await monthlyMetrics.upsert({
+          where: { account_month: { account: 'AURA', month: key } },
+          update: { ...auraVals, lastUpdatedAt: now },
+          create: { account: 'AURA', month: key, ...auraVals, lastUpdatedAt: now }
         })
         await monthlyMetrics.upsert({
           where: { account_month: { account: 'ALL', month: key } },
@@ -174,10 +181,15 @@ export async function GET(_req: NextRequest) {
       sumChargesMinusRefunds('IQ', { gte: Math.floor(previousMonthStart.getTime() / 1000), lt: Math.floor(currentMonthStart.getTime() / 1000) }),
       sumChargesMinusRefunds('IQ', { gte: Math.floor(currentMonthStart.getTime() / 1000) })
     ])
+    const [auraAll, auraLast, auraMtd] = await Promise.all([
+      sumChargesMinusRefunds('AURA'),
+      sumChargesMinusRefunds('AURA', { gte: Math.floor(previousMonthStart.getTime() / 1000), lt: Math.floor(currentMonthStart.getTime() / 1000) }),
+      sumChargesMinusRefunds('AURA', { gte: Math.floor(currentMonthStart.getTime() / 1000) })
+    ])
 
-    const allTime = suAll + iqAll
-    const lastMonth = suLast + iqLast
-    const mtd = suMtd + iqMtd
+    const allTime = suAll + iqAll + auraAll
+    const lastMonth = suLast + iqLast + auraLast
+    const mtd = suMtd + iqMtd + auraMtd
     const payloadTotal = JSON.stringify({ amount: allTime, fetchedAt: now.toISOString() })
     const payloadLast = JSON.stringify({ amount: lastMonth, fetchedAt: now.toISOString() })
     const payloadThis = JSON.stringify({ amount: mtd, fetchedAt: now.toISOString() })
@@ -191,10 +203,13 @@ export async function GET(_req: NextRequest) {
       prisma.systemSetting.upsert({ where: { key: 'metrics:ledger:thisMonthNet:SU' }, update: { value: JSON.stringify({ amount: suMtd, fetchedAt: now.toISOString() }) }, create: { key: 'metrics:ledger:thisMonthNet:SU', value: JSON.stringify({ amount: suMtd, fetchedAt: now.toISOString() }), category: 'metrics', description: 'Stripe net this month (SU, MTD)' } }),
       prisma.systemSetting.upsert({ where: { key: 'metrics:ledger:totalNetAllTime:IQ' }, update: { value: JSON.stringify({ amount: iqAll, fetchedAt: now.toISOString() }) }, create: { key: 'metrics:ledger:totalNetAllTime:IQ', value: JSON.stringify({ amount: iqAll, fetchedAt: now.toISOString() }), category: 'metrics', description: 'Stripe net all time (IQ)' } }),
       prisma.systemSetting.upsert({ where: { key: 'metrics:ledger:lastMonthNet:IQ' }, update: { value: JSON.stringify({ amount: iqLast, fetchedAt: now.toISOString() }) }, create: { key: 'metrics:ledger:lastMonthNet:IQ', value: JSON.stringify({ amount: iqLast, fetchedAt: now.toISOString() }), category: 'metrics', description: 'Stripe net last month (IQ)' } }),
-      prisma.systemSetting.upsert({ where: { key: 'metrics:ledger:thisMonthNet:IQ' }, update: { value: JSON.stringify({ amount: iqMtd, fetchedAt: now.toISOString() }) }, create: { key: 'metrics:ledger:thisMonthNet:IQ', value: JSON.stringify({ amount: iqMtd, fetchedAt: now.toISOString() }), category: 'metrics', description: 'Stripe net this month (IQ, MTD)' } })
+      prisma.systemSetting.upsert({ where: { key: 'metrics:ledger:thisMonthNet:IQ' }, update: { value: JSON.stringify({ amount: iqMtd, fetchedAt: now.toISOString() }) }, create: { key: 'metrics:ledger:thisMonthNet:IQ', value: JSON.stringify({ amount: iqMtd, fetchedAt: now.toISOString() }), category: 'metrics', description: 'Stripe net this month (IQ, MTD)' } }),
+      prisma.systemSetting.upsert({ where: { key: 'metrics:ledger:totalNetAllTime:AURA' }, update: { value: JSON.stringify({ amount: auraAll, fetchedAt: now.toISOString() }) }, create: { key: 'metrics:ledger:totalNetAllTime:AURA', value: JSON.stringify({ amount: auraAll, fetchedAt: now.toISOString() }), category: 'metrics', description: 'Stripe net all time (AURA)' } }),
+      prisma.systemSetting.upsert({ where: { key: 'metrics:ledger:lastMonthNet:AURA' }, update: { value: JSON.stringify({ amount: auraLast, fetchedAt: now.toISOString() }) }, create: { key: 'metrics:ledger:lastMonthNet:AURA', value: JSON.stringify({ amount: auraLast, fetchedAt: now.toISOString() }), category: 'metrics', description: 'Stripe net last month (AURA)' } }),
+      prisma.systemSetting.upsert({ where: { key: 'metrics:ledger:thisMonthNet:AURA' }, update: { value: JSON.stringify({ amount: auraMtd, fetchedAt: now.toISOString() }) }, create: { key: 'metrics:ledger:thisMonthNet:AURA', value: JSON.stringify({ amount: auraMtd, fetchedAt: now.toISOString() }), category: 'metrics', description: 'Stripe net this month (AURA, MTD)' } })
     ])
 
-    return NextResponse.json({ ok: true, totals: { allTime, lastMonth, mtd }, su: { allTime: suAll, lastMonth: suLast, mtd: suMtd }, iq: { allTime: iqAll, lastMonth: iqLast, mtd: iqMtd } })
+    return NextResponse.json({ ok: true, totals: { allTime, lastMonth, mtd }, su: { allTime: suAll, lastMonth: suLast, mtd: suMtd }, iq: { allTime: iqAll, lastMonth: iqLast, mtd: iqMtd }, aura: { allTime: auraAll, lastMonth: auraLast, mtd: auraMtd } })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'failed' }, { status: 500 })
   }
