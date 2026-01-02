@@ -180,6 +180,8 @@ function AdminDashboardContent() {
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null)
   const [memberMemberships, setMemberMemberships] = useState<Array<{ userId: string; memberName: string; membershipType: string; status: string; nextBilling: string | null; subscriptionId: string | null; cancelAtPeriodEnd: boolean }>>([])
   const [membershipsLoading, setMembershipsLoading] = useState(false)
+  const [customerPayments, setCustomerPayments] = useState<Array<{ id: string; amount: number; currency: string; status: string; description: string; failureReason: string | null; stripeInvoiceId: string | null; createdAt: string; processedAt: string | null; routedEntity: string }>>([])
+  const [customerPaymentsLoading, setCustomerPaymentsLoading] = useState(false)
   const [openPill, setOpenPill] = useState<'personal'|'contact'|'payments'|'management'|null>('personal')
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [addCustomerData, setAddCustomerData] = useState({
@@ -745,6 +747,24 @@ function AdminDashboardContent() {
     }
   }
 
+  // Fetch ALL payments for a specific customer (no limit - for complete history)
+  const fetchCustomerPayments = async (customerId: string) => {
+    try {
+      setCustomerPaymentsLoading(true)
+      const resp = await fetch(`/api/admin/customers/${customerId}/payments`)
+      const json = await resp.json()
+      if (resp.ok && json?.payments) {
+        setCustomerPayments(json.payments)
+      } else {
+        setCustomerPayments([])
+      }
+    } catch {
+      setCustomerPayments([])
+    } finally {
+      setCustomerPaymentsLoading(false)
+    }
+  }
+
   // Filter functions
   const filteredCustomers = customers.filter(customer => {
     const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1247,7 +1267,7 @@ function AdminDashboardContent() {
                   </thead>
                   <tbody>
                     {filteredCustomers.map((customer) => (
-                      <tr key={customer.id} className="border-b border-white/10 hover:bg-white/5 cursor-pointer" onClick={() => setSelectedCustomer(customer)}>
+                      <tr key={customer.id} className="border-b border-white/10 hover:bg-white/5 cursor-pointer" onClick={() => { setSelectedCustomer(customer); fetchCustomerPayments(customer.id) }}>
                         <td className="p-4 border-r border-white/5">
                           <div>
                             <p className="font-medium text-white flex items-center gap-2">
@@ -1388,7 +1408,10 @@ function AdminDashboardContent() {
                           const cust = customers.find(c => c.id === payment.customerId)
                           if (cust) {
                             setSelectedCustomer(cust)
-                            await fetchCustomerMemberships(cust.id)
+                            await Promise.all([
+                              fetchCustomerMemberships(cust.id),
+                              fetchCustomerPayments(cust.id)
+                            ])
                           } else {
                             alert('Customer details not available for this payment.')
                           }
@@ -1866,30 +1889,37 @@ function AdminDashboardContent() {
                     </div>
                   )}
 
-                {/* Recent Payments */}
+                {/* Recent Payments - Now fetches ALL payments for this customer */}
     <button onClick={() => setOpenPill(openPill==='payments'? null:'payments')} className="w-full flex items-center justify-between px-3 py-2 text-left">
-                  <span className="text-white text-base sm:text-lg font-semibold">Payments</span>
+                  <span className="text-white text-base sm:text-lg font-semibold">Payments ({customerPaymentsLoading ? '...' : customerPayments.length})</span>
                   <span className="text-white/60 text-xs">{openPill==='payments' ? '▾' : '▸'}</span>
                 </button>
                 {openPill==='payments' && (
                   <div className="px-3 pb-2">
+                {customerPaymentsLoading ? (
+                  <div className="text-white/60 text-sm py-4 text-center">Loading payments...</div>
+                ) : (
                 <table className="w-full text-sm">
                   <thead className="text-white/60">
                         <tr><th className="text-left p-2">Date</th><th className="text-left p-2">Amount</th><th className="text-left p-2">Status</th></tr>
                   </thead>
                   <tbody>
-                    {payments.filter(p => p.customerId === selectedCustomer.id).slice(0, 6).map((p) => (
+                    {customerPayments.slice(0, 10).map((p) => (
                       <tr key={p.id} className="border-t border-white/10">
-                        <td className="p-2">{new Date(p.timestamp).toLocaleDateString()}</td>
+                        <td className="p-2">{new Date(p.createdAt).toLocaleDateString()}</td>
                         <td className="p-2">£{p.amount}</td>
                         <td className="p-2"><Badge variant={getStatusBadgeVariant(p.status)}>{p.status}</Badge></td>
                       </tr>
                     ))}
-                    {payments.filter(p => p.customerId === selectedCustomer.id).length === 0 && (
+                    {customerPayments.length === 0 && (
                           <tr><td className="p-3 text-white/60" colSpan={3}>No payments yet.</td></tr>
                     )}
                   </tbody>
                 </table>
+                )}
+                {customerPayments.length > 10 && (
+                  <div className="text-white/50 text-xs mt-1">Showing 10 of {customerPayments.length} payments</div>
+                )}
               <div className="mt-2 text-right">
                       <Button variant="outline" onClick={() => { setSearchTerm(selectedCustomer.name); setActiveTab('payments'); setSelectedCustomer(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="border-white/20 text-white hover:bg-white/10">View all payments</Button>
               </div>
