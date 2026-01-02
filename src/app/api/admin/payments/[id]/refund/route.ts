@@ -37,89 +37,85 @@ export async function POST(
     if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
     if (payment.status === 'REFUNDED') return NextResponse.json({ success: true, message: 'Already refunded' })
 
-    // Discover payment_intent - ALWAYS prefer invoice lookup over [pi:...] tag
-    // The [pi:...] tag can be wrong (copied from another payment), but invoice ID is always correct
+    // Discover payment_intent - ALWAYS prefer charge lookup by date/amount over [pi:...] tag
+    // The [pi:...] tag can be wrong (copied from another payment)
     let paymentIntentId: string | null = null
+    
+    // Get subscription info for Stripe client
+    const sub = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
+    const stripeCustomerId = sub?.stripeCustomerId
+    const s = getStripeClient((sub as any)?.stripeAccountKey || 'SU')
     
     // Step 1: Try invoice ID (from DB field first, then description tag)
     const invoiceId = payment.stripeInvoiceId || extractTag(payment.description || undefined, 'inv')
     if (invoiceId) {
       try {
-        // Resolve account first to use correct Stripe client
-        const subForInvoice = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
-        const s = getStripeClient((subForInvoice as any)?.stripeAccountKey || 'SU')
         const inv = await s.invoices.retrieve(invoiceId)
-        // Get the CORRECT payment_intent from Stripe (not from potentially wrong [pi:...] tag)
+        // Get the payment_intent from invoice if it exists
         paymentIntentId = ((inv as any).payment_intent as string) || null
       } catch (invErr: any) {
-        // Invoice lookup failed, will try [pi:...] tag as fallback
         console.warn(`Invoice lookup failed for ${invoiceId}:`, invErr.message)
       }
     }
     
-    // Step 2: Only use [pi:...] tag as fallback if invoice lookup didn't work
+    // Step 2: If invoice has no payment_intent, search for matching charge by date and amount
+    // This handles cases where invoices are not properly linked to charges in Stripe
+    if (!paymentIntentId && stripeCustomerId) {
+      const targetTs = payment.processedAt || payment.createdAt
+      const targetMinor = Math.round(Number(payment.amount) * 100)
+      const ts = Math.floor(new Date(targetTs).getTime() / 1000)
+      
+      try {
+        // Search for charges within ±2 days of the payment date, matching amount
+        const chargeList: any = await s.charges.list({ 
+          customer: stripeCustomerId, 
+          created: { gte: ts - 2 * 24 * 60 * 60, lte: ts + 2 * 24 * 60 * 60 }, 
+          limit: 20 
+        })
+        
+        // Find a successful, non-refunded charge with matching amount
+        const matchingCharge = chargeList.data.find((ch: any) => 
+          ch.amount === targetMinor && 
+          ch.status === 'succeeded' && 
+          !ch.refunded &&
+          ch.payment_intent
+        )
+        
+        if (matchingCharge) {
+          paymentIntentId = matchingCharge.payment_intent
+          console.log(`Found matching charge ${matchingCharge.id} with PI ${paymentIntentId}`)
+        }
+      } catch (chargeErr: any) {
+        console.warn('Charge search failed:', chargeErr.message)
+      }
+    }
+    
+    // Step 3: Only use [pi:...] tag as LAST RESORT (it's often wrong!)
     if (!paymentIntentId) {
-      paymentIntentId = extractTag(payment.description || undefined, 'pi')
+      const taggedPi = extractTag(payment.description || undefined, 'pi')
+      if (taggedPi) {
+        // Verify this PI is not already fully refunded before using it
+        try {
+          const pi = await s.paymentIntents.retrieve(taggedPi)
+          const refunds: any = await s.refunds.list({ payment_intent: taggedPi, limit: 10 })
+          const totalRefunded = refunds.data.reduce((sum: number, r: any) => sum + r.amount, 0)
+          const remaining = (pi.amount_received || 0) - totalRefunded
+          
+          if (remaining > 0) {
+            paymentIntentId = taggedPi
+            console.log(`Using [pi:...] tag ${taggedPi} with ${remaining} pence remaining`)
+          } else {
+            console.warn(`[pi:...] tag ${taggedPi} is already fully refunded, ignoring`)
+          }
+        } catch (piErr: any) {
+          console.warn(`[pi:...] tag verification failed:`, piErr.message)
+        }
+      }
     }
 
-    // Fallback enrichment: try to resolve identifiers from Stripe if still missing
-    if (!paymentIntentId) {
-      // Guard: not a Stripe charge (e.g., GoCardless/demo)
-      if (payment.goCardlessPaymentId) {
-        return NextResponse.json({ error: 'Refund unavailable: non-Stripe payment' }, { status: 400 })
-      }
-
-      // Find a Stripe customer for this user
-      const sub = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
-      const stripeCustomerId = sub?.stripeCustomerId
-      const s = getStripeClient((sub as any)?.stripeAccountKey || 'SU')
-
-      if (stripeCustomerId) {
-        const targetTs = payment.processedAt || payment.createdAt
-        const targetMinor = Math.round(Number(payment.amount) * 100)
-        let resolvedInvoiceId: string | null = null
-        let resolvedPi: string | null = null
-
-        try {
-          // Prefer invoices (paid) close to the payment time and matching amount
-          const ts = Math.floor(new Date(targetTs).getTime() / 1000)
-          const invList: any = await s.invoices.list({ customer: stripeCustomerId, status: 'paid', created: { gte: ts - 60 * 24 * 60 * 60, lte: ts + 60 * 24 * 60 * 60 }, limit: 100 })
-          const candidates = invList.data.filter((inv: any) => Number(inv.amount_paid || 0) === targetMinor)
-          if (candidates.length) {
-            // Pick the closest by paid_at/created timestamp
-            const best = candidates.reduce((a: any, b: any) => {
-              const aTs = (a.status_transitions?.paid_at || a.created) * 1000
-              const bTs = (b.status_transitions?.paid_at || b.created) * 1000
-              return Math.abs(aTs - Number(targetTs)) <= Math.abs(bTs - Number(targetTs)) ? a : b
-            })
-            resolvedInvoiceId = best.id
-            resolvedPi = (best as any).payment_intent || null
-          }
-        } catch {}
-
-        // If no invoice match, try charges
-        if (!resolvedPi) {
-          try {
-            const ts = Math.floor(new Date(targetTs).getTime() / 1000)
-            const chList: any = await s.charges.list({ customer: stripeCustomerId, created: { gte: ts - 60 * 24 * 60 * 60, lte: ts + 60 * 24 * 60 * 60 }, limit: 100 })
-            const ch = chList.data.find((c: any) => Number(c.amount || 0) === targetMinor)
-            if (ch) {
-              resolvedPi = (ch as any).payment_intent || null
-            }
-          } catch {}
-        }
-
-        if (resolvedPi) {
-          paymentIntentId = resolvedPi
-          // Persist tags for future operations (idempotent append)
-          const desc = payment.description || 'Monthly membership payment'
-          const withInv = resolvedInvoiceId && !desc.includes(`[inv:${resolvedInvoiceId}]`) ? `${desc} [inv:${resolvedInvoiceId}]` : desc
-          const withPi = !withInv.includes(`[pi:${resolvedPi}]`) ? `${withInv} [pi:${resolvedPi}]` : withInv
-          try {
-            await prisma.payment.update({ where: { id: payment.id }, data: { description: withPi } })
-          } catch {}
-        }
-      }
+    // Guard: not a Stripe charge (e.g., GoCardless/demo)
+    if (!paymentIntentId && payment.goCardlessPaymentId) {
+      return NextResponse.json({ error: 'Refund unavailable: non-Stripe payment' }, { status: 400 })
     }
     if (!paymentIntentId) {
       return NextResponse.json({ error: 'Refund unavailable: missing Stripe identifiers on this payment' }, { status: 400 })
