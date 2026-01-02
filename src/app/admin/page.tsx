@@ -461,7 +461,11 @@ function AdminDashboardContent() {
 
   const openCustomerModal = (customerId: string) => {
     const cust = customers.find(c => c.id === customerId)
-    if (cust) setSelectedCustomer(cust)
+    if (cust) {
+      setCustomerPayments([])
+      setSelectedCustomer(cust)
+      fetchCustomerPayments(cust.id)
+    }
     else alert('Customer details not available.')
   }
 
@@ -471,7 +475,9 @@ function AdminDashboardContent() {
       alert('Customer details not available.')
       return
     }
+    setCustomerPayments([])
     setSelectedCustomer(cust)
+    fetchCustomerPayments(cust.id)
     setMembershipAction('cancel')
     setMembershipActionReason('Cancelled from To-Do panel')
     setShowMembershipActionModal(true)
@@ -1144,7 +1150,11 @@ function AdminDashboardContent() {
                       return (
                         <div key={index} className="flex items-center space-x-3 cursor-pointer" onClick={() => {
                           const cust = customers.find(c => c.id === activity.userId)
-                          if (cust) setSelectedCustomer(cust)
+                          if (cust) {
+                            setCustomerPayments([])
+                            setSelectedCustomer(cust)
+                            fetchCustomerPayments(cust.id)
+                          }
                         }}>
                           <IconComponent className={`h-4 w-4 ${activity.color}`} />
                           <div className="flex-1">
