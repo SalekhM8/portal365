@@ -164,6 +164,11 @@ function AdminDashboardContent() {
   const [vatStatus, setVatStatus] = useState<VATStatus[]>([])
   const [customers, setCustomers] = useState<CustomerDetail[]>([])
   const [payments, setPayments] = useState<PaymentDetail[]>([])
+  const [paymentsPage, setPaymentsPage] = useState(1)
+  const [paymentsHasMore, setPaymentsHasMore] = useState(true)
+  const [paymentsLoadingMore, setPaymentsLoadingMore] = useState(false)
+  const [paymentsCustomerFilter, setPaymentsCustomerFilter] = useState<string | null>(null)
+  const [paymentsTotalCount, setPaymentsTotalCount] = useState(0)
   const [businessMetrics, setBusinessMetrics] = useState<BusinessMetrics | null>(null)
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
@@ -351,6 +356,13 @@ function AdminDashboardContent() {
       setCustomers(data.customers)
       // Use full payments for Payments tab
       setPayments(Array.isArray(data.payments) ? data.payments : [])
+      // Set pagination info from dashboard response
+      if (data.paymentsPagination) {
+        setPaymentsPage(data.paymentsPagination.page || 1)
+        setPaymentsHasMore(data.paymentsPagination.hasMore ?? true)
+        setPaymentsTotalCount(data.paymentsPagination.totalCount || 0)
+        setPaymentsCustomerFilter(null) // Reset customer filter on full refresh
+      }
       setPaymentsTodo(Array.isArray(data.payments_todo) ? data.payments_todo : [])
       setBusinessMetrics(data.metrics)
       setRecentActivity(data.recentActivity)
@@ -768,6 +780,74 @@ function AdminDashboardContent() {
       setCustomerPayments([])
     } finally {
       setCustomerPaymentsLoading(false)
+    }
+  }
+
+  // Load more payments (for Payments Tab pagination)
+  const loadMorePayments = async () => {
+    if (paymentsLoadingMore || !paymentsHasMore) return
+    try {
+      setPaymentsLoadingMore(true)
+      const nextPage = paymentsPage + 1
+      const params = new URLSearchParams({ page: String(nextPage), limit: '50' })
+      if (paymentsCustomerFilter) {
+        params.set('customerId', paymentsCustomerFilter)
+      }
+      const resp = await fetch(`/api/admin/payments?${params}`)
+      const json = await resp.json()
+      if (resp.ok && json?.payments) {
+        setPayments(prev => [...prev, ...json.payments])
+        setPaymentsPage(nextPage)
+        setPaymentsHasMore(json.pagination?.hasMore ?? false)
+        setPaymentsTotalCount(json.pagination?.totalCount ?? 0)
+      }
+    } catch (err) {
+      console.error('Failed to load more payments:', err)
+    } finally {
+      setPaymentsLoadingMore(false)
+    }
+  }
+
+  // Load all payments for a specific customer (for "View all payments" button)
+  const loadPaymentsForCustomer = async (customerId: string, customerName: string) => {
+    try {
+      setPaymentsLoadingMore(true)
+      setPaymentsCustomerFilter(customerId)
+      setSearchTerm(customerName)
+      const resp = await fetch(`/api/admin/payments?customerId=${customerId}&limit=100`)
+      const json = await resp.json()
+      if (resp.ok && json?.payments) {
+        setPayments(json.payments)
+        setPaymentsPage(1)
+        setPaymentsHasMore(json.pagination?.hasMore ?? false)
+        setPaymentsTotalCount(json.pagination?.totalCount ?? 0)
+      }
+    } catch (err) {
+      console.error('Failed to load customer payments:', err)
+    } finally {
+      setPaymentsLoadingMore(false)
+    }
+  }
+
+  // Clear customer filter (to go back to all payments)
+  const clearPaymentsCustomerFilter = async () => {
+    setPaymentsCustomerFilter(null)
+    setSearchTerm('')
+    // Reload all payments from page 1
+    try {
+      setPaymentsLoadingMore(true)
+      const resp = await fetch('/api/admin/payments?page=1&limit=50')
+      const json = await resp.json()
+      if (resp.ok && json?.payments) {
+        setPayments(json.payments)
+        setPaymentsPage(1)
+        setPaymentsHasMore(json.pagination?.hasMore ?? false)
+        setPaymentsTotalCount(json.pagination?.totalCount ?? 0)
+      }
+    } catch (err) {
+      console.error('Failed to reload payments:', err)
+    } finally {
+      setPaymentsLoadingMore(false)
     }
   }
 
@@ -1510,6 +1590,33 @@ function AdminDashboardContent() {
                   </tbody>
                 </table>
               </div>
+              {/* Load More / Pagination */}
+              <div className="p-4 border-t border-white/10 flex items-center justify-between">
+                <div className="text-sm text-white/60">
+                  Showing {filteredPayments.length} of {paymentsTotalCount || payments.length} payments
+                  {paymentsCustomerFilter && (
+                    <span className="ml-2 text-blue-400">
+                      (Filtered to: {searchTerm})
+                      <button 
+                        onClick={clearPaymentsCustomerFilter}
+                        className="ml-2 text-red-400 hover:text-red-300 underline"
+                      >
+                        Clear filter
+                      </button>
+                    </span>
+                  )}
+                </div>
+                {paymentsHasMore && (
+                  <Button 
+                    variant="outline" 
+                    onClick={loadMorePayments}
+                    disabled={paymentsLoadingMore}
+                    className="border-white/20"
+                  >
+                    {paymentsLoadingMore ? 'Loading...' : 'Load More'}
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1932,7 +2039,12 @@ function AdminDashboardContent() {
                   <div className="text-white/50 text-xs mt-1">Showing 10 of {customerPayments.length} payments</div>
                 )}
               <div className="mt-2 text-right">
-                      <Button variant="outline" onClick={() => { setSearchTerm(selectedCustomer.name); setActiveTab('payments'); setSelectedCustomer(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="border-white/20 text-white hover:bg-white/10">View all payments</Button>
+                      <Button variant="outline" onClick={async () => { 
+                        await loadPaymentsForCustomer(selectedCustomer.id, selectedCustomer.name)
+                        setActiveTab('payments')
+                        setSelectedCustomer(null)
+                        window.scrollTo({ top: 0, behavior: 'smooth' }) 
+                      }} className="border-white/20 text-white hover:bg-white/10">View all payments</Button>
               </div>
             </div>
                 )}

@@ -484,14 +484,19 @@ export async function GET() {
       totalPaidByUser[t.userId] = Number(t._sum.amount || 0)
     }
 
-    // Get recent payments with detailed info
+    // Get total payments count for pagination
+    const totalPaymentsCount = await prisma.payment.count({
+      where: { amount: { gt: 0 } }
+    })
+
+    // Get recent payments with detailed info (first 50 for faster initial load)
     const payments = await prisma.payment.findMany({
       where: { amount: { gt: 0 } },
       orderBy: [
         { processedAt: 'desc' },
         { createdAt: 'desc' }
       ],
-      take: 500,
+      take: 50,
       include: {
         user: { select: { firstName: true, lastName: true, email: true } },
         routedEntity: { select: { displayName: true } },
@@ -875,6 +880,12 @@ export async function GET() {
       vatStatus: vatPositions,
       customers: formattedCustomers,
       payments: payments_full,
+      paymentsPagination: {
+        page: 1,
+        limit: 50,
+        totalCount: totalPaymentsCount,
+        hasMore: totalPaymentsCount > 50
+      },
       payments_todo,
       metrics: {
         // Strict Stripe-ledger parity when enabled

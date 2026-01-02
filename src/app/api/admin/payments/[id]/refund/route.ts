@@ -37,18 +37,29 @@ export async function POST(
     if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
     if (payment.status === 'REFUNDED') return NextResponse.json({ success: true, message: 'Already refunded' })
 
-    // Discover payment_intent
-    let paymentIntentId = extractTag(payment.description || undefined, 'pi')
-    if (!paymentIntentId) {
-      const invoiceId = extractTag(payment.description || undefined, 'inv')
-      if (invoiceId) {
+    // Discover payment_intent - ALWAYS prefer invoice lookup over [pi:...] tag
+    // The [pi:...] tag can be wrong (copied from another payment), but invoice ID is always correct
+    let paymentIntentId: string | null = null
+    
+    // Step 1: Try invoice ID (from DB field first, then description tag)
+    const invoiceId = payment.stripeInvoiceId || extractTag(payment.description || undefined, 'inv')
+    if (invoiceId) {
+      try {
         // Resolve account first to use correct Stripe client
         const subForInvoice = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
         const s = getStripeClient((subForInvoice as any)?.stripeAccountKey || 'SU')
         const inv = await s.invoices.retrieve(invoiceId)
-        // Cast to any to avoid Stripe TS helper Response<T> property access issue during build
+        // Get the CORRECT payment_intent from Stripe (not from potentially wrong [pi:...] tag)
         paymentIntentId = ((inv as any).payment_intent as string) || null
+      } catch (invErr: any) {
+        // Invoice lookup failed, will try [pi:...] tag as fallback
+        console.warn(`Invoice lookup failed for ${invoiceId}:`, invErr.message)
       }
+    }
+    
+    // Step 2: Only use [pi:...] tag as fallback if invoice lookup didn't work
+    if (!paymentIntentId) {
+      paymentIntentId = extractTag(payment.description || undefined, 'pi')
     }
 
     // Fallback enrichment: try to resolve identifiers from Stripe if still missing
