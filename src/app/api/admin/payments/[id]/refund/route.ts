@@ -124,15 +124,14 @@ export async function POST(
     // Determine refund amount (in pence)
     const amountInPence = amountPounds !== undefined ? Math.round(amountPounds * 100) : undefined
 
-    // Execute refund
-    const subForRefund = await prisma.subscription.findFirst({ where: { userId: payment.userId }, orderBy: { createdAt: 'desc' } })
-    const sFinal = getStripeClient((subForRefund as any)?.stripeAccountKey || 'SU')
-    const refund = await sFinal.refunds.create({
+    // Execute refund (use Stripe client already initialized above)
+    const refund = await s.refunds.create({
       payment_intent: paymentIntentId,
       amount: amountInPence,
       reason: 'requested_by_customer'
     }, {
-      idempotencyKey: `refund:${payment.id}:${amountInPence ?? 'full'}`
+      // Include payment_intent in idempotency key so different PIs get different keys
+      idempotencyKey: `refund:${payment.id}:${paymentIntentId}:${amountInPence ?? 'full'}`
     })
 
     // DB updates: full → mark payment REFUNDED; partial → insert negative row
