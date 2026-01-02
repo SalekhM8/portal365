@@ -1267,7 +1267,7 @@ function AdminDashboardContent() {
                   </thead>
                   <tbody>
                     {filteredCustomers.map((customer) => (
-                      <tr key={customer.id} className="border-b border-white/10 hover:bg-white/5 cursor-pointer" onClick={() => { setSelectedCustomer(customer); fetchCustomerPayments(customer.id) }}>
+                      <tr key={customer.id} className="border-b border-white/10 hover:bg-white/5 cursor-pointer" onClick={() => { setCustomerPayments([]); setSelectedCustomer(customer); fetchCustomerPayments(customer.id) }}>
                         <td className="p-4 border-r border-white/5">
                           <div>
                             <p className="font-medium text-white flex items-center gap-2">
@@ -1407,6 +1407,7 @@ function AdminDashboardContent() {
                         onClick={async () => {
                           const cust = customers.find(c => c.id === payment.customerId)
                           if (cust) {
+                            setCustomerPayments([])
                             setSelectedCustomer(cust)
                             await Promise.all([
                               fetchCustomerMemberships(cust.id),
