@@ -362,6 +362,7 @@ function AdminDashboardContent() {
         setPaymentsHasMore(data.paymentsPagination.hasMore ?? true)
         setPaymentsTotalCount(data.paymentsPagination.totalCount || 0)
         setPaymentsCustomerFilter(null) // Reset customer filter on full refresh
+        setPaymentsServerFiltered(false) // Reset server-filtered flag
       }
       setPaymentsTodo(Array.isArray(data.payments_todo) ? data.payments_todo : [])
       setBusinessMetrics(data.metrics)
@@ -784,20 +785,46 @@ function AdminDashboardContent() {
   }
 
   // Load more payments (for Payments Tab pagination)
+  // Track if we've already loaded server-filtered results for current search
+  const [paymentsServerFiltered, setPaymentsServerFiltered] = useState(false)
+  
   const loadMorePayments = async () => {
-    if (paymentsLoadingMore || !paymentsHasMore) return
+    if (paymentsLoadingMore) return
+    
+    const hasSearchFilter = (searchTerm && searchTerm.trim()) || (statusFilter && statusFilter !== 'all')
+    
+    // If we have a search filter and haven't fetched from server yet, start fresh from page 1
+    const isFirstServerFetch = hasSearchFilter && !paymentsServerFiltered
+    const targetPage = isFirstServerFetch ? 1 : paymentsPage + 1
+    
+    // If no search filter and no more pages, nothing to do
+    if (!hasSearchFilter && !paymentsHasMore && !isFirstServerFetch) return
+    
     try {
       setPaymentsLoadingMore(true)
-      const nextPage = paymentsPage + 1
-      const params = new URLSearchParams({ page: String(nextPage), limit: '50' })
+      const params = new URLSearchParams({ page: String(targetPage), limit: '50' })
       if (paymentsCustomerFilter) {
         params.set('customerId', paymentsCustomerFilter)
+      }
+      // Pass search term and status filter for proper pagination
+      if (searchTerm && searchTerm.trim()) {
+        params.set('search', searchTerm.trim())
+      }
+      if (statusFilter && statusFilter !== 'all') {
+        params.set('status', statusFilter)
       }
       const resp = await fetch(`/api/admin/payments?${params}`)
       const json = await resp.json()
       if (resp.ok && json?.payments) {
-        setPayments(prev => [...prev, ...json.payments])
-        setPaymentsPage(nextPage)
+        if (isFirstServerFetch) {
+          // Replace results for first server-filtered fetch
+          setPayments(json.payments)
+          setPaymentsServerFiltered(true)
+        } else {
+          // Append for subsequent pages
+          setPayments(prev => [...prev, ...json.payments])
+        }
+        setPaymentsPage(targetPage)
         setPaymentsHasMore(json.pagination?.hasMore ?? false)
         setPaymentsTotalCount(json.pagination?.totalCount ?? 0)
       }
@@ -833,6 +860,7 @@ function AdminDashboardContent() {
   const clearPaymentsCustomerFilter = async () => {
     setPaymentsCustomerFilter(null)
     setSearchTerm('')
+    setPaymentsServerFiltered(false)
     // Reload all payments from page 1
     try {
       setPaymentsLoadingMore(true)
@@ -1270,7 +1298,7 @@ function AdminDashboardContent() {
                 <Input
                   placeholder="Search customers..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => { setSearchTerm(e.target.value); setPaymentsServerFiltered(false) }}
                   className="pl-10 w-64"
                 />
               </div>
@@ -1428,7 +1456,7 @@ function AdminDashboardContent() {
                 <Input
                   placeholder="Search payments..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => { setSearchTerm(e.target.value); setPaymentsServerFiltered(false) }}
                   className="pl-10 w-64"
                 />
               </div>

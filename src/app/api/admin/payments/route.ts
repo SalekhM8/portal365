@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
  *   - page: number (default 1)
  *   - limit: number (default 50, max 100)
  *   - customerId: string (optional, filter to specific customer)
+ *   - search: string (optional, search by customer name)
  *   - status: string (optional, filter by status)
  */
 export async function GET(request: NextRequest) {
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')))
     const customerId = searchParams.get('customerId') || undefined
+    const search = searchParams.get('search') || undefined
     const status = searchParams.get('status') || undefined
     const skip = (page - 1) * limit
 
@@ -31,6 +33,16 @@ export async function GET(request: NextRequest) {
     const where: any = { amount: { gt: 0 } }
     if (customerId) {
       where.userId = customerId
+    }
+    // Search by customer name (first or last name contains search term)
+    if (search && search.trim()) {
+      where.user = {
+        OR: [
+          { firstName: { contains: search.trim(), mode: 'insensitive' } },
+          { lastName: { contains: search.trim(), mode: 'insensitive' } },
+          { email: { contains: search.trim(), mode: 'insensitive' } }
+        ]
+      }
     }
     if (status && status !== 'all') {
       where.status = status
