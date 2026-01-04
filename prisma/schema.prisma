@@ -548,25 +548,48 @@ model MembershipPlan {
 }
 
 // ============================================================================
-// SCHEDULED PAUSE WINDOWS (Month-level control for pause/resume automation)
+// SCHEDULED PAUSE WINDOWS (Date-based control with credit-forward billing)
 // ============================================================================
 
 model SubscriptionPauseWindow {
   id              String   @id @default(cuid())
   subscriptionId  String
   subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  year            Int
-  month           Int        // 1..12 (UTC month to pause)
-  pauseBehavior   String     @default("void") // 'void' | 'keep_as_draft' | 'mark_uncollectible'
-  openEnded       Boolean    @default(false) // if true, applies from this month indefinitely until closed
+
+  // Legacy month-based fields (for migration compatibility)
+  year            Int?
+  month           Int?
+
+  // Date-based pausing (new approach) - nullable for migration
+  startDate       DateTime?       // Pause start date (inclusive)
+  endDate         DateTime?       // Pause end date (inclusive)
+
+  // Credit tracking for next invoice
+  pausedDays      Int?            // Calculated total paused days
+  creditAmount    Decimal?  @db.Decimal(10, 2) // Credit in GBP
+  creditAppliedAt DateTime?       // When credit was added to Stripe
+  stripeInvoiceItemId String?     // ID of the credit invoice item in Stripe
+
+  // Status lifecycle
+  status          String   @default("SCHEDULED") // SCHEDULED | CREDIT_APPLIED | COMPLETED | CANCELLED
+
+  // Legacy fields (keep for backwards compat)
+  pauseBehavior   String   @default("void")
+  openEnded       Boolean  @default(false)
   closedAt        DateTime?
-  // Idempotency markers for automation runs
   appliedPauseAt  DateTime?
   appliedResumeAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+
+  // Admin notes
+  reason          String?         // Optional reason for pause
+  createdBy       String?         // Admin who created this pause
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([subscriptionId, year, month])
-  @@index([year, month])
+  @@index([subscriptionId])
+  @@index([startDate, endDate])
+  @@index([status])
   @@map("subscription_pause_windows")
 }

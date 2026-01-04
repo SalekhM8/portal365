@@ -175,15 +175,15 @@ export async function POST(
         })
         console.log(`📊 [${operationId}] Updated subscription status: ${activeSubscription.status} → ${updatedSubscription.status}`)
 
-        // Update membership status (for ALL active memberships, not just ACTIVE ones)
+        // Update membership status to PAUSED (consistent with subscription)
         const updatedMemberships = await tx.membership.updateMany({
           where: { 
             userId: customer.id,
-            status: { in: ['ACTIVE', 'SUSPENDED'] } // Update both ACTIVE and already SUSPENDED
+            status: { in: ['ACTIVE', 'SUSPENDED', 'PAUSED'] }
           },
-          data: { status: 'SUSPENDED' }
+          data: { status: 'PAUSED' }
         })
-        console.log(`📊 [${operationId}] Updated ${updatedMemberships.count} memberships to SUSPENDED`)
+        console.log(`📊 [${operationId}] Updated ${updatedMemberships.count} memberships to PAUSED`)
       })
 
       // 📊 CREATE AUDIT LOG OUTSIDE TRANSACTION (won't rollback main updates if it fails)

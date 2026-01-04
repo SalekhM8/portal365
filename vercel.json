@@ -1,16 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/admin/cron/pause-resume/apply",
-      "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/admin/cron/pause-resume/verify",
-      "schedule": "30 0 * * *"
-    },
-    {
-      "path": "/api/admin/cron/pause-resume/backstop",
-      "schedule": "0 6 * * *"
+      "path": "/api/admin/cron/apply-pause-credits",
+      "schedule": "0 22 * * *"
     },
     {
       "path": "/api/admin/cron/refresh-stripe-metrics",

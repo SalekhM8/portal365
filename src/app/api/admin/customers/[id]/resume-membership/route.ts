@@ -173,7 +173,7 @@ export async function POST(
         const updatedMemberships = await tx.membership.updateMany({
           where: { 
             userId: customer.id,
-            status: { in: ['SUSPENDED', 'ACTIVE'] } // Update both SUSPENDED and already ACTIVE
+            status: { in: ['SUSPENDED', 'PAUSED', 'ACTIVE'] } // Update SUSPENDED, PAUSED, and already ACTIVE
           },
           data: { status: 'ACTIVE' }
         })

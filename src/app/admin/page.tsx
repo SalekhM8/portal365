@@ -48,6 +48,7 @@ import {
 import { loadStripe } from '@stripe/stripe-js'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
+import { PauseCalendar } from '@/components/pause-calendar'
 
 // Stripe is loaded dynamically per-transaction based on account
 
@@ -79,6 +80,7 @@ interface CustomerDetail {
   name: string
   email: string
   phone: string
+  dateOfBirth: string | null
   membershipType: string
   status: string
   subscriptionStatus: string
@@ -232,6 +234,8 @@ function AdminDashboardContent() {
   const [pauseMode, setPauseMode] = useState<'immediate' | 'schedule'>('immediate')
   const [pauseStartMonth, setPauseStartMonth] = useState<string>('') // YYYY-MM
   const [pauseEndMonth, setPauseEndMonth] = useState<string>('')     // YYYY-MM
+  // NEW: Beautiful calendar-based pause scheduling
+  const [showPauseCalendar, setShowPauseCalendar] = useState(false)
   // Dismissed To-Do items (client-side only)
   const [dismissedTodoIds, setDismissedTodoIds] = useState<string[]>([])
   // NEW: Change Plan modal state
@@ -1974,6 +1978,7 @@ function AdminDashboardContent() {
                 </button>
                 {openPill==='personal' && (
                   <div className="px-3 pb-3 space-y-2">
+                    <p className="text-white"><strong className="text-white/90">Date of Birth:</strong> {(selectedCustomer as any).dateOfBirth ? new Date((selectedCustomer as any).dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</p>
                   {(() => {
                       try {
                         const raw = (selectedCustomer as any)?.emergencyContact
@@ -2422,7 +2427,7 @@ function AdminDashboardContent() {
             {membershipAction === 'pause' && (
               <div className="mb-4">
                 <Label className="text-white mb-2 block">Pause Mode</Label>
-                <div className="flex gap-2 mb-3">
+                <div className="flex gap-2 mb-4">
                   <Button
                     variant={pauseMode === 'immediate' ? 'default' : 'outline'}
                     className={pauseMode === 'immediate' ? '' : 'border-white/20 text-white'}
@@ -2433,66 +2438,33 @@ function AdminDashboardContent() {
                   <Button
                     variant={pauseMode === 'schedule' ? 'default' : 'outline'}
                     className={pauseMode === 'schedule' ? '' : 'border-white/20 text-white'}
-                    onClick={() => setPauseMode('schedule')}
+                    onClick={() => {
+                      setPauseMode('schedule')
+                      setShowMembershipActionModal(false)
+                      setShowPauseCalendar(true)
+                    }}
                   >
-                    Schedule months
+                    📅 Schedule Dates
                   </Button>
                 </div>
 
-                <Label htmlFor="pauseBehavior" className="text-white mb-2 block">Pause Behavior</Label>
-                <Select value={pauseBehavior} onValueChange={(value: any) => setPauseBehavior(value)}>
-                  <SelectTrigger className="bg-white/5 border-white/20 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-black border-white/20">
-                    <SelectItem value="void" className="text-white hover:bg-white/10">Void invoices (recommended)</SelectItem>
-                    <SelectItem value="keep_as_draft" className="text-white hover:bg-white/10">Keep as draft</SelectItem>
-                    <SelectItem value="mark_uncollectible" className="text-white hover:bg-white/10">Mark uncollectible</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-white/60 mt-1">
-                  Void: Cancels pending invoices. Draft: Keeps for manual collection. Uncollectible: Marks as bad debt.
-                </p>
-
-                {pauseMode === 'schedule' && (
-                  <div className="mt-4 grid gap-3">
-                    <div>
-                      <Label className="text-white mb-1 block">Start month (YYYY-MM)</Label>
-                      <input
-                        type="month"
-                        value={pauseStartMonth}
-                        onChange={(e) => setPauseStartMonth(e.target.value)}
-                        className="w-full p-2 bg-white/5 border border-white/20 rounded text-white"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        id="openEnded"
-                        type="checkbox"
-                        className="h-4 w-4"
-                        onChange={(e) => {
-                          const checked = e.target.checked
-                          if (checked) setPauseEndMonth('')
-                          ;(window as any).__pauseOpenEnded = checked
-                        }}
-                      />
-                      <Label htmlFor="openEnded" className="text-white">Pause indefinitely from start month</Label>
-                    </div>
-                    {!(window as any).__pauseOpenEnded && (
-                      <div>
-                        <Label className="text-white mb-1 block">End month (inclusive)</Label>
-                        <input
-                          type="month"
-                          value={pauseEndMonth}
-                          onChange={(e) => setPauseEndMonth(e.target.value)}
-                          className="w-full p-2 bg-white/5 border border-white/20 rounded text-white"
-                        />
-                      </div>
-                    )}
-                    <p className="text-xs text-white/60">
-                      The subscription will be paused for each selected month. For indefinite pauses, automation applies from your start month and keeps pausing every month until you manually resume.
+                {pauseMode === 'immediate' && (
+                  <>
+                    <Label htmlFor="pauseBehavior" className="text-white mb-2 block">Pause Behavior</Label>
+                    <Select value={pauseBehavior} onValueChange={(value: any) => setPauseBehavior(value)}>
+                      <SelectTrigger className="bg-white/5 border-white/20 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-black border-white/20">
+                        <SelectItem value="void" className="text-white hover:bg-white/10">Void invoices (recommended)</SelectItem>
+                        <SelectItem value="keep_as_draft" className="text-white hover:bg-white/10">Keep as draft</SelectItem>
+                        <SelectItem value="mark_uncollectible" className="text-white hover:bg-white/10">Mark uncollectible</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-white/60 mt-1">
+                      Void: Cancels pending invoices. Draft: Keeps for manual collection. Uncollectible: Marks as bad debt.
                     </p>
-                  </div>
+                  </>
                 )}
               </div>
             )}
@@ -2722,6 +2694,27 @@ function AdminDashboardContent() {
       </div>
     </DialogContent>
   </Dialog>
+
+      {/* 🗓️ NEW: Beautiful Calendar-based Pause Scheduler */}
+      {selectedCustomer && (
+        <PauseCalendar
+          customerId={selectedCustomer.id}
+          customerName={selectedCustomer.name}
+          monthlyPrice={
+            (() => {
+              const plan = Object.values(MEMBERSHIP_PLANS).find(p => p.key === selectedCustomer.membershipType)
+              return plan?.monthlyPrice || 50
+            })()
+          }
+          membershipType={selectedCustomer.membershipType}
+          isOpen={showPauseCalendar}
+          onClose={() => setShowPauseCalendar(false)}
+          onPauseCreated={() => {
+            fetchAdminData()
+            setShowPauseCalendar(false)
+          }}
+        />
+      )}
     </div>
   )
 } 

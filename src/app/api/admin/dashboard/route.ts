@@ -633,7 +633,10 @@ export async function GET() {
       const membership = customer.memberships[0]
       const subscription = customer.subscriptions[0]
       const confirmedPaymentsCount = customer.payments.filter((p: any) => p.status === 'CONFIRMED').length
-      const nextBillingIso = membership?.nextBillingDate ? membership.nextBillingDate.toISOString().split('T')[0] : 'N/A'
+      // Use subscription.nextBillingDate (updated by Stripe) instead of membership.nextBillingDate (static from creation)
+      const nextBillingIso = subscription?.nextBillingDate 
+        ? subscription.nextBillingDate.toISOString().split('T')[0] 
+        : (membership?.nextBillingDate ? membership.nextBillingDate.toISOString().split('T')[0] : 'N/A')
 
       // Derive clear status with distinctions
       let derivedStatus = 'INACTIVE'
@@ -647,8 +650,9 @@ export async function GET() {
       }
 
       // Detect DD migration trials (no upfront payment, starts next billing)
-      const startsOn = subscription && confirmedPaymentsCount === 0 && membership?.nextBillingDate && membership.nextBillingDate > new Date()
-        ? membership.nextBillingDate.toISOString().split('T')[0]
+      const billingDate = subscription?.nextBillingDate || membership?.nextBillingDate
+      const startsOn = subscription && confirmedPaymentsCount === 0 && billingDate && billingDate > new Date()
+        ? billingDate.toISOString().split('T')[0]
         : null
 
       // Determine last paid amount (most recent CONFIRMED payment)
@@ -659,20 +663,44 @@ export async function GET() {
       let pauseScheduleLabel: string | null = null
       const wins = subscription?.id ? (winsBySubId[subscription.id] || []) : []
       if (wins.length > 0) {
-        const upcoming = wins.filter(w => (w.appliedPauseAt == null) || (w.openEnded && !w.closedAt))
+        // Filter for SCHEDULED (not yet applied) date-based windows
+        const upcoming = wins.filter((w: any) => 
+          w.status === 'SCHEDULED' && w.startDate && w.endDate
+        )
+        
         if (upcoming.length > 0) {
-          const sorted = [...upcoming].sort((a,b) => (a.year - b.year) || (a.month - b.month))
+          // Sort by start date
+          const sorted = [...upcoming].sort((a: any, b: any) => 
+            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+          )
           const first = sorted[0]
-          const last = sorted[sorted.length - 1]
           const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-          const firstLabel = `${monthNames[(first.month||1)-1]} ${first.year}`
-          if (sorted.some(w => w.openEnded && !w.closedAt)) {
-            pauseScheduleLabel = `from ${firstLabel}`
-          } else {
-            const lastLabel = `${monthNames[(last.month||1)-1]} ${last.year}`
-            pauseScheduleLabel = (first.year === last.year && first.month === last.month)
-              ? firstLabel
-              : `${firstLabel}–${lastLabel}`
+          
+          const startDate = new Date(first.startDate)
+          const endDate = new Date(first.endDate)
+          
+          const formatDateLabel = (d: Date) => `${monthNames[d.getMonth()]} ${d.getDate()}`
+          
+          pauseScheduleLabel = `${formatDateLabel(startDate)}–${formatDateLabel(endDate)}`
+        } else {
+          // Fallback for old month-based format
+          const oldFormat = wins.filter((w: any) => 
+            (w.appliedPauseAt == null) || (w.openEnded && !w.closedAt)
+          )
+          if (oldFormat.length > 0 && oldFormat[0].month && oldFormat[0].year) {
+            const sorted = [...oldFormat].sort((a: any, b: any) => (a.year - b.year) || (a.month - b.month))
+            const first = sorted[0]
+            const last = sorted[sorted.length - 1]
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+            const firstLabel = `${monthNames[(first.month||1)-1]} ${first.year}`
+            if (sorted.some((w: any) => w.openEnded && !w.closedAt)) {
+              pauseScheduleLabel = `from ${firstLabel}`
+            } else {
+              const lastLabel = `${monthNames[(last.month||1)-1]} ${last.year}`
+              pauseScheduleLabel = (first.year === last.year && first.month === last.month)
+                ? firstLabel
+                : `${firstLabel}–${lastLabel}`
+            }
           }
         }
       }
@@ -683,6 +711,7 @@ export async function GET() {
         name: `${customer.firstName} ${customer.lastName}`,
         email: customer.email,
         phone: customer.phone || 'N/A',
+        dateOfBirth: customer.dateOfBirth ? customer.dateOfBirth.toISOString().split('T')[0] : null,
         membershipType: membership?.membershipType || 'None',
         status: derivedStatus,
         subscriptionStatus: subscription?.status || 'NO_SUBSCRIPTION',
