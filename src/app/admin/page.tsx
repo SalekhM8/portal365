@@ -179,7 +179,8 @@ function AdminDashboardContent() {
   const [revenueLoading, setRevenueLoading] = useState(false)
   const [revenueUpdatedAt, setRevenueUpdatedAt] = useState<string | null>(null)
   const revenueAbortRef = useRef<AbortController | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
@@ -247,6 +248,25 @@ function AdminDashboardContent() {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [changeLoading, setChangeLoading] = useState(false)
 
+  // 🚀 OPTIMISTIC UPDATE HELPERS - Update UI instantly without full reload
+  const updateCustomerInState = useCallback((customerId: string, updates: Partial<CustomerDetail>) => {
+    setCustomers(prev => prev.map(c => 
+      c.id === customerId ? { ...c, ...updates } : c
+    ))
+  }, [])
+
+  const removeCustomerFromState = useCallback((customerId: string) => {
+    setCustomers(prev => prev.filter(c => c.id !== customerId))
+  }, [])
+
+  const addPaymentToState = useCallback((payment: PaymentDetail) => {
+    setPayments(prev => [payment, ...prev])
+  }, [])
+
+  // Track last fetch time to prevent refetch on tab switch (persists across remounts!)
+  const lastFetchTimeRef = useRef<number>(0)
+  const CACHE_DURATION_MS = 30000 // 30 seconds - don't refetch within this window
+
   useEffect(() => {
     // ✅ ADD authentication check
     if (status === 'loading') return
@@ -271,11 +291,42 @@ function AdminDashboardContent() {
 
     // Initialize tab from URL (?tab=...)
     const tab = searchParams.get('tab')
-    if (tab && ['overview','customers','payments','vat-monitor','analytics','settings'].includes(tab)) {
+    if (tab && ['overview','customers','payments','analytics'].includes(tab)) {
       setActiveTab(tab)
     }
 
-    fetchAdminData()
+    // Only fetch if we haven't fetched recently (prevents refetch on tab switch!)
+    // Check sessionStorage for cross-remount persistence
+    const lastFetchStr = sessionStorage.getItem('portal365.admin.lastFetch')
+    const lastFetch = lastFetchStr ? parseInt(lastFetchStr, 10) : 0
+    const now = Date.now()
+    
+    // Check if we have cached data in sessionStorage
+    const cachedData = sessionStorage.getItem('portal365.admin.cachedData')
+    
+    if (now - lastFetch > CACHE_DURATION_MS || !cachedData) {
+      // Cache expired or no cached data - fetch fresh
+      sessionStorage.setItem('portal365.admin.lastFetch', String(now))
+      lastFetchTimeRef.current = now
+      setLoading(true)
+      fetchAdminData()
+    } else if (cachedData && !initialLoadDone) {
+      // Use cached data - no loading spinner!
+      try {
+        const data = JSON.parse(cachedData)
+        setVatStatus(data.vatStatus || [])
+        setCustomers(data.customers || [])
+        setPayments(data.payments || [])
+        setBusinessMetrics(data.metrics || null)
+        setRecentActivity(data.recentActivity || [])
+        setAnalytics(data.analytics || null)
+        setPaymentsTodo(data.payments_todo || [])
+        setInitialLoadDone(true)
+      } catch (e) {
+        // Cache corrupted - fetch fresh
+        fetchAdminData()
+      }
+    }
   }, [session, status])
 
   // Push tab changes into URL for back/forward support
@@ -371,7 +422,24 @@ function AdminDashboardContent() {
       setPaymentsTodo(Array.isArray(data.payments_todo) ? data.payments_todo : [])
       setBusinessMetrics(data.metrics)
       setRecentActivity(data.recentActivity)
-      setAnalytics(data.analytics) // 🚀 NEW: Real analytics data
+      setAnalytics(data.analytics)
+      setInitialLoadDone(true)
+      
+      // 🚀 Cache data to prevent reload on tab switch
+      try {
+        sessionStorage.setItem('portal365.admin.cachedData', JSON.stringify({
+          vatStatus: data.vatStatus,
+          customers: data.customers,
+          payments: data.payments,
+          metrics: data.metrics,
+          recentActivity: data.recentActivity,
+          analytics: data.analytics,
+          payments_todo: data.payments_todo
+        }))
+        sessionStorage.setItem('portal365.admin.lastFetch', String(Date.now()))
+      } catch (e) {
+        console.warn('Failed to cache admin data:', e)
+      }
       
       console.log(`✅ Real admin data loaded: ${data.customers.length} customers, ${(data.payments||[]).length} payments`)
       
@@ -898,10 +966,11 @@ function AdminDashboardContent() {
     return matchesSearch && matchesStatus
   })
 
-  if (loading) {
+  // Only show loading if actually fetching AND no data yet
+  if (loading && customers.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center min-h-screen bg-black">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
       </div>
     )
   }
@@ -956,7 +1025,7 @@ function AdminDashboardContent() {
         <div className="space-y-2">
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Portal365 Management Dashboard</h1>
           <p className="text-sm lg:text-base text-muted-foreground">
-            Complete business oversight, customer management, and VAT optimization
+            Complete business oversight and customer management
           </p>
         </div>
         <div className="flex items-center gap-2 lg:gap-3">
@@ -1070,14 +1139,14 @@ function AdminDashboardContent() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto">
-          <TabsTrigger value="overview" className="text-xs lg:text-sm">Overview</TabsTrigger>
-          <TabsTrigger value="customers" className="text-xs lg:text-sm">Customers</TabsTrigger>
-          <TabsTrigger value="payments" className="text-xs lg:text-sm">Payments</TabsTrigger>
-          <TabsTrigger value="vat-monitor" className="text-xs lg:text-sm">VAT</TabsTrigger>
-          <TabsTrigger value="analytics" className="text-xs lg:text-sm">Analytics</TabsTrigger>
-          <TabsTrigger value="settings" className="text-xs lg:text-sm">Settings</TabsTrigger>
-        </TabsList>
+        <div className="flex justify-center w-full">
+          <TabsList className="inline-grid grid-cols-2 lg:grid-cols-4 h-auto">
+            <TabsTrigger value="overview" className="text-xs lg:text-sm px-6">Overview</TabsTrigger>
+            <TabsTrigger value="customers" className="text-xs lg:text-sm px-6">Customers</TabsTrigger>
+            <TabsTrigger value="payments" className="text-xs lg:text-sm px-6">Payments</TabsTrigger>
+            <TabsTrigger value="analytics" className="text-xs lg:text-sm px-6">Analytics</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
@@ -1654,147 +1723,9 @@ function AdminDashboardContent() {
         </TabsContent>
 
         {/* VAT Monitor Tab */}
-        <TabsContent value="vat-monitor" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Real-time VAT Monitoring</CardTitle>
-              <CardDescription>
-                Current VAT year progress for all business entities
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {vatStatus.map((entity) => (
-                  <div key={entity.entityId} className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <h4 className="font-semibold">{entity.entityName}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          £{entity.currentRevenue.toLocaleString()} / £{entity.vatThreshold.toLocaleString()} 
-                          • {entity.customerCount} customers
-                        </p>
-                      </div>
-                      <div className="text-right space-y-1">
-                        <Badge variant={getRiskBadgeVariant(entity.riskLevel)}>
-                          {entity.riskLevel} RISK
-                        </Badge>
-                        <p className="text-sm text-muted-foreground">
-                          £{entity.headroom.toLocaleString()} headroom
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <Progress 
-                      value={getVATProgress(entity.currentRevenue, entity.vatThreshold)}
-                      className="h-3"
-                    />
-                    
-                    <div className="grid grid-cols-3 gap-4 text-xs text-muted-foreground">
-                      <div>
-                        <span>Monthly avg:</span>
-                        <p className="font-medium">£{entity.monthlyAverage.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <span>Projected year-end:</span>
-                        <p className="font-medium">£{entity.projectedYearEnd.toLocaleString()}</p>
-                      </div>
-                      <div>
-                        <span>Avg payment:</span>
-                        <p className="font-medium">£{entity.avgPaymentValue}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Business Analytics Tab */}
         <TabsContent value="analytics" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle>Customer Lifetime Value</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">£{businessMetrics?.avgLifetimeValue || 0}</div>
-                <p className="text-sm text-muted-foreground">Average across all memberships</p>
-                <div className="mt-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Full Memberships</span>
-                    <span>£{analytics?.membershipCLV?.FULL_ADULT || 0}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Weekend Memberships</span>
-                    <span>£{analytics?.membershipCLV?.WEEKEND_ADULT || 0}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Personal Training</span>
-                    <span>£{analytics?.membershipCLV?.PERSONAL_TRAINING || 0}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Women's Classes</span>
-                    <span>£{analytics?.membershipCLV?.WOMENS_CLASSES || 0}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Wellness Package</span>
-                    <span>£{analytics?.membershipCLV?.WELLNESS_PACKAGE || 0}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Member Acquisition</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{Math.round(businessMetrics?.acquisitionRate || 0)}%</div>
-                <p className="text-sm text-muted-foreground">Monthly growth rate</p>
-                <div className="mt-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>This month</span>
-                    <span>+{analytics?.acquisitionDetails?.thisMonth || 0} members</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Last month</span>
-                    <span>+{analytics?.acquisitionDetails?.lastMonth || 0} members</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Growth rate</span>
-                    <span>{Math.round(analytics?.acquisitionDetails?.growthRate || 0)}%</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Operational Efficiency</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{Math.round(businessMetrics?.routingEfficiency || 0)}%</div>
-                <p className="text-sm text-muted-foreground">VAT routing accuracy</p>
-                <div className="mt-4 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Auto-routing</span>
-                    <span>{analytics?.operationalMetrics?.autoRoutingRate || 0}%</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Manual override</span>
-                    <span>{analytics?.operationalMetrics?.manualOverrideRate || 0}%</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Avg decision time</span>
-                    <span>{analytics?.operationalMetrics?.avgDecisionTime || 1.2} seconds</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-      {/* Monthly Revenue (Stripe Net) */}
+          {/* Monthly Revenue (Stripe Net) */}
       <Card className="mt-6 border border-white/15 bg-white/[0.03] backdrop-blur-xl shadow-2xl">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1874,76 +1805,6 @@ function AdminDashboardContent() {
         </TabsContent>
 
         {/* Settings Tab */}
-        <TabsContent value="settings" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>VAT Routing Configuration</CardTitle>
-              <CardDescription>
-                Configure automatic payment routing parameters and thresholds
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-4">
-                  <h4 className="font-medium">Safety Thresholds</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label>Warning Level</Label>
-                      <Input className="w-32" defaultValue="80000" />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label>Stop Routing Level</Label>
-                      <Input className="w-32" defaultValue="85000" />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label>Critical Level</Label>
-                      <Input className="w-32" defaultValue="88000" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h4 className="font-medium">Routing Preferences</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span>Service-based routing</span>
-                      <Badge variant="default">Enabled</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Load balancing</span>
-                      <Badge variant="default">Enabled</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Manual override alerts</span>
-                      <Badge variant="default">Enabled</Badge>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Risk assessment</span>
-                      <Badge variant="default">Auto</Badge>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t">
-                <div className="flex gap-3">
-                  <Button>
-                    <Settings className="h-4 w-4 mr-2" />
-                    Save Configuration
-                  </Button>
-                  <Button variant="outline">
-                    Reset to Defaults
-                  </Button>
-                  <Button variant="outline">
-                    Export Settings
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          
-        </TabsContent>
       </Tabs>
 
       {/* Customer Details Modal */}
@@ -2450,20 +2311,20 @@ function AdminDashboardContent() {
 
                 {pauseMode === 'immediate' && (
                   <>
-                    <Label htmlFor="pauseBehavior" className="text-white mb-2 block">Pause Behavior</Label>
-                    <Select value={pauseBehavior} onValueChange={(value: any) => setPauseBehavior(value)}>
-                      <SelectTrigger className="bg-white/5 border-white/20 text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-black border-white/20">
-                        <SelectItem value="void" className="text-white hover:bg-white/10">Void invoices (recommended)</SelectItem>
-                        <SelectItem value="keep_as_draft" className="text-white hover:bg-white/10">Keep as draft</SelectItem>
-                        <SelectItem value="mark_uncollectible" className="text-white hover:bg-white/10">Mark uncollectible</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-white/60 mt-1">
-                      Void: Cancels pending invoices. Draft: Keeps for manual collection. Uncollectible: Marks as bad debt.
-                    </p>
+                <Label htmlFor="pauseBehavior" className="text-white mb-2 block">Pause Behavior</Label>
+                <Select value={pauseBehavior} onValueChange={(value: any) => setPauseBehavior(value)}>
+                  <SelectTrigger className="bg-white/5 border-white/20 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black border-white/20">
+                    <SelectItem value="void" className="text-white hover:bg-white/10">Void invoices (recommended)</SelectItem>
+                    <SelectItem value="keep_as_draft" className="text-white hover:bg-white/10">Keep as draft</SelectItem>
+                    <SelectItem value="mark_uncollectible" className="text-white hover:bg-white/10">Mark uncollectible</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-white/60 mt-1">
+                  Void: Cancels pending invoices. Draft: Keeps for manual collection. Uncollectible: Marks as bad debt.
+                </p>
                   </>
                 )}
               </div>

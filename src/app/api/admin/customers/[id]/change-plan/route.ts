@@ -81,76 +81,167 @@ export async function POST(
 
     // effective === 'now'
     if (stripeStatus === 'trialing') {
-      // Update price without proration (Stripe won’t prorate trial), then settle delta now
+      const deltaPence = computeTrialDelta()
+      const customerId = (stripeSub as any).customer as string
+      let chargeResult = { charged: false, invoiceId: '', error: '' }
+      
+      console.log(`📊 Trial plan change: current £${currentMonthly} → new £${newMonthly}, delta: £${(deltaPence/100).toFixed(2)}, settlement: ${settlement}`)
+
+      if (settlement === 'charge_now') {
+        // CHARGE NOW: Update Stripe, charge delta, update Portal immediately
+        await stripe.subscriptions.update(stripeSub.id, {
+          items: [{ id: item.id, price: (newPrice as any).id }],
+          proration_behavior: 'none'
+        })
+
+        if (deltaPence > 0) {
+          try {
+            await stripe.invoiceItems.create({
+              customer: customerId,
+              amount: deltaPence,
+              currency: 'gbp',
+              description: `Upgrade proration: ${plan.name} (${newMembershipType})`,
+              metadata: { dbSubscriptionId: sub.id, reason: 'trial_upgrade_proration' }
+            })
+            
+            const inv = await stripe.invoices.create({
+              customer: customerId,
+              auto_advance: false,
+              pending_invoice_items_behavior: 'include',
+              metadata: { dbSubscriptionId: sub.id, reason: 'trial_upgrade_proration' }
+            })
+            
+            if (inv.id) {
+              await stripe.invoices.finalizeInvoice(inv.id)
+              const paidInvoice = await stripe.invoices.pay(inv.id)
+              chargeResult = { 
+                charged: paidInvoice.status === 'paid', 
+                invoiceId: inv.id, 
+                error: paidInvoice.status !== 'paid' ? `Invoice status: ${paidInvoice.status}` : '' 
+              }
+              console.log(`✅ Trial upgrade charged: £${(deltaPence/100).toFixed(2)} - Invoice ${inv.id}`)
+            }
+          } catch (e: any) {
+            chargeResult = { charged: false, invoiceId: '', error: e.message || 'Payment failed' }
+            console.error('❌ Trial upgrade charge failed:', e.message)
+          }
+        } else if (deltaPence < 0) {
+          // Downgrade credit
+          await stripe.invoiceItems.create({
+            customer: customerId,
+            amount: deltaPence,
+            currency: 'gbp',
+            description: `Downgrade credit: ${plan.name} (${newMembershipType})`,
+            metadata: { dbSubscriptionId: sub.id, reason: 'trial_downgrade_credit' }
+          })
+        }
+
+        // Update Portal immediately - they paid
+        await prisma.membership.updateMany({ where: { userId }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
+        await prisma.subscription.update({ where: { id: sub.id }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
+        
+        return NextResponse.json({ 
+          success: true, 
+          applied: 'now', 
+          deltaPounds: deltaPence / 100,
+          settlement: 'charge_now',
+          chargeResult
+        })
+      } else {
+        // DEFER: Update Stripe price, add proration to next invoice, DON'T update Portal access yet
+        await stripe.subscriptions.update(stripeSub.id, {
+          items: [{ id: item.id, price: (newPrice as any).id }],
+          proration_behavior: 'none',
+          metadata: {
+            ...(stripeSub as any).metadata,
+            pending_plan: newMembershipType,
+            pending_from_plan: sub.membershipType
+          }
+        })
+
+        // Add proration delta to next invoice
+        if (deltaPence !== 0) {
+          await stripe.invoiceItems.create({
+            customer: customerId,
+            amount: deltaPence,
+            currency: 'gbp',
+            description: deltaPence > 0 
+              ? `Upgrade proration: ${plan.name} (${newMembershipType})` 
+              : `Downgrade credit: ${plan.name} (${newMembershipType})`,
+            metadata: { 
+              dbSubscriptionId: sub.id, 
+              reason: 'plan_change_proration_deferred',
+              pendingPlan: newMembershipType
+            }
+          })
+          console.log(`📋 Proration £${(deltaPence/100).toFixed(2)} added to next invoice`)
+        }
+
+        // DON'T update Portal membership - they keep current access until they pay
+        console.log(`⏳ Plan change deferred: user keeps ${sub.membershipType} access until next payment`)
+        
+        return NextResponse.json({ 
+          success: true, 
+          applied: 'deferred', 
+          message: `Plan change scheduled. User keeps ${sub.membershipType} access until Feb 1. New plan ${newMembershipType} activates when invoice is paid.`,
+          deltaPounds: deltaPence / 100,
+          settlement: 'defer'
+        })
+      }
+    }
+
+    // ACTIVE subscription: use Stripe proration
+    if (settlement === 'charge_now') {
+      // Charge now with immediate proration invoice
       await stripe.subscriptions.update(stripeSub.id, {
         items: [{ id: item.id, price: (newPrice as any).id }],
-        proration_behavior: 'none'
+        proration_behavior: 'always_invoice'
       })
 
-      const deltaPence = computeTrialDelta()
-      if (deltaPence > 0) {
-        // Upgrade: charge delta now via invoice item + invoice
-        await stripe.invoiceItems.create({
+      // Find and pay the proration invoice
+      try {
+        const invoices = await stripe.invoices.list({
           customer: (stripeSub as any).customer as string,
-          amount: deltaPence,
-          currency: 'gbp',
-          description: `Trial proration adjustment (${newMembershipType})`,
-          metadata: { dbSubscriptionId: sub.id, reason: 'trial_proration_adjustment' }
+          subscription: stripeSub.id,
+          limit: 5
         })
-        const inv = await stripe.invoices.create({
-          customer: (stripeSub as any).customer as string,
-          auto_advance: true,
-          metadata: { dbSubscriptionId: sub.id, reason: 'trial_proration_adjustment' }
-        })
-        // Best-effort immediate payment
-        try { if (inv.id) await stripe.invoices.pay(inv.id) } catch {}
-      } else if (deltaPence < 0) {
-        // Downgrade: refund partial amount from the original proration PI when possible
-        const abs = Math.abs(deltaPence)
-        // Find the most recent proration payment for this sub
-        const recentPayment = await prisma.payment.findFirst({
-          where: { userId, status: 'CONFIRMED' },
-          orderBy: { createdAt: 'desc' }
-        })
-        if (recentPayment) {
-          const piMatch = (recentPayment.description || '').match(/\[pi:([^\]]+)\]/)
-          const piId = piMatch?.[1]
-          if (piId) {
-            try { await stripe.refunds.create({ payment_intent: piId, amount: abs }) } catch {}
-          }
+        const prorationInvoice = invoices.data.find(i => i.status === 'open')
+        
+        if (prorationInvoice?.id && prorationInvoice.amount_due > 0) {
+          await stripe.invoices.pay(prorationInvoice.id)
+          console.log(`✅ Active upgrade charged: £${(prorationInvoice.amount_due / 100).toFixed(2)}`)
         }
-        // Optionally record a refund marker if needed
+      } catch (e: any) {
+        console.error('Charge now payment failed:', e?.message)
       }
 
+      // Update Portal immediately - they paid
       await prisma.membership.updateMany({ where: { userId }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
       await prisma.subscription.update({ where: { id: sub.id }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
-      return NextResponse.json({ success: true, applied: 'now', deltaPounds: deltaPence / 100 })
-    }
 
-    // ACTIVE now: use Stripe proration
-    await stripe.subscriptions.update(stripeSub.id, {
-      items: [{ id: item.id, price: (newPrice as any).id }],
-      proration_behavior: 'create_prorations'
-    })
-
-    if (settlement === 'charge_now') {
-      // Attempt to pay open invoice containing proration; else create/pay a new invoice
-      try {
-        const list = await stripe.invoices.list({ customer: (stripeSub as any).customer as string, limit: 5 })
-        const open = list.data.find(i => i.status === 'open')
-        if (open?.id) {
-          await stripe.invoices.pay(open.id)
-        } else {
-          const inv = await stripe.invoices.create({ customer: (stripeSub as any).customer as string, auto_advance: true })
-          try { if (inv.id) await stripe.invoices.pay(inv.id) } catch {}
+      return NextResponse.json({ success: true, applied: 'now', settlement: 'charge_now' })
+    } else {
+      // DEFER: proration added to next invoice, DON'T change access yet
+      await stripe.subscriptions.update(stripeSub.id, {
+        items: [{ id: item.id, price: (newPrice as any).id }],
+        proration_behavior: 'create_prorations',
+        metadata: {
+          ...(stripeSub as any).metadata,
+          pending_plan: newMembershipType,
+          pending_from_plan: sub.membershipType
         }
-      } catch {}
+      })
+
+      // DON'T update Portal - webhook will handle it when invoice is paid
+      console.log(`⏳ Active plan change deferred: user keeps ${sub.membershipType} access until next payment`)
+
+      return NextResponse.json({ 
+        success: true, 
+        applied: 'deferred', 
+        message: `Plan change scheduled. User keeps ${sub.membershipType} access until next billing. New plan ${newMembershipType} activates when invoice is paid.`,
+        settlement: 'defer' 
+      })
     }
-
-    await prisma.membership.updateMany({ where: { userId }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
-    await prisma.subscription.update({ where: { id: sub.id }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
-
-    return NextResponse.json({ success: true, applied: 'now', settlement: settlement || 'defer' })
 
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Change plan failed' }, { status: 500 })

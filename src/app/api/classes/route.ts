@@ -24,7 +24,15 @@ export async function GET() {
       serviceName: c.service?.name || 'General'
     }))
 
-    return NextResponse.json({ success: true, classes: payload })
+    // Cache classes for 5 minutes - they don't change often
+    return NextResponse.json(
+      { success: true, classes: payload },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+        },
+      }
+    )
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to load classes' }, { status: 500 })
   }

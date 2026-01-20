@@ -315,6 +315,43 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     })
     
     console.log(`✅ [${operationId}] Updated ${updatedMemberships.count} memberships to ACTIVE`)
+
+    // STEP 9b: Apply pending plan change if deferred plan switch was scheduled
+    try {
+      if (subscriptionId) {
+        const stripeSubData = await stripe.subscriptions.retrieve(subscriptionId)
+        const pendingPlan = (stripeSubData.metadata as any)?.pending_plan
+        const pendingFromPlan = (stripeSubData.metadata as any)?.pending_from_plan
+        
+        if (pendingPlan) {
+          console.log(`🔄 [${operationId}] Applying deferred plan change: ${pendingFromPlan} → ${pendingPlan}`)
+          
+          // Update Portal membership and subscription to the new plan
+          await prisma.membership.updateMany({
+            where: { userId: subscription.userId },
+            data: { membershipType: pendingPlan }
+          })
+          await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { membershipType: pendingPlan }
+          })
+          
+          // Clear the pending metadata
+          await stripe.subscriptions.update(subscriptionId, {
+            metadata: {
+              ...stripeSubData.metadata,
+              pending_plan: '',
+              pending_from_plan: ''
+            }
+          })
+          
+          console.log(`✅ [${operationId}] Applied deferred plan: ${pendingPlan}`)
+        }
+      }
+    } catch (pendingError) {
+      console.error(`⚠️ [${operationId}] Failed to apply pending plan:`, pendingError)
+      // Non-fatal - continue with payment processing
+    }
     
     // STEP 10: Create or update payment record with explicit member tag to aid admin/customer UI
     const paymentDescription = invoice.billing_reason === 'subscription_create' 

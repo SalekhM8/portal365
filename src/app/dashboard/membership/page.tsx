@@ -5,10 +5,22 @@ import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { ArrowLeft, Crown, CheckCircle2, Phone, Loader2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { ArrowLeft, Crown, CheckCircle2, Phone, Loader2, ArrowUpRight, ArrowDownRight, CreditCard, Calendar } from 'lucide-react'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
+
+type Preview = {
+  currentPlan: string
+  currentPrice: number
+  newPlan: string
+  newPrice: number
+  isUpgrade: boolean
+  prorationAmount: number
+  prorationAction: 'charge' | 'credit'
+  nextBillingDate: string | null
+  stripeStatus: string
+}
 
 export default function MembershipPage() {
   const { data: session, status } = useSession()
@@ -16,8 +28,13 @@ export default function MembershipPage() {
   const [currentMembership, setCurrentMembership] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [changingTo, setChangingTo] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  
+  // Modal state
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [processing, setProcessing] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -47,32 +64,69 @@ export default function MembershipPage() {
     }
   }
 
-  const handlePlanChange = async (newPlan: string) => {
-    if (newPlan === currentMembership?.type) return
+  const openPlanModal = async (planKey: string) => {
+    if (planKey === currentMembership?.type) return
+    
+    setSelectedPlan(planKey)
+    setPreview(null)
+    setPreviewLoading(true)
+    setError(null)
+    
+    try {
+      const response = await fetch('/api/customers/membership/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newMembershipType: planKey })
+      })
+      const data = await response.json()
+      
+      if (data.success) {
+        setPreview(data.preview)
+      } else {
+        setError(data.error || 'Failed to preview change')
+        setSelectedPlan(null)
+      }
+    } catch (err) {
+      setError('Network error. Please try again.')
+      setSelectedPlan(null)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
 
-    setChangingTo(newPlan)
+  const handlePlanChange = async (settlement: 'charge_now' | 'defer') => {
+    if (!selectedPlan) return
+    
+    setProcessing(true)
     setError(null)
 
     try {
       const response = await fetch('/api/customers/membership/change', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newMembershipType: newPlan })
+        body: JSON.stringify({ newMembershipType: selectedPlan, settlement })
       })
 
       const data = await response.json()
 
       if (data.success) {
-        setSuccess(`Successfully changed to ${MEMBERSHIP_PLANS[newPlan as keyof typeof MEMBERSHIP_PLANS].name}!`)
-        await fetchMembership() // Refresh data
+        setSuccess(data.message)
+        setSelectedPlan(null)
+        setPreview(null)
+        await fetchMembership()
       } else {
         setError(data.error || 'Failed to change membership plan')
       }
     } catch (err) {
       setError('Network error. Please try again.')
     } finally {
-      setChangingTo(null)
+      setProcessing(false)
     }
+  }
+
+  const closeModal = () => {
+    setSelectedPlan(null)
+    setPreview(null)
   }
 
   if (loading) {
@@ -85,6 +139,8 @@ export default function MembershipPage() {
       </div>
     )
   }
+
+  const selectedPlanDetails = selectedPlan ? MEMBERSHIP_PLANS[selectedPlan as keyof typeof MEMBERSHIP_PLANS] : null
 
   return (
     <div className="container mx-auto p-6 max-w-4xl space-y-6">
@@ -164,7 +220,7 @@ export default function MembershipPage() {
         <CardHeader>
           <CardTitle>Available Plans</CardTitle>
           <CardDescription>
-            Change your membership plan. Changes take effect on your next billing cycle.
+            Click on a plan to see pricing options and change your membership.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -177,7 +233,7 @@ export default function MembershipPage() {
                 className={`cursor-pointer transition-all hover:shadow-lg border-2 ${
                   currentMembership?.type === key ? 'ring-2 ring-blue-400 bg-blue-500/10 border-blue-500/20' : 'hover:border-white/30'
                 }`}
-                onClick={() => handlePlanChange(key)}
+                onClick={() => openPlanModal(key)}
               >
                 <CardHeader className="text-center">
                   <CardTitle className="text-lg">{plan.name}</CardTitle>
@@ -195,12 +251,11 @@ export default function MembershipPage() {
                     </div>
                   ))}
                   <Button
-                    onClick={() => handlePlanChange(key)}
-                    disabled={currentMembership?.type === key || changingTo !== null}
+                    disabled={currentMembership?.type === key}
                     className="w-full mt-4"
                     variant={currentMembership?.type === key ? 'secondary' : 'default'}
                   >
-                    {changingTo === key ? 'Changing...' : currentMembership?.type === key ? 'Current Plan' : 'Change to This Plan'}
+                    {currentMembership?.type === key ? 'Current Plan' : 'Select This Plan'}
                   </Button>
                 </CardContent>
               </Card>
@@ -208,6 +263,114 @@ export default function MembershipPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Plan Change Modal */}
+      <Dialog open={!!selectedPlan} onOpenChange={(open) => !open && closeModal()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {preview?.isUpgrade ? (
+                <ArrowUpRight className="h-5 w-5 text-green-500" />
+              ) : (
+                <ArrowDownRight className="h-5 w-5 text-blue-500" />
+              )}
+              {preview?.isUpgrade ? 'Upgrade' : 'Change'} to {selectedPlanDetails?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Choose how you'd like to handle the price adjustment
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewLoading ? (
+            <div className="py-8 text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+              <p className="mt-2 text-muted-foreground">Calculating adjustment...</p>
+            </div>
+          ) : preview ? (
+            <div className="space-y-4">
+              {/* Price Summary */}
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Current plan</span>
+                  <span>£{preview.currentPrice}/month</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">New plan</span>
+                  <span className="font-semibold">£{preview.newPrice}/month</span>
+                </div>
+                <div className="border-t pt-2 mt-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      {preview.isUpgrade ? 'Amount due today' : 'Credit to account'}
+                    </span>
+                    <span className={`font-bold ${preview.isUpgrade ? 'text-green-500' : 'text-blue-500'}`}>
+                      £{preview.prorationAmount.toFixed(2)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Prorated for remaining days until {preview.nextBillingDate}
+                  </p>
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="space-y-3">
+                <Button
+                  className="w-full h-auto py-4"
+                  onClick={() => handlePlanChange('charge_now')}
+                  disabled={processing}
+                >
+                  <div className="flex items-center gap-3 w-full">
+                    <CreditCard className="h-5 w-5 flex-shrink-0" />
+                    <div className="text-left flex-1">
+                      <div className="font-semibold">
+                        {preview.isUpgrade ? `Pay £${preview.prorationAmount.toFixed(2)} now` : 'Switch now'}
+                      </div>
+                      <div className="text-xs opacity-80">
+                        {preview.isUpgrade 
+                          ? 'Charge my card immediately and upgrade now' 
+                          : `Receive £${preview.prorationAmount.toFixed(2)} credit on next invoice`}
+                      </div>
+                    </div>
+                  </div>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="w-full h-auto py-4"
+                  onClick={() => handlePlanChange('defer')}
+                  disabled={processing}
+                >
+                  <div className="flex items-center gap-3 w-full">
+                    <Calendar className="h-5 w-5 flex-shrink-0" />
+                    <div className="text-left flex-1">
+                      <div className="font-semibold">Add to next invoice</div>
+                      <div className="text-xs opacity-80">
+                        {preview.isUpgrade 
+                          ? `Pay £${(preview.newPrice + preview.prorationAmount).toFixed(2)} on ${preview.nextBillingDate}` 
+                          : `Pay £${(preview.newPrice - preview.prorationAmount).toFixed(2)} on ${preview.nextBillingDate}`}
+                      </div>
+                    </div>
+                  </div>
+                </Button>
+              </div>
+
+              {processing && (
+                <div className="text-center py-2">
+                  <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                  <p className="text-sm text-muted-foreground mt-1">Processing...</p>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeModal} disabled={processing}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Cancellation Notice */}
       <Card className="border-orange-200">

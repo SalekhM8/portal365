@@ -689,17 +689,17 @@ export async function GET() {
           )
           if (oldFormat.length > 0 && oldFormat[0].month && oldFormat[0].year) {
             const sorted = [...oldFormat].sort((a: any, b: any) => (a.year - b.year) || (a.month - b.month))
-            const first = sorted[0]
-            const last = sorted[sorted.length - 1]
-            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-            const firstLabel = `${monthNames[(first.month||1)-1]} ${first.year}`
+          const first = sorted[0]
+          const last = sorted[sorted.length - 1]
+          const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+          const firstLabel = `${monthNames[(first.month||1)-1]} ${first.year}`
             if (sorted.some((w: any) => w.openEnded && !w.closedAt)) {
-              pauseScheduleLabel = `from ${firstLabel}`
-            } else {
-              const lastLabel = `${monthNames[(last.month||1)-1]} ${last.year}`
-              pauseScheduleLabel = (first.year === last.year && first.month === last.month)
-                ? firstLabel
-                : `${firstLabel}–${lastLabel}`
+            pauseScheduleLabel = `from ${firstLabel}`
+          } else {
+            const lastLabel = `${monthNames[(last.month||1)-1]} ${last.year}`
+            pauseScheduleLabel = (first.year === last.year && first.month === last.month)
+              ? firstLabel
+              : `${firstLabel}–${lastLabel}`
             }
           }
         }

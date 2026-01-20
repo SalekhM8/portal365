@@ -16,7 +16,7 @@ import {
   X
 } from "lucide-react";
 import { MEMBERSHIP_PLANS } from "@/config/memberships";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -26,6 +26,7 @@ import {
   AlertDialogTrigger,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
+import { useClasses, usePlansByBusiness } from "@/hooks/use-dashboard-data";
 
 const businesses = [
   {
@@ -52,43 +53,20 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [timetableOpen, setTimetableOpen] = useState(false);
   const [specialOpen, setSpecialOpen] = useState(false);
-  const [classes, setClasses] = useState<Array<any>>([]);
-  const [loadingClasses, setLoadingClasses] = useState(false);
-  const [plansByBusiness, setPlansByBusiness] = useState<Record<string, any[]>>({})
-
-  useEffect(() => {
-    if (!timetableOpen || classes.length) return;
-    setLoadingClasses(true);
-    fetch('/api/classes')
-      .then(r => r.json())
-      .then(json => {
-        if (json?.success && Array.isArray(json.classes) && json.classes.length > 0) {
-          setClasses(json.classes);
-        } else {
-          setClasses(getFallbackTimetable());
-        }
-      })
-      .finally(() => setLoadingClasses(false));
-  }, [timetableOpen, classes.length]);
-
-  useEffect(() => {
-    // Load DB plans for each business so landing reflects newly created packages
-    const load = async () => {
-      try {
-        const ids = ['aura_mma','aura_womens']
-        const entries = await Promise.all(ids.map(async id => {
-          const res = await fetch(`/api/plans?business=${id}`, { cache: 'no-store' })
-          const json = await res.json()
-          const arr = Array.isArray(json?.plans) ? json.plans : []
-          return [id, arr] as const
-        }))
-        const map: Record<string, any[]> = {}
-        for (const [id, arr] of entries) map[id] = arr
-        setPlansByBusiness(map)
-      } catch {}
-    }
-    load()
-  }, [])
+  
+  // SWR hooks for cached data fetching - no more refetch on tab switch!
+  const { classes: classesData, isLoading: loadingClasses } = useClasses();
+  const { plans: auraPlans } = usePlansByBusiness('aura_mma');
+  const { plans: womensPlans } = usePlansByBusiness('aura_womens');
+  
+  // Use fetched classes or fallback
+  const classes = classesData.length > 0 ? classesData : getFallbackTimetable();
+  
+  // Combine plans by business
+  const plansByBusiness: Record<string, any[]> = {
+    'aura_mma': auraPlans,
+    'aura_womens': womensPlans
+  };
 
   return (
     <div className="min-h-screen bg-black text-white">

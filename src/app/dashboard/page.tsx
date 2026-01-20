@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Calendar, CreditCard, User, Clock, MapPin, Users, LogOut, Settings, Crown } from 'lucide-react'
+import { Calendar, CreditCard, User, Clock, MapPin, Users, LogOut, Settings, Crown, Loader2 } from 'lucide-react'
+import { useCustomerDashboard } from '@/hooks/use-dashboard-data'
+import { useState } from 'react'
 
 interface MembershipData {
   type: string
@@ -41,76 +43,27 @@ interface ClassData {
 function DashboardContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const userEmail = searchParams.get('email')
-  const [loading, setLoading] = useState(true)
-  const [membershipData, setMembershipData] = useState<MembershipData | null>(null)
-  const [paymentHistory, setPaymentHistory] = useState<PaymentData[]>([])
-  const [members, setMembers] = useState<Array<{ id: string; name: string }>>([])
+  const userEmail = searchParams.get('email') || undefined
   const [selectedMemberId, setSelectedMemberId] = useState<string>('ALL')
-  const [upcomingClasses, setUpcomingClasses] = useState<ClassData[]>([])
-  const [userData, setUserData] = useState<any>(null)
 
-  useEffect(() => {
-    // ✅ REPLACE mock data with real API call
-    fetchDashboardData()
-  }, [])
+  // 🚀 SWR hook - cached data, no refetch on tab switch!
+  const { 
+    user: userData, 
+    membership: membershipData, 
+    payments: paymentHistory, 
+    members, 
+    classes: upcomingClasses,
+    isLoading: loading,
+    isError,
+    refresh
+  } = useCustomerDashboard(userEmail)
 
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true)
-      
-      console.log('🔍 Fetching real customer dashboard data...')
-      
-      // Include email parameter if available (for post-registration flow)
-      const url = userEmail 
-        ? `/api/customers/dashboard?email=${encodeURIComponent(userEmail)}` 
-        : '/api/customers/dashboard'
-      
-      const response = await fetch(url, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          // ✅ Handle authentication redirect
-          window.location.href = '/auth/signin'
-          return
-        }
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      const data = await response.json()
-
-      // ✅ Set all data including user information
-      setUserData(data.user)
-      setMembershipData(data.membership)
-      // Backwards compatibility: if new shape exists, remap; else use legacy paymentHistory
-      if (Array.isArray(data.paymentsWithMember) && Array.isArray(data.members)) {
-        setMembers([{ id: 'ALL', name: 'All' }, ...data.members])
-        const mapped: PaymentData[] = data.paymentsWithMember.map((p: any) => ({
-          id: p.id,
-          amount: p.amount,
-          date: p.date,
-          status: p.status,
-          description: `${p.description || 'Payment'} — ${p.memberName}`,
-          memberId: p.memberId
-        }))
-        setPaymentHistory(mapped)
-      } else {
-        setPaymentHistory(data.paymentHistory)
-      }
-      setUpcomingClasses(data.classSchedule)
-      
-      console.log(`✅ Real customer data loaded for: ${data.user.firstName} ${data.user.lastName}`)
-      
-    } catch (error) {
-      console.error('❌ Error fetching real customer data:', error)
-      // ✅ KEEP your existing error handling pattern
-    } finally {
-      setLoading(false)
+  // Handle auth redirect
+  if (isError) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/auth/signin'
     }
+    return null
   }
 
   const handleLogout = async () => {
@@ -119,8 +72,11 @@ function DashboardContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center min-h-screen bg-black">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-red-500" />
+          <p className="text-white/60">Loading your dashboard...</p>
+        </div>
       </div>
     )
   }

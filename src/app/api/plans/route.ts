@@ -25,7 +25,15 @@ export async function GET(req: NextRequest) {
       ? plans.filter(p => (p.preferredEntities || []).includes(business))
       : plans
 
-    return NextResponse.json({ success: true, plans: filtered })
+    // Cache plans for 5 minutes - they rarely change
+    return NextResponse.json(
+      { success: true, plans: filtered },
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+        },
+      }
+    )
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e?.message || 'Failed to load plans' }, { status: 500 })
   }
