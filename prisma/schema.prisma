@@ -533,6 +533,7 @@ model MembershipPlan {
   schedulePolicy       String?  // JSON: timezone, allowedWindows[{days,start,end,zones?}], exceptions?
   preferredEntities    String?  // JSON array of entity names
   active               Boolean  @default(true)
+  migrationOnly        Boolean  @default(false) // If true, only shown on /migrate page (no proration)
 
   // Stripe mapping (for new signups). Existing subs remain on old prices unless migrated explicitly
   stripeProductId      String?

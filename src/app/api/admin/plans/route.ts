@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
       schedulePolicy: safeParse(r.schedulePolicy),
       preferredEntities: safeParse(r.preferredEntities),
       active: r.active,
+      migrationOnly: r.migrationOnly,
       stripeProductId: r.stripeProductId,
       stripePriceIdActive: r.stripePriceIdActive
     }))
@@ -55,11 +56,20 @@ export async function POST(req: NextRequest) {
       features = [],
       schedulePolicy,
       preferredEntities = [],
-      active = true
+      active = true,
+      migrationOnly = false
     } = body || {}
 
-    if (!key || !name || !displayName || typeof monthlyPrice !== 'number') {
-      return NextResponse.json({ error: 'Validation failed' }, { status: 400 })
+    // Validate required fields with specific error messages
+    const errors: string[] = []
+    if (!key) errors.push('Key is required')
+    if (!name) errors.push('Name is required')
+    if (!displayName) errors.push('Display Name is required')
+    if (typeof monthlyPrice !== 'number' || isNaN(monthlyPrice)) errors.push('Monthly Price must be a valid number')
+    
+    if (errors.length > 0) {
+      console.error('Plan validation failed:', errors, { key, name, displayName, monthlyPrice })
+      return NextResponse.json({ error: 'Validation failed', details: errors }, { status: 400 })
     }
 
     const created = await prisma.membershipPlan.create({
@@ -72,7 +82,8 @@ export async function POST(req: NextRequest) {
         features: JSON.stringify(Array.isArray(features) ? features : []),
         schedulePolicy: schedulePolicy ? JSON.stringify(schedulePolicy) : null,
         preferredEntities: JSON.stringify(Array.isArray(preferredEntities) ? preferredEntities : []),
-        active
+        active,
+        migrationOnly
       }
     })
 
@@ -103,6 +114,7 @@ export async function PATCH(req: NextRequest) {
     if (update.schedulePolicy) data.schedulePolicy = JSON.stringify(update.schedulePolicy)
     if (Array.isArray(update.preferredEntities)) data.preferredEntities = JSON.stringify(update.preferredEntities)
     if (typeof update.active === 'boolean') data.active = update.active
+    if (typeof update.migrationOnly === 'boolean') data.migrationOnly = update.migrationOnly
     if (typeof update.stripeProductId === 'string') data.stripeProductId = update.stripeProductId
     if (typeof update.stripePriceIdActive === 'string') data.stripePriceIdActive = update.stripePriceIdActive
 

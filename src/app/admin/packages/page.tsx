@@ -18,7 +18,7 @@ function PackagesContent() {
   const [authChecked, setAuthChecked] = useState(false)
   const [plans, setPlans] = useState<any[]>([])
   const [creating, setCreating] = useState(false)
-  const [newPlan, setNewPlan] = useState({ key: '', name: '', displayName: '', description: '', monthlyPrice: '' })
+  const [newPlan, setNewPlan] = useState({ key: '', name: '', displayName: '', description: '', monthlyPrice: '', migrationOnly: false })
   const [newWindows, setNewWindows] = useState<Array<{ days: string[]; start: string; end: string }>>([])
   const [newVisibility, setNewVisibility] = useState<string[]>([])
   const DAY_OPTIONS = ['mon','tue','wed','thu','fri','sat','sun']
@@ -111,7 +111,16 @@ function PackagesContent() {
                   <input type="checkbox" checked={newVisibility.includes('aura_mma')} onChange={e => setNewVisibility(v => e.target.checked ? Array.from(new Set([...v, 'aura_mma'])) : v.filter(x => x !== 'aura_mma'))} /> Aura MMA (men)
                 </label>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={newVisibility.includes('aura_womens')} onChange={e => setNewVisibility(v => e.target.checked ? Array.from(new Set([...v, 'aura_womens'])) : v.filter(x => x !== 'aura_womens'))} /> Women’s Striking
+                  <input type="checkbox" checked={newVisibility.includes('aura_womens')} onChange={e => setNewVisibility(v => e.target.checked ? Array.from(new Set([...v, 'aura_womens'])) : v.filter(x => x !== 'aura_womens'))} /> Women's Striking
+                </label>
+              </div>
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <Label className="text-white/80">Migration Only</Label>
+              <div className="flex gap-3 text-white/80 text-sm">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={newPlan.migrationOnly} onChange={e => setNewPlan(p => ({ ...p, migrationOnly: e.target.checked }))} />
+                  <span>Only show on migration page (no prorated payment for these plans)</span>
                 </label>
               </div>
             </div>
@@ -175,17 +184,26 @@ function PackagesContent() {
                       features: newFeatures.filter(Boolean),
                       schedulePolicy: { timezone: 'Europe/London', allowedWindows: (newWindows.length ? newWindows : [{ days: ['mon','tue','wed','thu','fri','sat','sun'], start: '00:00', end: '24:00' }]) },
                       preferredEntities: newVisibility,
-                      active: true
+                      active: true,
+                      migrationOnly: newPlan.migrationOnly
                     })
                   })
                   const data = await res.json()
                   if (data?.success) {
-                    setPlans(prev => [...prev, { ...data.plan, monthlyPrice: Number(data.plan.monthlyPrice), features: newFeatures.filter(Boolean), schedulePolicy: { timezone: 'Europe/London', allowedWindows: (newWindows.length ? newWindows : [{ days: ['mon','tue','wed','thu','fri','sat','sun'], start: '00:00', end: '24:00' }]) }, preferredEntities: newVisibility }])
-                    setNewPlan({ key: '', name: '', displayName: '', description: '', monthlyPrice: '' })
+                    setPlans(prev => [...prev, { ...data.plan, monthlyPrice: Number(data.plan.monthlyPrice), features: newFeatures.filter(Boolean), schedulePolicy: { timezone: 'Europe/London', allowedWindows: (newWindows.length ? newWindows : [{ days: ['mon','tue','wed','thu','fri','sat','sun'], start: '00:00', end: '24:00' }]) }, preferredEntities: newVisibility, migrationOnly: newPlan.migrationOnly }])
+                    setNewPlan({ key: '', name: '', displayName: '', description: '', monthlyPrice: '', migrationOnly: false })
                     setNewWindows([])
                     setNewVisibility([])
                     setNewFeatures([])
+                    alert('Plan created successfully!')
+                  } else {
+                    const errorMsg = data?.details?.join(', ') || data?.error || 'Failed to create plan'
+                    alert(`Error: ${errorMsg}`)
+                    console.error('Create plan failed:', data)
                   }
+                } catch (err: any) {
+                  alert(`Error: ${err?.message || 'Network error'}`)
+                  console.error('Create plan error:', err)
                 } finally {
                   setCreating(false)
                 }
@@ -201,8 +219,9 @@ function PackagesContent() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white">{plan.displayName}</CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Badge className={`border-white/10 ${plan.active ? 'bg-green-500/20 text-green-200' : 'bg-white/10 text-white'}`}>{plan.active ? 'Active' : 'Archived'}</Badge>
+                  {plan.migrationOnly && <Badge className="bg-orange-500/20 text-orange-200 border-orange-500/30">Migration Only</Badge>}
                   <Badge className="bg-white/10 text-white border-white/10">£{plan.monthlyPrice}/mo</Badge>
                 </div>
               </div>
@@ -235,6 +254,7 @@ function PackagesContent() {
                           description: plan.description || '',
                           monthlyPrice: String(plan.monthlyPrice),
                           active: !!plan.active,
+                          migrationOnly: !!plan.migrationOnly,
                           windows: windows.map((w: any) => ({ days: (w.days || []).join(','), start: w.start, end: w.end })),
                           preferredEntities: Array.isArray(plan.preferredEntities) ? plan.preferredEntities : []
                         })
@@ -310,7 +330,16 @@ function PackagesContent() {
                       <Label className="text-white/80">Visibility</Label>
                       <div className="flex gap-3 text-white/80 text-sm">
                         <label className="flex items-center gap-2"><input type="checkbox" checked={editDraft.preferredEntities.includes('aura_mma')} onChange={e => setEditDraft((d: any) => ({ ...d, preferredEntities: e.target.checked ? Array.from(new Set([...(d.preferredEntities||[]), 'aura_mma'])) : (d.preferredEntities||[]).filter((x: string) => x !== 'aura_mma') }))} /> Aura MMA</label>
-                        <label className="flex items-center gap-2"><input type="checkbox" checked={editDraft.preferredEntities.includes('aura_womens')} onChange={e => setEditDraft((d: any) => ({ ...d, preferredEntities: e.target.checked ? Array.from(new Set([...(d.preferredEntities||[]), 'aura_womens'])) : (d.preferredEntities||[]).filter((x: string) => x !== 'aura_womens') }))} /> Women’s Striking</label>
+                        <label className="flex items-center gap-2"><input type="checkbox" checked={editDraft.preferredEntities.includes('aura_womens')} onChange={e => setEditDraft((d: any) => ({ ...d, preferredEntities: e.target.checked ? Array.from(new Set([...(d.preferredEntities||[]), 'aura_womens'])) : (d.preferredEntities||[]).filter((x: string) => x !== 'aura_womens') }))} /> Women's Striking</label>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-white/80">Migration Only</Label>
+                      <div className="flex gap-3 text-white/80 text-sm">
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" checked={editDraft.migrationOnly} onChange={e => setEditDraft((d: any) => ({ ...d, migrationOnly: e.target.checked }))} />
+                          <span>Only show on migration page (no proration)</span>
+                        </label>
                       </div>
                     </div>
                     <div className="flex gap-2 pt-2">
@@ -330,12 +359,13 @@ function PackagesContent() {
                               monthlyPrice: Number(editDraft.monthlyPrice),
                               schedulePolicy,
                               preferredEntities: editDraft.preferredEntities,
-                              features: (editDraft.features || []).filter((s: string) => !!s)
+                              features: (editDraft.features || []).filter((s: string) => !!s),
+                              migrationOnly: editDraft.migrationOnly
                             } })
                           })
                           const data = await res.json()
                           if (data?.success) {
-                            setPlans(prev => prev.map(p => p.key === plan.key ? { ...p, displayName: editDraft.displayName, description: editDraft.description, monthlyPrice: Number(editDraft.monthlyPrice), schedulePolicy, preferredEntities: editDraft.preferredEntities, features: (editDraft.features || []).filter((s: string) => !!s) } : p))
+                            setPlans(prev => prev.map(p => p.key === plan.key ? { ...p, displayName: editDraft.displayName, description: editDraft.description, monthlyPrice: Number(editDraft.monthlyPrice), schedulePolicy, preferredEntities: editDraft.preferredEntities, features: (editDraft.features || []).filter((s: string) => !!s), migrationOnly: editDraft.migrationOnly } : p))
                             setEditingKey(null)
                             setEditDraft(null)
                           }
