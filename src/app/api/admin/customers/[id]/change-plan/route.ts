@@ -3,7 +3,30 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
-import { getPlan } from '@/config/memberships'
+import { getPlan, MEMBERSHIP_PLANS } from '@/config/memberships'
+
+// Helper to get plan from DB first, then fallback to config
+async function getPlanDetails(key: string): Promise<{ name: string; displayName: string; monthlyPrice: number } | null> {
+  // Try database first
+  const dbPlan = await prisma.membershipPlan.findUnique({ where: { key } })
+  if (dbPlan) {
+    return {
+      name: dbPlan.name,
+      displayName: dbPlan.displayName,
+      monthlyPrice: Number(dbPlan.monthlyPrice)
+    }
+  }
+  // Fallback to static config
+  const staticPlan = MEMBERSHIP_PLANS[key as keyof typeof MEMBERSHIP_PLANS]
+  if (staticPlan) {
+    return {
+      name: staticPlan.name,
+      displayName: staticPlan.displayName,
+      monthlyPrice: staticPlan.monthlyPrice
+    }
+  }
+  return null
+}
 
 export async function POST(
   request: NextRequest,
@@ -36,7 +59,10 @@ export async function POST(
     const stripeStatus = (stripeSub as any).status as string
     const item = (stripeSub as any).items?.data?.[0]
     const currentMonthly = ((item?.price?.unit_amount || 0) / 100)
-    const plan = getPlan(newMembershipType)
+    const plan = await getPlanDetails(newMembershipType)
+    if (!plan) {
+      return NextResponse.json({ error: `Unknown membership plan: ${newMembershipType}` }, { status: 400 })
+    }
     const newMonthly = plan.monthlyPrice
 
     // Ensure price exists
