@@ -244,6 +244,8 @@ function AdminDashboardContent() {
   const [newPlanKey, setNewPlanKey] = useState<string>('FULL_ADULT')
   const [effectiveMode, setEffectiveMode] = useState<'now' | 'period_end'>('now')
   const [settlementMode, setSettlementMode] = useState<'defer' | 'charge_now'>('defer')
+  const [availablePlans, setAvailablePlans] = useState<Array<{key: string, displayName: string, monthlyPrice: number, migrationOnly?: boolean}>>([])
+  const [plansLoading, setPlansLoading] = useState(false)
   const [preview, setPreview] = useState<any>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [changeLoading, setChangeLoading] = useState(false)
@@ -1964,7 +1966,27 @@ function AdminDashboardContent() {
                     {/* Admin tools moved here */}
         <div className="flex flex-col gap-2">
           <Button variant="outline" onClick={async () => { if (!confirm('Delete this account? Only allowed when no active/trial/paused/past_due subs, no paid invoices, no confirmed payments.')) return; const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/delete`, { method: 'POST' }); const json = await resp.json(); if (resp.ok) { alert('Account deleted'); setSelectedCustomer(null); await fetchAdminData() } else { alert('Delete blocked: ' + (json.error || 'Unknown reason')) } }} className="border-red-500/20 text-red-400 hover:bg-red-500/10 w-full">Delete Account</Button>
-          <Button variant="outline" onClick={() => setShowChangePlanModal(true)} className="border-white/20 text-white hover:bg-white/10 w-full">Change Plan (Admin)</Button>
+          <Button variant="outline" onClick={async () => {
+            setShowChangePlanModal(true)
+            // Fetch all plans including migration-only ones
+            if (availablePlans.length === 0) {
+              setPlansLoading(true)
+              try {
+                const res = await fetch('/api/admin/plans')
+                const data = await res.json()
+                if (data?.plans) {
+                  setAvailablePlans(data.plans.filter((p: any) => p.active))
+                } else {
+                  // Fallback to static config
+                  setAvailablePlans(Object.values(MEMBERSHIP_PLANS).map(p => ({ key: p.key, displayName: p.displayName, monthlyPrice: p.monthlyPrice })))
+                }
+              } catch {
+                setAvailablePlans(Object.values(MEMBERSHIP_PLANS).map(p => ({ key: p.key, displayName: p.displayName, monthlyPrice: p.monthlyPrice })))
+              } finally {
+                setPlansLoading(false)
+              }
+            }
+          }} className="border-white/20 text-white hover:bg-white/10 w-full">Change Plan (Admin)</Button>
           <Button variant="outline" onClick={() => handlePasswordReset(selectedCustomer.id)} disabled={resetPasswordLoading} className="border-blue-500/20 text-blue-400 hover:bg-blue-500/10 w-full">{resetPasswordLoading ? 'Resetting…' : 'Reset Password'}</Button>
                   </div>
                   </div>
@@ -2430,12 +2452,22 @@ function AdminDashboardContent() {
                   <SelectTrigger className="bg-white/5 border-white/20 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-black border-white/20">
-                    {Object.entries(MEMBERSHIP_PLANS).map(([key, plan]) => (
-                      <SelectItem key={key} value={key} className="text-white hover:bg-white/10">
-                        {plan.displayName} (£{plan.monthlyPrice}/mo)
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="bg-black border-white/20 max-h-[300px]">
+                    {plansLoading ? (
+                      <SelectItem value="_loading" disabled className="text-white/50">Loading plans...</SelectItem>
+                    ) : availablePlans.length > 0 ? (
+                      availablePlans.map((plan) => (
+                        <SelectItem key={plan.key} value={plan.key} className="text-white hover:bg-white/10">
+                          {plan.displayName} (£{plan.monthlyPrice}/mo){plan.migrationOnly ? ' [Migration]' : ''}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      Object.entries(MEMBERSHIP_PLANS).map(([key, plan]) => (
+                        <SelectItem key={key} value={key} className="text-white hover:bg-white/10">
+                          {plan.displayName} (£{plan.monthlyPrice}/mo)
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
