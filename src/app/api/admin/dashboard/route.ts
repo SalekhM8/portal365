@@ -881,16 +881,18 @@ export async function GET() {
       }
     })
 
-    // Group by key (newest first) - for deduplication per invoice/subscription-month
-    const todoGrouped: Record<string, Array<typeof todoItemsRaw[number]>> = {}
-    for (const it of todoItemsRaw.sort((a,b) => b._ts - a._ts)) {
-      todoGrouped[it._key] = todoGrouped[it._key] || []
-      todoGrouped[it._key].push(it)
+    // Group by USER ID (not invoice) - show only ONE failure per person (the most recent)
+    const todoByUser: Record<string, typeof todoItemsRaw[number]> = {}
+    for (const it of todoItemsRaw.sort((a, b) => b._ts - a._ts)) {
+      // Only keep the most recent failure per user
+      if (!todoByUser[it.customerId]) {
+        todoByUser[it.customerId] = it
+      }
     }
 
-    // Take first failure per group (already filtered for non-dismissed at query level)
-    const paymentTodos = Object.values(todoGrouped).map(list => {
-      const { _key, _ts, _invoiceId, ...rest } = list[0]
+    // Transform to final format
+    const paymentTodos = Object.values(todoByUser).map(item => {
+      const { _key, _ts, _invoiceId, ...rest } = item
       return { ...rest, groupKey: _key, invoiceId: _invoiceId }
     })
 
