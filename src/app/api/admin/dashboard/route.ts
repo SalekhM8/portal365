@@ -515,7 +515,10 @@ export async function GET() {
     const allFailedPayments = await prisma.payment.findMany({
       where: { 
         status: 'FAILED',
-        failureReason: { notIn: ['DISMISSED_ADMIN', 'VOIDED_INVOICE'] }
+        OR: [
+          { failureReason: null },
+          { failureReason: { notIn: ['DISMISSED_ADMIN', 'VOIDED_INVOICE'] } }
+        ]
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -530,6 +533,54 @@ export async function GET() {
           }
         }
       }
+    })
+
+    // Get all CONFIRMED payments to check for resolved failures
+    const allConfirmedPayments = await prisma.payment.findMany({
+      where: { status: 'CONFIRMED' },
+      select: { 
+        userId: true, 
+        stripeInvoiceId: true, 
+        description: true,
+        createdAt: true 
+      }
+    })
+
+    // Build a set of resolved invoice IDs and user+month keys
+    const resolvedInvoiceIds = new Set<string>()
+    const resolvedUserMonthKeys = new Set<string>()
+    
+    for (const p of allConfirmedPayments) {
+      if (p.stripeInvoiceId) {
+        resolvedInvoiceIds.add(p.stripeInvoiceId)
+      }
+      // Also extract invoice from description [inv:xxx]
+      const invMatch = (p.description || '').match(/\[inv:([^\]]+)\]/)
+      if (invMatch?.[1]) {
+        resolvedInvoiceIds.add(invMatch[1])
+      }
+      // User+month key
+      const monthKey = p.createdAt.toISOString().slice(0, 7)
+      resolvedUserMonthKeys.add(`${p.userId}:${monthKey}`)
+    }
+
+    // Filter out failed payments that have been resolved
+    const unresolvedFailedPayments = allFailedPayments.filter((payment: any) => {
+      // Check by invoice ID
+      if (payment.stripeInvoiceId && resolvedInvoiceIds.has(payment.stripeInvoiceId)) {
+        return false // Resolved
+      }
+      // Check by description invoice
+      const invMatch = (payment.description || '').match(/\[inv:([^\]]+)\]/)
+      if (invMatch?.[1] && resolvedInvoiceIds.has(invMatch[1])) {
+        return false // Resolved
+      }
+      // Check by user+month (if same user paid in same month, consider resolved)
+      const monthKey = payment.createdAt.toISOString().slice(0, 7)
+      if (resolvedUserMonthKeys.has(`${payment.userId}:${monthKey}`)) {
+        return false // Resolved
+      }
+      return true // Still unresolved
     })
 
     // Best-effort enrichment of failure reasons for recent failed payments lacking a reason
@@ -799,8 +850,8 @@ export async function GET() {
       })
     }
 
-    // 🔴 Build To-Do items from ALL failed payments (not limited to 50)
-    const todoItemsRaw = allFailedPayments.map((payment: any) => {
+    // 🔴 Build To-Do items from UNRESOLVED failed payments (excludes ones with subsequent success)
+    const todoItemsRaw = unresolvedFailedPayments.map((payment: any) => {
       const desc: string = payment.description || ''
       const subMatch = desc.match(/\[sub:([^\]]+)\]/)
       const invMatch = desc.match(/\[inv:([^\]]+)\]/)
