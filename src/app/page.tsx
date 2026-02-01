@@ -319,14 +319,14 @@ export default function Home() {
             {/* Migration portal link */}
             <div className="flex items-center">
               <Link href="/migrate">
-                <button
+                  <button
                   aria-label="Migration Portal"
-                  className="h-8 w-8 rounded-full border border-white/20 text-white/70 hover:text-white hover:border-white/40 hover:bg-white/10 transition"
+                    className="h-8 w-8 rounded-full border border-white/20 text-white/70 hover:text-white hover:border-white/40 hover:bg-white/10 transition"
                   title="Migration Portal for Existing Members"
-                >
-                  •
-                </button>
-              </Link>
+                  >
+                    •
+                  </button>
+                      </Link>
             </div>
           </div>
         </div>

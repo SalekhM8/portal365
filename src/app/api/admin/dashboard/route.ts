@@ -511,6 +511,27 @@ export async function GET() {
       }
     })
 
+    // 🔴 SEPARATE QUERY: Get ALL failed payments for To-Do list (no limit)
+    const allFailedPayments = await prisma.payment.findMany({
+      where: { 
+        status: 'FAILED',
+        failureReason: { notIn: ['DISMISSED_ADMIN', 'VOIDED_INVOICE'] }
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { firstName: true, lastName: true, email: true } },
+        routedEntity: { select: { displayName: true } },
+        routing: {
+          select: {
+            routingReason: true,
+            confidence: true,
+            routingMethod: true,
+            thresholdDistance: true
+          }
+        }
+      }
+    })
+
     // Best-effort enrichment of failure reasons for recent failed payments lacking a reason
     const enrichedFailureReasonById: Record<string, string> = {}
     const failedNeedingReason = payments.filter((p: any) => p.status === 'FAILED' && !p.failureReason).slice(0, 10)
@@ -778,14 +799,11 @@ export async function GET() {
       })
     }
 
-    // Build payment items with a stable key per billing artifact to dedupe and auto-hide on success
-    const paymentItemsRaw = payments.map((payment: any) => {
+    // 🔴 Build To-Do items from ALL failed payments (not limited to 50)
+    const todoItemsRaw = allFailedPayments.map((payment: any) => {
       const desc: string = payment.description || ''
       const subMatch = desc.match(/\[sub:([^\]]+)\]/)
       const invMatch = desc.match(/\[inv:([^\]]+)\]/)
-      // New grouping:
-      // 1) Prefer invoice id when present (group per-invoice)
-      // 2) Else group per subscription-month (stable monthly bucket)
       const monthKey = payment.createdAt.toISOString().slice(0,7)
       const key = invMatch?.[1]
         ? `INV:${invMatch[1]}`
@@ -805,39 +823,25 @@ export async function GET() {
         retryCount: payment.retryCount,
         processingTime: payment.routing?.decisionTimeMs || 0,
         confidence: payment.routing?.confidence || 'MEDIUM',
-        membershipType: formattedCustomers.find(c => c.id === payment.userId)?.membershipType || 'Unknown',
+        membershipType: formattedCustomers.find((c: any) => c.id === payment.userId)?.membershipType || 'Unknown',
         _key: key,
         _invoiceId: invoiceId,
         _ts: payment.createdAt.getTime()
       }
     })
 
-    // Group by key (newest first)
-    const grouped: Record<string, Array<typeof paymentItemsRaw[number]>> = {}
-    for (const it of paymentItemsRaw.sort((a,b) => b._ts - a._ts)) {
-      grouped[it._key] = grouped[it._key] || []
-      grouped[it._key].push(it)
+    // Group by key (newest first) - for deduplication per invoice/subscription-month
+    const todoGrouped: Record<string, Array<typeof todoItemsRaw[number]>> = {}
+    for (const it of todoItemsRaw.sort((a,b) => b._ts - a._ts)) {
+      todoGrouped[it._key] = todoGrouped[it._key] || []
+      todoGrouped[it._key].push(it)
     }
 
-    // For each key: if any CONFIRMED exists, hide entire key; else take first FAILED that isn't dismissed
-    const picked: Array<typeof paymentItemsRaw[number]> = []
-    for (const key of Object.keys(grouped)) {
-      const list = grouped[key]
-      const hasConfirmed = list.some(i => i.status === 'CONFIRMED')
-      if (hasConfirmed) continue
-      const candidate = list.find(i => {
-        if (i.status !== 'FAILED') return false
-        const reason = i.failureReason || ''
-        return !['DISMISSED_ADMIN', 'VOIDED_INVOICE'].includes(reason)
-      })
-      if (candidate) picked.push(candidate)
-    }
-
-    const paymentTodos = picked.map(({ _key, _ts, _invoiceId, ...rest }) => ({
-      ...rest,
-      groupKey: _key,
-      invoiceId: _invoiceId
-    }))
+    // Take first failure per group (already filtered for non-dismissed at query level)
+    const paymentTodos = Object.values(todoGrouped).map(list => {
+      const { _key, _ts, _invoiceId, ...rest } = list[0]
+      return { ...rest, groupKey: _key, invoiceId: _invoiceId }
+    })
 
     const payments_full = payments.map((payment: any) => ({
       id: payment.id,

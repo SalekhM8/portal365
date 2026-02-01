@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
 
       if (settlement === 'charge_now') {
         // CHARGE NOW: Update Stripe price, charge delta, update Portal immediately
-        await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+    await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
           items: [{ id: item.id, price: newPriceId }],
           proration_behavior: 'none'
         })
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Update Portal immediately - they paid, they get access
-        await prisma.membership.updateMany({
+    await prisma.membership.updateMany({
           where: { userId: user.id, status: 'ACTIVE' },
           data: { membershipType: newMembershipType, monthlyPrice: newDetails.monthlyPrice }
         })
@@ -212,8 +212,8 @@ export async function POST(request: NextRequest) {
         where: { userId: user.id, status: 'ACTIVE' },
         data: { membershipType: newMembershipType, monthlyPrice: newDetails.monthlyPrice }
       })
-      await prisma.subscription.update({
-        where: { id: subscription.id },
+    await prisma.subscription.update({
+      where: { id: subscription.id },
         data: { membershipType: newMembershipType, monthlyPrice: newDetails.monthlyPrice }
       })
     } else {
@@ -224,8 +224,8 @@ export async function POST(request: NextRequest) {
         metadata: {
           pending_plan: newMembershipType,
           pending_from: currentMembership.membershipType
-        }
-      })
+      }
+    })
 
       // DON'T update Portal - webhook will handle it when invoice is paid
       console.log(`⏳ Active plan change deferred: keeping ${currentMembership.membershipType} until next payment`)

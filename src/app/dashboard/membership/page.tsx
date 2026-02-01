@@ -66,7 +66,7 @@ export default function MembershipPage() {
 
   const openPlanModal = async (planKey: string) => {
     if (planKey === currentMembership?.type) return
-    
+
     setSelectedPlan(planKey)
     setPreview(null)
     setPreviewLoading(true)

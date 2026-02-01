@@ -61,7 +61,7 @@ function DashboardContent() {
   // Handle auth redirect
   if (isError) {
     if (typeof window !== 'undefined') {
-      window.location.href = '/auth/signin'
+          window.location.href = '/auth/signin'
     }
     return null
   }

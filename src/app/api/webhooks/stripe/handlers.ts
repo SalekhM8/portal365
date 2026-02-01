@@ -315,7 +315,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     })
     
     console.log(`✅ [${operationId}] Updated ${updatedMemberships.count} memberships to ACTIVE`)
-
+    
     // STEP 9b: Apply pending plan change if deferred plan switch was scheduled
     try {
       if (subscriptionId) {
