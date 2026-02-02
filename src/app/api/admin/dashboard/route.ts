@@ -802,7 +802,16 @@ export async function GET() {
         nextBilling: nextBillingIso,
         startsOn,
         pauseScheduleLabel,
-        emergencyContact: customer.emergencyContact ? JSON.parse(customer.emergencyContact) : { name: '', phone: '', relationship: '' },
+        emergencyContact: (() => {
+          if (!customer.emergencyContact) return { name: '', phone: '', relationship: '' }
+          try {
+            return JSON.parse(customer.emergencyContact)
+          } catch {
+            // Plain string format like "Name/Phone" - parse it
+            const parts = customer.emergencyContact.split('/')
+            return { name: parts[0]?.trim() || customer.emergencyContact, phone: parts[1]?.trim() || '', relationship: '' }
+          }
+        })(),
         accessHistory: {
           lastAccess: 'N/A',
           totalVisits: 0,
