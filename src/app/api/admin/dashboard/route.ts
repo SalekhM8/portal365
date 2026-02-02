@@ -535,9 +535,15 @@ export async function GET() {
       }
     })
 
-    // Get all CONFIRMED payments to check for resolved failures
-    const allConfirmedPayments = await prisma.payment.findMany({
-      where: { status: 'CONFIRMED' },
+    // Get CONFIRMED payments from recent months only (for performance)
+    const threeMonthsAgo = new Date()
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+    
+    const recentConfirmedPayments = await prisma.payment.findMany({
+      where: { 
+        status: 'CONFIRMED',
+        createdAt: { gte: threeMonthsAgo }
+      },
       select: { 
         userId: true, 
         stripeInvoiceId: true, 
@@ -550,7 +556,7 @@ export async function GET() {
     const resolvedInvoiceIds = new Set<string>()
     const resolvedUserMonthKeys = new Set<string>()
     
-    for (const p of allConfirmedPayments) {
+    for (const p of recentConfirmedPayments) {
       if (p.stripeInvoiceId) {
         resolvedInvoiceIds.add(p.stripeInvoiceId)
       }
