@@ -1177,16 +1177,19 @@ function AdminDashboardContent() {
                         }
                         return (
                           <>
-                          {failed.map((p) => (
+                          {failed.map((p, idx) => (
                           <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
                             <div className="flex items-start justify-between gap-3">
-                              <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
-                                <p className="text-sm font-medium text-white">{p.customerName}</p>
-                                <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
-                                <div className="mt-1">
-                                  <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
-                                    {p.status === 'INCOMPLETE_SIGNUP' ? 'NO PAYMENT METHOD ATTACHED' : 'FAILED'}
-                                  </Badge>
+                              <div className="flex items-start gap-3">
+                                <span className="text-sm font-bold text-white/50 min-w-[24px]">{idx + 1}.</span>
+                                <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
+                                  <p className="text-sm font-medium text-white">{p.customerName}</p>
+                                  <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
+                                  <div className="mt-1">
+                                    <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
+                                      {p.status === 'INCOMPLETE_SIGNUP' ? 'NO PAYMENT METHOD ATTACHED' : 'FAILED'}
+                                    </Badge>
+                                  </div>
                                 </div>
                               </div>
                               <div className="flex flex-col gap-2 shrink-0">
@@ -1272,16 +1275,19 @@ function AdminDashboardContent() {
                     }
                   return (
                     <>
-                    {failed.map((p) => (
+                    {failed.map((p, idx) => (
                       <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
                         <div className="flex items-start justify-between gap-3">
-                          <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
-                            <p className="text-sm font-medium text-white">{p.customerName}</p>
+                          <div className="flex items-start gap-3">
+                            <span className="text-sm font-bold text-white/50 min-w-[24px]">{idx + 1}.</span>
+                            <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
+                              <p className="text-sm font-medium text-white">{p.customerName}</p>
                             <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
                             <div className="mt-1">
                               <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
                                 {p.status === 'INCOMPLETE_SIGNUP' ? 'NO PAYMENT METHOD ATTACHED' : 'FAILED'}
                               </Badge>
+                              </div>
                             </div>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 shrink-0">
