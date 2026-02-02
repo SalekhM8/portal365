@@ -512,13 +512,19 @@ export async function GET() {
     })
 
     // 🔴 SEPARATE QUERY: Get ALL failed payments for To-Do list (no limit)
+    // Exclude users with CANCELLED subscriptions (nothing to do for them)
     const allFailedPayments = await prisma.payment.findMany({
       where: { 
         status: 'FAILED',
         OR: [
           { failureReason: null },
           { failureReason: { notIn: ['DISMISSED_ADMIN', 'VOIDED_INVOICE'] } }
-        ]
+        ],
+        user: {
+          subscriptions: {
+            some: { status: { notIn: ['CANCELLED'] } }
+          }
+        }
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -552,9 +558,9 @@ export async function GET() {
       }
     })
 
-    // Build a set of resolved invoice IDs and track earliest confirmed payment per user
+    // Build a set of resolved invoice IDs and track LATEST confirmed payment per user
     const resolvedInvoiceIds = new Set<string>()
-    const userEarliestConfirmedDate: Record<string, Date> = {}
+    const userLatestConfirmedDate: Record<string, Date> = {}
     
     for (const p of recentConfirmedPayments) {
       if (p.stripeInvoiceId) {
@@ -565,9 +571,9 @@ export async function GET() {
       if (invMatch?.[1]) {
         resolvedInvoiceIds.add(invMatch[1])
       }
-      // Track earliest confirmed payment date per user
-      if (!userEarliestConfirmedDate[p.userId] || p.createdAt < userEarliestConfirmedDate[p.userId]) {
-        userEarliestConfirmedDate[p.userId] = p.createdAt
+      // Track LATEST confirmed payment date per user
+      if (!userLatestConfirmedDate[p.userId] || p.createdAt > userLatestConfirmedDate[p.userId]) {
+        userLatestConfirmedDate[p.userId] = p.createdAt
       }
     }
 
@@ -583,8 +589,8 @@ export async function GET() {
         return false // Resolved
       }
       // Check if user has ANY confirmed payment AFTER this failure
-      const earliestConfirmed = userEarliestConfirmedDate[payment.userId]
-      if (earliestConfirmed && earliestConfirmed > payment.createdAt) {
+      const latestConfirmed = userLatestConfirmedDate[payment.userId]
+      if (latestConfirmed && latestConfirmed > payment.createdAt) {
         return false // User has paid successfully after this failure - resolved
       }
       return true // Still unresolved
