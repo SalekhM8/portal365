@@ -247,7 +247,50 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
             console.log(`♻️ [${operationId}] Reattributed existing payment ${existingPaymentAnyUser.id} to user ${preferredUserId}`)
           }
         } catch {}
-        console.log(`ℹ️ [${operationId}] Invoice already processed with payment ${existingPaymentAnyUser.id}, skipping`)
+        
+        // 🔴 FIX: If existing payment was FAILED but invoice is now paid, update everything!
+        if (existingPaymentAnyUser.status === 'FAILED') {
+          console.log(`🔄 [${operationId}] Existing payment was FAILED, updating to CONFIRMED and activating membership...`)
+          
+          // Update payment to CONFIRMED
+          await prisma.payment.update({
+            where: { id: existingPaymentAnyUser.id },
+            data: { 
+              status: 'CONFIRMED',
+              processedAt: new Date(),
+              failureReason: null
+            }
+          })
+          console.log(`✅ [${operationId}] Updated payment ${existingPaymentAnyUser.id} from FAILED to CONFIRMED`)
+          
+          // Update subscription to ACTIVE
+          await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { 
+              status: 'ACTIVE',
+              currentPeriodStart: new Date(invoice.period_start * 1000),
+              currentPeriodEnd: new Date(invoice.period_end * 1000),
+              nextBillingDate: new Date(invoice.period_end * 1000)
+            }
+          })
+          console.log(`✅ [${operationId}] Updated subscription ${subscription.id} to ACTIVE`)
+          
+          // Update membership to ACTIVE
+          await prisma.membership.updateMany({
+            where: { userId: subscription.userId },
+            data: { status: 'ACTIVE' }
+          })
+          console.log(`✅ [${operationId}] Updated memberships for user ${subscription.userId} to ACTIVE`)
+          
+          // Clear any dunning suspension flag
+          try {
+            await prisma.systemSetting.deleteMany({ where: { key: `dunning:suspended:${subscription.id}` } })
+          } catch {}
+          
+          return
+        }
+        
+        console.log(`ℹ️ [${operationId}] Invoice already processed with payment ${existingPaymentAnyUser.id} (status: ${existingPaymentAnyUser.status}), skipping`)
         return
       }
       // Backfill missing payment for already-recorded invoice

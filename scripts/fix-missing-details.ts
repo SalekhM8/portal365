@@ -108,18 +108,14 @@ for (const m of membersData) {
 async function main() {
   console.log('🔍 Finding users with missing details in prod...\n')
 
-  // Find users with missing details
+  // Find users with missing details (name, phone, emergency contact)
   const users = await prisma.user.findMany({
     where: {
       OR: [
-        { firstName: null },
         { firstName: '' },
-        { lastName: null },
         { lastName: '' },
         { phone: null },
         { phone: '' },
-        { address: null },
-        { address: '' },
         { emergencyContact: null },
         { emergencyContact: '' },
       ]
@@ -130,7 +126,6 @@ async function main() {
       firstName: true,
       lastName: true,
       phone: true,
-      address: true,
       emergencyContact: true,
     }
   })
@@ -161,7 +156,6 @@ async function main() {
     if (!user.firstName && firstName) updateData.firstName = firstName
     if (!user.lastName && lastName) updateData.lastName = lastName
     if (!user.phone && memberData.phone) updateData.phone = memberData.phone.replace(/\s/g, '')
-    if (!user.address && memberData.address) updateData.address = memberData.address
     if (!user.emergencyContact && memberData.emergency) updateData.emergencyContact = memberData.emergency
 
     if (Object.keys(updateData).length > 0) {
