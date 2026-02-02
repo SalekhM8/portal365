@@ -552,9 +552,9 @@ export async function GET() {
       }
     })
 
-    // Build a set of resolved invoice IDs and user+month keys
+    // Build a set of resolved invoice IDs and track earliest confirmed payment per user
     const resolvedInvoiceIds = new Set<string>()
-    const resolvedUserMonthKeys = new Set<string>()
+    const userEarliestConfirmedDate: Record<string, Date> = {}
     
     for (const p of recentConfirmedPayments) {
       if (p.stripeInvoiceId) {
@@ -565,9 +565,10 @@ export async function GET() {
       if (invMatch?.[1]) {
         resolvedInvoiceIds.add(invMatch[1])
       }
-      // User+month key
-      const monthKey = p.createdAt.toISOString().slice(0, 7)
-      resolvedUserMonthKeys.add(`${p.userId}:${monthKey}`)
+      // Track earliest confirmed payment date per user
+      if (!userEarliestConfirmedDate[p.userId] || p.createdAt < userEarliestConfirmedDate[p.userId]) {
+        userEarliestConfirmedDate[p.userId] = p.createdAt
+      }
     }
 
     // Filter out failed payments that have been resolved
@@ -581,10 +582,10 @@ export async function GET() {
       if (invMatch?.[1] && resolvedInvoiceIds.has(invMatch[1])) {
         return false // Resolved
       }
-      // Check by user+month (if same user paid in same month, consider resolved)
-      const monthKey = payment.createdAt.toISOString().slice(0, 7)
-      if (resolvedUserMonthKeys.has(`${payment.userId}:${monthKey}`)) {
-        return false // Resolved
+      // Check if user has ANY confirmed payment AFTER this failure
+      const earliestConfirmed = userEarliestConfirmedDate[payment.userId]
+      if (earliestConfirmed && earliestConfirmed > payment.createdAt) {
+        return false // User has paid successfully after this failure - resolved
       }
       return true // Still unresolved
     })
