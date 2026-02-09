@@ -87,7 +87,7 @@ export async function POST(
       include: {
         subscriptions: {
           where: { 
-            status: { in: ['ACTIVE', 'PAUSED', 'TRIALING'] }
+            status: { in: ['ACTIVE', 'PAUSED', 'TRIALING', 'PAST_DUE', 'PENDING_PAYMENT'] }
           },
           include: {
             routedEntity: true
@@ -95,7 +95,7 @@ export async function POST(
         },
         memberships: {
           where: { 
-            status: { in: ['ACTIVE', 'SUSPENDED'] }
+            status: { in: ['ACTIVE', 'SUSPENDED', 'PENDING_PAYMENT'] }
           }
         }
       }
@@ -222,9 +222,24 @@ export async function POST(
           await tx.membership.updateMany({
             where: { 
               userId: customer.id,
-              status: { in: ['ACTIVE', 'SUSPENDED'] }
+              status: { in: ['ACTIVE', 'SUSPENDED', 'PENDING_PAYMENT'] }
             },
             data: { status: 'CANCELLED' }
+          })
+
+          // Mark any FAILED payments for this user as resolved so they clear from To-Do
+          await tx.payment.updateMany({
+            where: {
+              userId: customer.id,
+              status: 'FAILED',
+              OR: [
+                { failureReason: null },
+                { failureReason: { notIn: ['DISMISSED_ADMIN', 'VOIDED_INVOICE'] } }
+              ]
+            },
+            data: {
+              failureReason: 'VOIDED_INVOICE'
+            }
           })
         } else {
           // End of period cancellation - just set the flag
