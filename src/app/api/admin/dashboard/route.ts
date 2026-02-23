@@ -503,7 +503,27 @@ export async function GET() {
             lastName: true,
             email: true,
             phone: true,
+            status: true,
             emergencyContact: true
+            ,
+            memberships: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                membershipType: true,
+                status: true,
+                nextBillingDate: true
+              }
+            },
+            subscriptions: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                membershipType: true,
+                status: true,
+                nextBillingDate: true
+              }
+            }
           }
         })
       : []
@@ -974,7 +994,8 @@ export async function GET() {
       const parent = parentById.get(fid)
       if (!familiesMap[fid]) {
         const parentDisplayName = parent ? `${parent.firstName} ${parent.lastName}`.trim() : 'Unknown Parent'
-        const familyLastName = (parent?.lastName || '').trim()
+        const fallbackLastName = parentDisplayName.split(' ').filter(Boolean).slice(-1)[0] || 'Family'
+        const familyLastName = (parent?.lastName || '').trim() || fallbackLastName
         familiesMap[fid] = {
           familyId: fid,
           familyName: familyLastName ? `${familyLastName} Family` : `${parentDisplayName} Family`,
@@ -1036,6 +1057,36 @@ export async function GET() {
         membershipStatus: row.status,
         userStatus: row.user.status,
         nextBilling: row.nextBillingDate ? row.nextBillingDate.toISOString().split('T')[0] : null
+      })
+    }
+
+    // Always include the primary account as a clickable row in each family group.
+    // Some older records have child links but the parent membership row is not family-linked.
+    for (const fid of Object.keys(familiesMap)) {
+      const family = familiesMap[fid]
+      const parent = parentById.get(fid)
+      if (!parent) continue
+
+      const alreadyHasParentRow = family.members.some((m) => m.id === parent.id)
+      if (alreadyHasParentRow) continue
+
+      const parentMembership = (parent as any).memberships?.[0]
+      const parentSubscription = (parent as any).subscriptions?.[0]
+      const parentSubscriptionStatus = parentSubscription?.status === 'TRIALING'
+        ? 'ACTIVE'
+        : parentSubscription?.status
+      const parentNextBilling = parentMembership?.nextBillingDate || parentSubscription?.nextBillingDate || null
+
+      family.members.push({
+        id: parent.id,
+        name: `${parent.firstName} ${parent.lastName}`.trim(),
+        email: parent.email,
+        phone: parent.phone || 'N/A',
+        role: 'PARENT',
+        membershipType: parentMembership?.membershipType || parentSubscription?.membershipType || '—',
+        membershipStatus: parentMembership?.status || parentSubscriptionStatus || parent.status || 'ACTIVE',
+        userStatus: parent.status || 'ACTIVE',
+        nextBilling: parentNextBilling ? parentNextBilling.toISOString().split('T')[0] : null
       })
     }
 

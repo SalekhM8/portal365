@@ -1583,7 +1583,9 @@ function AdminDashboardContent() {
                   <div key={family.familyId} className="border border-white/10 rounded-lg p-4 bg-white/5">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
                       <div>
-                        <p className="text-white font-semibold">{family.familyName}</p>
+                        <p className="text-white font-semibold">
+                          {family.familyName || `${(family.parent.name || 'Family').split(' ').filter(Boolean).slice(-1)[0]} Family`}
+                        </p>
                         <p className="text-xs text-white/60">Primary account: {family.parent.name}</p>
                         <p className="text-sm text-white/70">{family.parent.email} • {family.parent.phone || '—'}</p>
                       </div>
