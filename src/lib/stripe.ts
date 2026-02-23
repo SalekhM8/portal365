@@ -192,22 +192,67 @@ export class SubscriptionProcessor {
       
       // Branch: Admin-created subscriptions use SetupIntent + Elements, no upfront PaymentIntent
       if (request.isAdminCreated) {
-        // Create DB subscription placeholder first
-        const dbSubscription = await prisma.subscription.create({
-          data: {
+        // Guard against duplicate family/admin activations:
+        // if a real live Stripe subscription already exists for this user, return it.
+        const existingLiveSubscription = await prisma.subscription.findFirst({
+          where: {
             userId: request.userId,
-            stripeSubscriptionId: `setup_placeholder_${Date.now()}`,
-            stripeCustomerId: customerIdToUse,
-            stripeAccountKey: stripeAccount,
-            routedEntityId: routing.selectedEntityId,
-            membershipType: request.membershipType,
-            monthlyPrice: membershipDetails.monthlyPrice,
-            status: 'PENDING_PAYMENT',
-            currentPeriodStart: now,
-            currentPeriodEnd: startDate,
-            nextBillingDate: startDate
-          }
+            status: { in: ['ACTIVE', 'TRIALING', 'PAUSED', 'PAST_DUE'] },
+            stripeSubscriptionId: { startsWith: 'sub_' }
+          },
+          orderBy: { createdAt: 'desc' }
         })
+        if (existingLiveSubscription) {
+          return {
+            subscription: existingLiveSubscription,
+            clientSecret: '' as any,
+            routing,
+            proratedAmount: 0,
+            nextBillingDate: existingLiveSubscription.nextBillingDate.toISOString().split('T')[0],
+            paymentStatus: 'succeeded'
+          }
+        }
+
+        // Reuse latest pending placeholder if one already exists for this user.
+        // This prevents orphan setup_placeholder rows on repeated activation attempts.
+        const existingPendingPlaceholder = await prisma.subscription.findFirst({
+          where: {
+            userId: request.userId,
+            status: 'PENDING_PAYMENT',
+            stripeSubscriptionId: { startsWith: 'setup_placeholder_' }
+          },
+          orderBy: { createdAt: 'desc' }
+        })
+
+        const dbSubscription = existingPendingPlaceholder
+          ? await prisma.subscription.update({
+              where: { id: existingPendingPlaceholder.id },
+              data: {
+                stripeCustomerId: customerIdToUse,
+                stripeAccountKey: stripeAccount,
+                routedEntityId: routing.selectedEntityId,
+                membershipType: request.membershipType,
+                monthlyPrice: membershipDetails.monthlyPrice,
+                currentPeriodStart: now,
+                currentPeriodEnd: startDate,
+                nextBillingDate: startDate
+              }
+            })
+          : await prisma.subscription.create({
+              data: {
+                userId: request.userId,
+                stripeSubscriptionId: `setup_placeholder_${Date.now()}`,
+                stripeCustomerId: customerIdToUse,
+                stripeAccountKey: stripeAccount,
+                routedEntityId: routing.selectedEntityId,
+                membershipType: request.membershipType,
+                monthlyPrice: membershipDetails.monthlyPrice,
+                status: 'PENDING_PAYMENT',
+                currentPeriodStart: now,
+                currentPeriodEnd: startDate,
+                nextBillingDate: startDate
+              }
+            })
         // Retrieve customer to determine if a default PM exists and ensure account alignment
         let hasDefaultPm = false
         try {

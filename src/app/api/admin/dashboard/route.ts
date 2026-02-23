@@ -661,6 +661,20 @@ export async function GET() {
       }
     })
 
+    // If a user already has a real live Stripe subscription, do not show
+    // "NO PAYMENT METHOD ATTACHED" based on stale placeholder rows.
+    const usersWithRealLiveSubs = new Set(
+      (
+        await prisma.subscription.findMany({
+          where: {
+            status: { in: ['ACTIVE', 'TRIALING', 'PAUSED', 'PAST_DUE'] },
+            stripeSubscriptionId: { startsWith: 'sub_' }
+          },
+          select: { userId: true }
+        })
+      ).map((s) => s.userId)
+    )
+
     const incompleteToDos = [] as Array<{
       id: string
       customerName: string
@@ -678,6 +692,7 @@ export async function GET() {
     }>
 
     for (const sub of rawIncompleteSubs) {
+      if (usersWithRealLiveSubs.has(sub.userId)) continue
       const invoice = sub.invoices[0]
       // Include when there is no invoice yet OR invoice is not paid/void
       if (invoice && ['paid', 'void'].includes(invoice.status)) continue
@@ -849,6 +864,7 @@ export async function GET() {
       const subscription = c.subscriptions[0]
       if (!membership) continue
       if (membership.status !== 'PENDING_PAYMENT') continue
+      if (usersWithRealLiveSubs.has(c.id)) continue
       // Only include if there is no subscription record yet
       if (subscription) continue
       // Ensure no confirmed payments (any time)

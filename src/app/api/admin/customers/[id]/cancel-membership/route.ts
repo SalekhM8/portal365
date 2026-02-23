@@ -89,6 +89,7 @@ export async function POST(
           where: { 
             status: { in: ['ACTIVE', 'PAUSED', 'TRIALING', 'PAST_DUE', 'PENDING_PAYMENT'] }
           },
+          orderBy: { createdAt: 'desc' },
           include: {
             routedEntity: true
           }
@@ -109,13 +110,27 @@ export async function POST(
       }, { status: 404 })
     }
 
-    const activeSubscription = customer.subscriptions[0]
+    const activeSubscription =
+      customer.subscriptions.find((s: any) =>
+        typeof s.stripeSubscriptionId === 'string' && s.stripeSubscriptionId.startsWith('sub_')
+      ) || customer.subscriptions[0]
     if (!activeSubscription) {
       return NextResponse.json({ 
         success: false, 
         error: 'No active subscription found for this customer',
         code: 'NO_ACTIVE_SUBSCRIPTION'
       }, { status: 404 })
+    }
+
+    if (
+      !activeSubscription.stripeSubscriptionId ||
+      !activeSubscription.stripeSubscriptionId.startsWith('sub_')
+    ) {
+      return NextResponse.json({
+        success: false,
+        error: 'No real Stripe subscription found (only pending placeholder record). Activate or cleanup pending setup first.',
+        code: 'NO_REAL_STRIPE_SUBSCRIPTION'
+      }, { status: 400 })
     }
 
     // ✅ IDEMPOTENCY CHECK
