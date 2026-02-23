@@ -936,8 +936,34 @@ export async function GET() {
       orderBy: { createdAt: 'desc' }
     })
 
+    const parentMembershipRows = familyParentIds.length > 0
+      ? await prisma.membership.findMany({
+          where: {
+            userId: { in: familyParentIds }
+          },
+          select: {
+            userId: true,
+            status: true,
+            membershipType: true,
+            nextBillingDate: true,
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+                status: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        })
+      : []
+
     const familiesMap: Record<string, {
       familyId: string
+      familyName: string
       parent: { id: string; name: string; email: string; phone: string }
       members: Array<{ id: string; name: string; email: string; phone: string; role: 'PARENT' | 'CHILD'; membershipType: string; membershipStatus: string; userStatus: string; nextBilling: string | null }>
     }> = {}
@@ -947,11 +973,14 @@ export async function GET() {
       if (!fid) continue
       const parent = parentById.get(fid)
       if (!familiesMap[fid]) {
+        const parentDisplayName = parent ? `${parent.firstName} ${parent.lastName}`.trim() : 'Unknown Parent'
+        const familyLastName = (parent?.lastName || '').trim()
         familiesMap[fid] = {
           familyId: fid,
+          familyName: familyLastName ? `${familyLastName} Family` : `${parentDisplayName} Family`,
           parent: {
             id: parent?.id || fid,
-            name: parent ? `${parent.firstName} ${parent.lastName}`.trim() : 'Unknown Parent',
+            name: parentDisplayName,
             email: parent?.email || 'N/A',
             phone: parent?.phone || 'N/A'
           },
@@ -972,9 +1001,51 @@ export async function GET() {
       })
     }
 
+    // Ensure parent memberships are visible in family groups (not just children)
+    for (const row of parentMembershipRows as any[]) {
+      const fid = row.userId as string
+      if (!fid) continue
+      const parent = parentById.get(fid)
+      const parentDisplayName = parent ? `${parent.firstName} ${parent.lastName}`.trim() : `${row.user.firstName} ${row.user.lastName}`.trim()
+      const familyLastName = (parent?.lastName || row.user.lastName || '').trim()
+
+      if (!familiesMap[fid]) {
+        familiesMap[fid] = {
+          familyId: fid,
+          familyName: familyLastName ? `${familyLastName} Family` : `${parentDisplayName} Family`,
+          parent: {
+            id: row.user.id,
+            name: parentDisplayName,
+            email: row.user.email || 'N/A',
+            phone: row.user.phone || 'N/A'
+          },
+          members: []
+        }
+      }
+
+      const alreadyIncluded = familiesMap[fid].members.some((m) => m.id === row.user.id)
+      if (alreadyIncluded) continue
+
+      familiesMap[fid].members.push({
+        id: row.user.id,
+        name: `${row.user.firstName} ${row.user.lastName}`.trim(),
+        email: row.user.email,
+        phone: row.user.phone || 'N/A',
+        role: 'PARENT',
+        membershipType: row.membershipType,
+        membershipStatus: row.status,
+        userStatus: row.user.status,
+        nextBilling: row.nextBillingDate ? row.nextBillingDate.toISOString().split('T')[0] : null
+      })
+    }
+
     const families = Object.values(familiesMap)
       .map((family) => ({
         ...family,
+        members: [...family.members].sort((a, b) => {
+          if (a.role !== b.role) return a.role === 'PARENT' ? -1 : 1
+          return a.name.localeCompare(b.name)
+        }),
         membersCount: family.members.length
       }))
       .sort((a, b) => b.membersCount - a.membersCount)
