@@ -4,6 +4,16 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient } from '@/lib/stripe'
 
+function parseEmergencyContact(raw: string | null | undefined): any {
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
 // GET: list dependents (children) for the logged-in parent
 export async function GET() {
   try {
@@ -60,6 +70,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
     }
 
+    const parentEmergency = parseEmergencyContact(parent.emergencyContact)
+    const inheritedEmergency = {
+      ...parentEmergency,
+      name: parentEmergency?.name || `${parent.firstName} ${parent.lastName}`,
+      phone: parentEmergency?.phone || parent.phone || '',
+      relationship: parentEmergency?.relationship || 'parent'
+    }
+
     // Create child user account without password (managed by parent)
     const child = await prisma.user.create({
       data: {
@@ -68,8 +86,12 @@ export async function POST(request: NextRequest) {
         email: `${crypto.randomUUID()}@child.local`, // placeholder email; can be updated later
         role: 'CUSTOMER',
         status: 'ACTIVE',
+        phone: parent.phone || null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-        emergencyContact: parent.phone ? JSON.stringify({ name: `${parent.firstName} ${parent.lastName}`, phone: parent.phone, relationship: 'parent' }) : null
+        emergencyContact: Object.keys(inheritedEmergency).length > 0 ? JSON.stringify(inheritedEmergency) : null,
+        communicationPrefs: JSON.stringify({
+          guardianEmail: parent.email
+        })
       }
     })
 

@@ -10,6 +10,16 @@ function firstOfNextMonthUTC(): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0))
 }
 
+function parseEmergencyContact(raw: string | null | undefined): any {
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions) as any
@@ -51,11 +61,20 @@ export async function POST(request: NextRequest) {
 
     // Create child user (shadow) with synthetic email (no login)
     const syntheticEmail = `${childFirstName.toLowerCase()}.${Date.now()}+child@member.local`
+    const parentEmergency = parseEmergencyContact(parent.emergencyContact)
+    const inheritedEmergency = {
+      ...parentEmergency,
+      name: parentEmergency?.name || `${parent.firstName} ${parent.lastName}`,
+      phone: parentEmergency?.phone || parent.phone || '',
+      relationship: parentEmergency?.relationship || 'parent'
+    }
     const child = await prisma.user.create({
       data: {
         email: syntheticEmail,
         firstName: childFirstName,
         lastName: childLastName || '',
+        phone: parent.phone || null,
+        emergencyContact: Object.keys(inheritedEmergency).length > 0 ? JSON.stringify(inheritedEmergency) : null,
         role: 'CUSTOMER',
         status: 'ACTIVE',
         communicationPrefs: JSON.stringify({ guardianEmail: parentEmail })

@@ -10,6 +10,39 @@ import { prisma } from '@/lib/prisma'
 import { VATCalculationEngine } from '@/lib/vat-routing'
 import { stripe } from '@/lib/stripe'
 
+function parseEmergencyContact(raw: string | null | undefined): any {
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function normalizeEmergencyContact(contact: any): {
+  name: string
+  phone: string
+  relationship: string
+  addressInfo?: { address?: string; postcode?: string }
+} {
+  if (!contact || typeof contact !== 'object') {
+    return { name: '', phone: '', relationship: '' }
+  }
+  const addressInfo = contact.addressInfo && typeof contact.addressInfo === 'object'
+    ? {
+        address: contact.addressInfo.address || '',
+        postcode: contact.addressInfo.postcode || ''
+      }
+    : undefined
+  return {
+    name: String(contact.name || ''),
+    phone: String(contact.phone || ''),
+    relationship: String(contact.relationship || ''),
+    ...(addressInfo ? { addressInfo } : {})
+  }
+}
+
 export async function GET() {
   try {
     // ✅ REUSE your existing auth pattern
@@ -453,6 +486,30 @@ export async function GET() {
       take: 500
     })
 
+    const familyParentIds = Array.from(
+      new Set(
+        customers
+          .map((c: any) => c.memberships?.[0]?.familyGroupId)
+          .filter((id: string | null | undefined): id is string => !!id)
+      )
+    )
+
+    const parentUsers = familyParentIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: familyParentIds } },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            emergencyContact: true
+          }
+        })
+      : []
+
+    const parentById = new Map(parentUsers.map((p: any) => [p.id, p]))
+
     // Prefetch upcoming pause windows for all listed subscriptions
     const subIds = customers.map((c: any) => c.subscriptions?.[0]?.id).filter((x: any) => !!x)
     const upcomingWindows = subIds.length
@@ -732,6 +789,8 @@ export async function GET() {
     const formattedCustomers = customers.map((customer: any) => {
       const membership = customer.memberships[0]
       const subscription = customer.subscriptions[0]
+      const familyGroupId = membership?.familyGroupId || null
+      const parent = familyGroupId ? parentById.get(familyGroupId) : null
       const confirmedPaymentsCount = customer.payments.filter((p: any) => p.status === 'CONFIRMED').length
       // Use subscription.nextBillingDate (updated by Stripe) instead of membership.nextBillingDate (static from creation)
       const nextBillingIso = subscription?.nextBillingDate 
@@ -758,6 +817,18 @@ export async function GET() {
       // Determine last paid amount (most recent CONFIRMED payment)
       const lastConfirmedPayment = customer.payments.find((p: any) => p.status === 'CONFIRMED')
       const lastPaidAmount = lastConfirmedPayment ? Number(lastConfirmedPayment.amount) : null
+      const ownEmergency = normalizeEmergencyContact(parseEmergencyContact(customer.emergencyContact))
+      const parentEmergency = normalizeEmergencyContact(parseEmergencyContact(parent?.emergencyContact || null))
+      const effectiveEmergency = {
+        name: ownEmergency.name || parentEmergency.name || '',
+        phone: ownEmergency.phone || parentEmergency.phone || '',
+        relationship: ownEmergency.relationship || parentEmergency.relationship || '',
+        addressInfo: {
+          address: ownEmergency.addressInfo?.address || parentEmergency.addressInfo?.address || '',
+          postcode: ownEmergency.addressInfo?.postcode || parentEmergency.addressInfo?.postcode || ''
+        }
+      }
+      const effectivePhone = customer.phone || parent?.phone || 'N/A'
 
       // Build upcoming pause label from subscription.pauseWindows (if any)
       let pauseScheduleLabel: string | null = null
@@ -810,7 +881,7 @@ export async function GET() {
         account: (subscription?.stripeAccountKey as any) ?? null,
         name: `${customer.firstName} ${customer.lastName}`,
         email: customer.email,
-        phone: customer.phone || 'N/A',
+        phone: effectivePhone,
         dateOfBirth: customer.dateOfBirth ? customer.dateOfBirth.toISOString().split('T')[0] : null,
         membershipType: membership?.membershipType || 'None',
         status: derivedStatus,
@@ -824,16 +895,15 @@ export async function GET() {
         nextBilling: nextBillingIso,
         startsOn,
         pauseScheduleLabel,
-        emergencyContact: (() => {
-          if (!customer.emergencyContact) return { name: '', phone: '', relationship: '' }
-          try {
-            return JSON.parse(customer.emergencyContact)
-          } catch {
-            // Plain string format like "Name/Phone" - parse it
-            const parts = customer.emergencyContact.split('/')
-            return { name: parts[0]?.trim() || customer.emergencyContact, phone: parts[1]?.trim() || '', relationship: '' }
-          }
-        })(),
+        emergencyContact: effectiveEmergency,
+        familyContext: {
+          isChild: Boolean(familyGroupId && membership?.isPrimaryMember === false),
+          familyGroupId,
+          parentId: parent?.id || null,
+          parentName: parent ? `${parent.firstName} ${parent.lastName}`.trim() : null,
+          parentEmail: parent?.email || null,
+          parentPhone: parent?.phone || null
+        },
         accessHistory: {
           lastAccess: 'N/A',
           totalVisits: 0,
@@ -841,6 +911,73 @@ export async function GET() {
         }
       }
     })
+
+    const familyRows = await prisma.membership.findMany({
+      where: {
+        familyGroupId: { not: null }
+      },
+      select: {
+        familyGroupId: true,
+        status: true,
+        membershipType: true,
+        nextBillingDate: true,
+        isPrimaryMember: true,
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            status: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    const familiesMap: Record<string, {
+      familyId: string
+      parent: { id: string; name: string; email: string; phone: string }
+      members: Array<{ id: string; name: string; email: string; phone: string; role: 'PARENT' | 'CHILD'; membershipType: string; membershipStatus: string; userStatus: string; nextBilling: string | null }>
+    }> = {}
+
+    for (const row of familyRows as any[]) {
+      const fid = row.familyGroupId as string
+      if (!fid) continue
+      const parent = parentById.get(fid)
+      if (!familiesMap[fid]) {
+        familiesMap[fid] = {
+          familyId: fid,
+          parent: {
+            id: parent?.id || fid,
+            name: parent ? `${parent.firstName} ${parent.lastName}`.trim() : 'Unknown Parent',
+            email: parent?.email || 'N/A',
+            phone: parent?.phone || 'N/A'
+          },
+          members: []
+        }
+      }
+
+      familiesMap[fid].members.push({
+        id: row.user.id,
+        name: `${row.user.firstName} ${row.user.lastName}`.trim(),
+        email: row.user.email,
+        phone: row.user.phone || parent?.phone || 'N/A',
+        role: row.isPrimaryMember ? 'PARENT' : 'CHILD',
+        membershipType: row.membershipType,
+        membershipStatus: row.status,
+        userStatus: row.user.status,
+        nextBilling: row.nextBillingDate ? row.nextBillingDate.toISOString().split('T')[0] : null
+      })
+    }
+
+    const families = Object.values(familiesMap)
+      .map((family) => ({
+        ...family,
+        membersCount: family.members.length
+      }))
+      .sort((a, b) => b.membersCount - a.membersCount)
 
     // Build incomplete signup todos for users with a pending membership but no subscription yet
     const membershipIncompleteToDos = [] as Array<{
@@ -1003,6 +1140,7 @@ export async function GET() {
       recentActivity: activities,
       vatStatus: vatPositions,
       customers: formattedCustomers,
+      families,
       payments: payments_full,
       paymentsPagination: {
         page: 1,

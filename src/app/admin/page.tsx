@@ -97,12 +97,46 @@ interface CustomerDetail {
     name: string
     phone: string
     relationship: string
+    addressInfo?: {
+      address?: string
+      postcode?: string
+    }
+  }
+  familyContext?: {
+    isChild: boolean
+    familyGroupId: string | null
+    parentId: string | null
+    parentName: string | null
+    parentEmail: string | null
+    parentPhone: string | null
   }
   accessHistory: {
     lastAccess: string
     totalVisits: number
     avgWeeklyVisits: number
   }
+}
+
+interface FamilyDetail {
+  familyId: string
+  membersCount: number
+  parent: {
+    id: string
+    name: string
+    email: string
+    phone: string
+  }
+  members: Array<{
+    id: string
+    name: string
+    email: string
+    phone: string
+    role: 'PARENT' | 'CHILD'
+    membershipType: string
+    membershipStatus: string
+    userStatus: string
+    nextBilling: string | null
+  }>
 }
 
 interface PaymentDetail {
@@ -165,6 +199,7 @@ function AdminDashboardContent() {
   const router = useRouter()
   const [vatStatus, setVatStatus] = useState<VATStatus[]>([])
   const [customers, setCustomers] = useState<CustomerDetail[]>([])
+  const [families, setFamilies] = useState<FamilyDetail[]>([])
   const [payments, setPayments] = useState<PaymentDetail[]>([])
   const [paymentsPage, setPaymentsPage] = useState(1)
   const [paymentsHasMore, setPaymentsHasMore] = useState(true)
@@ -293,7 +328,7 @@ function AdminDashboardContent() {
 
     // Initialize tab from URL (?tab=...)
     const tab = searchParams.get('tab')
-    if (tab && ['overview','customers','payments','analytics'].includes(tab)) {
+    if (tab && ['overview','customers','families','payments','analytics'].includes(tab)) {
       setActiveTab(tab)
     }
 
@@ -318,6 +353,7 @@ function AdminDashboardContent() {
         const data = JSON.parse(cachedData)
         setVatStatus(data.vatStatus || [])
         setCustomers(data.customers || [])
+        setFamilies(data.families || [])
         setPayments(data.payments || [])
         setBusinessMetrics(data.metrics || null)
         setRecentActivity(data.recentActivity || [])
@@ -411,6 +447,7 @@ function AdminDashboardContent() {
       // ✅ KEEP your existing state setters (no changes to UI logic)
       setVatStatus(data.vatStatus)
       setCustomers(data.customers)
+      setFamilies(Array.isArray(data.families) ? data.families : [])
       // Use full payments for Payments tab
       setPayments(Array.isArray(data.payments) ? data.payments : [])
       // Set pagination info from dashboard response
@@ -432,6 +469,7 @@ function AdminDashboardContent() {
         sessionStorage.setItem('portal365.admin.cachedData', JSON.stringify({
           vatStatus: data.vatStatus,
           customers: data.customers,
+          families: data.families,
           payments: data.payments,
           metrics: data.metrics,
           recentActivity: data.recentActivity,
@@ -1142,9 +1180,10 @@ function AdminDashboardContent() {
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <div className="flex justify-center w-full">
-          <TabsList className="inline-grid grid-cols-2 lg:grid-cols-4 h-auto">
+          <TabsList className="inline-grid grid-cols-2 lg:grid-cols-5 h-auto">
             <TabsTrigger value="overview" className="text-xs lg:text-sm px-6">Overview</TabsTrigger>
             <TabsTrigger value="customers" className="text-xs lg:text-sm px-6">Customers</TabsTrigger>
+            <TabsTrigger value="families" className="text-xs lg:text-sm px-6">Families</TabsTrigger>
             <TabsTrigger value="payments" className="text-xs lg:text-sm px-6">Payments</TabsTrigger>
             <TabsTrigger value="analytics" className="text-xs lg:text-sm px-6">Analytics</TabsTrigger>
           </TabsList>
@@ -1528,6 +1567,71 @@ function AdminDashboardContent() {
           </Card>
         </TabsContent>
 
+        {/* Families Tab */}
+        <TabsContent value="families" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Family Groups</CardTitle>
+              <CardDescription>Parent-child membership overview for observability</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {families.length === 0 ? (
+                <div className="text-sm text-white/70">No family groups found.</div>
+              ) : (
+                families.map((family) => (
+                  <div key={family.familyId} className="border border-white/10 rounded-lg p-4 bg-white/5">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+                      <div>
+                        <p className="text-white font-semibold">{family.parent.name}</p>
+                        <p className="text-sm text-white/70">{family.parent.email} • {family.parent.phone || '—'}</p>
+                      </div>
+                      <Badge variant="outline" className="border-white/20 text-white w-fit">
+                        {family.membersCount} member{family.membersCount === 1 ? '' : 's'}
+                      </Badge>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="text-white/60 border-b border-white/10">
+                          <tr>
+                            <th className="text-left p-2">Member</th>
+                            <th className="text-left p-2">Role</th>
+                            <th className="text-left p-2">Plan</th>
+                            <th className="text-left p-2">Status</th>
+                            <th className="text-left p-2">Next Billing</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {family.members.map((member) => (
+                            <tr
+                              key={member.id}
+                              className="border-b border-white/5 hover:bg-white/5 cursor-pointer"
+                              onClick={() => openCustomerModal(member.id)}
+                            >
+                              <td className="p-2">
+                                <p className="text-white">{member.name}</p>
+                                <p className="text-xs text-white/60">{member.email}</p>
+                              </td>
+                              <td className="p-2">
+                                <Badge variant="secondary" className="text-xs">{member.role}</Badge>
+                              </td>
+                              <td className="p-2 text-white/90">{member.membershipType || '—'}</td>
+                              <td className="p-2">
+                                <Badge variant={getStatusBadgeVariant(member.membershipStatus)}>{member.membershipStatus}</Badge>
+                              </td>
+                              <td className="p-2 text-white/80">{member.nextBilling ? new Date(member.nextBilling).toLocaleDateString() : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Payment Details Tab */}
         <TabsContent value="payments" className="space-y-6">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
@@ -1828,7 +1932,12 @@ function AdminDashboardContent() {
                   {selectedCustomer.membershipType} • {selectedCustomer.status}
                   {selectedCustomer.account && <> • {selectedCustomer.account}</>}
                 </p>
-                {selectedCustomer.phone && (
+                {selectedCustomer.familyContext?.isChild && (
+                  <p className="text-xs text-blue-300">
+                    Family member under {selectedCustomer.familyContext.parentName || 'parent account'}
+                  </p>
+                )}
+                {selectedCustomer.phone && selectedCustomer.phone !== 'N/A' && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     <Button variant="outline" asChild className="rounded-full"><a href={`tel:${selectedCustomer.phone}`}>Call</a></Button>
                     <Button variant="outline" asChild className="rounded-full"><a href={`sms:${selectedCustomer.phone}`}>SMS</a></Button>
@@ -1852,11 +1961,11 @@ function AdminDashboardContent() {
                       try {
                         const raw = (selectedCustomer as any)?.emergencyContact
                         const addrObj = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw || {}
-                        const addr = (addrObj as any)?.addressInfo || (addrObj as any)?.address || null
-                        const postcode = (addrObj as any)?.postcode || (addrObj as any)?.addressInfo?.postcode || null
+                        const addr = (addrObj as any)?.addressInfo?.address || (addrObj as any)?.address || null
+                        const postcode = (addrObj as any)?.addressInfo?.postcode || (addrObj as any)?.postcode || null
                     return (
                       <>
-                            <p className="text-white"><strong className="text-white/90">Address:</strong> {(addr && (addr.address || addr.line1 || addr)) || '—'}</p>
+                            <p className="text-white"><strong className="text-white/90">Address:</strong> {(addr && ((addr as any).address || (addr as any).line1 || addr)) || '—'}</p>
                             <p className="text-white"><strong className="text-white/90">Post Code:</strong> {postcode || '—'}</p>
                       </>
                     )

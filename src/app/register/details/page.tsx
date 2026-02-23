@@ -548,6 +548,17 @@ function RegisterDetailsContent() {
                     )}
                   </div>
 
+                  <div className="rounded-xl border border-amber-400/35 bg-amber-500/10 p-4 shadow-lg shadow-amber-900/20">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 rounded-full bg-amber-400/20 p-1.5">
+                        <AlertTriangle className="h-4 w-4 text-amber-300" />
+                      </div>
+                      <p className="text-sm leading-relaxed text-amber-100">
+                        Your first payment will be a prorated payment that calculates how much you owe for the rest of the month. For cancellations, you must give a 14-day notice.
+                      </p>
+                    </div>
+                  </div>
+
                   <Button
                     type="submit"
                     className="w-full bg-white text-black hover:bg-white/90 font-semibold py-6 text-base"
