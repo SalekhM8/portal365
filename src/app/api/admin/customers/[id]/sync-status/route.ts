@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 // Reconcile a single customer's latest failed payment after a successful retry in Stripe
 // Usage: POST /api/admin/customers/[id]/sync-status  OR body { email }
@@ -36,6 +36,7 @@ export async function POST(
     if (!sub?.stripeCustomerId) return NextResponse.json({ error: 'No Stripe customer found for user' }, { status: 400 })
 
     // Find most recent paid invoice on Stripe
+    const stripe = getStripeClient((sub.stripeAccountKey as StripeAccountKey) || 'SU')
     const invoices = await stripe.invoices.list({ customer: sub.stripeCustomerId, limit: 10, status: 'paid' as any })
     const mostRecentPaid = invoices.data.sort((a,b) => (b.created || 0) - (a.created || 0))[0]
     if (!mostRecentPaid) return NextResponse.json({ error: 'No paid invoices found for this customer in Stripe' }, { status: 404 })

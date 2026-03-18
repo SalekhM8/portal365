@@ -40,8 +40,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'email, membershipType, stripeCustomerId are required' }, { status: 400 })
     }
 
-    // Use specified account or default to AURA for new subscriptions
-    const stripeAccount: StripeAccountKey = (account as StripeAccountKey) || 'AURA'
+    // Use specified account or default to AURAUP for new subscriptions
+    const stripeAccount: StripeAccountKey = (account as StripeAccountKey) || 'AURAUP'
     const stripe = getStripeClient(stripeAccount)
 
     const user = await prisma.user.findUnique({ where: { email } })

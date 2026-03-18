@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 // Force fresh reads for proof/debug
 export const dynamic = 'force-dynamic'
@@ -21,7 +21,7 @@ function startOfThisMonthUTC() {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0))
 }
 
-async function sumBalanceSalesNet(created?: { gte?: number; lt?: number }) {
+async function sumBalanceSalesNetForClient(stripeClient: ReturnType<typeof getStripeClient>, created?: { gte?: number; lt?: number }) {
   let hasMore = true
   let startingAfter: string | undefined
   let totalMinor = 0
@@ -29,7 +29,7 @@ async function sumBalanceSalesNet(created?: { gte?: number; lt?: number }) {
   const firstIds: string[] = []
   const lastIds: string[] = []
   while (hasMore) {
-    const page: any = await stripe.balanceTransactions.list({
+    const page: any = await stripeClient.balanceTransactions.list({
       limit: 100,
       starting_after: startingAfter,
       ...(created ? { created } : {})
@@ -49,14 +49,14 @@ async function sumBalanceSalesNet(created?: { gte?: number; lt?: number }) {
   return { amount: totalMinor / 100, count, firstIds, lastIds }
 }
 
-async function sumChargesMinusRefunds(created?: { gte?: number; lt?: number }) {
+async function sumChargesMinusRefundsForClient(stripeClient: ReturnType<typeof getStripeClient>, created?: { gte?: number; lt?: number }) {
   let hasMore = true
   let startingAfter: string | undefined
   let grossMinor = 0
   let refundedMinor = 0
   let count = 0
   while (hasMore) {
-    const page: any = await stripe.charges.list({ limit: 100, starting_after: startingAfter, ...(created ? { created } : {}) })
+    const page: any = await stripeClient.charges.list({ limit: 100, starting_after: startingAfter, ...(created ? { created } : {}) })
     for (const ch of page.data) {
       if ((ch as any).status === 'succeeded' || (ch as any).paid === true) {
         grossMinor += Number(ch.amount || 0)
@@ -68,6 +68,37 @@ async function sumChargesMinusRefunds(created?: { gte?: number; lt?: number }) {
     startingAfter = page.data[page.data.length - 1]?.id
   }
   return { amount: (grossMinor - refundedMinor) / 100, count }
+}
+
+async function sumBalanceSalesNet(created?: { gte?: number; lt?: number }) {
+  const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+  let totalAmount = 0, totalCount = 0
+  const firstIds: string[] = [], lastIds: string[] = []
+  for (const account of allAccounts) {
+    try {
+      const client = getStripeClient(account)
+      const r = await sumBalanceSalesNetForClient(client, created)
+      totalAmount += r.amount
+      totalCount += r.count
+      firstIds.push(...r.firstIds)
+      if (r.lastIds.length) lastIds[0] = r.lastIds[0]
+    } catch {}
+  }
+  return { amount: totalAmount, count: totalCount, firstIds: firstIds.slice(0, 3), lastIds }
+}
+
+async function sumChargesMinusRefunds(created?: { gte?: number; lt?: number }) {
+  const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+  let totalAmount = 0, totalCount = 0
+  for (const account of allAccounts) {
+    try {
+      const client = getStripeClient(account)
+      const r = await sumChargesMinusRefundsForClient(client, created)
+      totalAmount += r.amount
+      totalCount += r.count
+    } catch {}
+  }
+  return { amount: totalAmount, count: totalCount }
 }
 
 export async function GET(req: NextRequest) {
@@ -107,22 +138,31 @@ export async function GET(req: NextRequest) {
       results[key] = { salesNet, chargesMinusRefunds }
     }
 
-    // Payouts
+    // Payouts (aggregate across all accounts)
+    const payoutsByAccount: Record<string, { last: any; next: any }> = {}
     let lastPayout: any = null
     let nextPayout: any = null
-    try {
-      const paid = await stripe.payouts.list({ status: 'paid', limit: 1 })
-      if (paid.data[0]) lastPayout = { amount: paid.data[0].amount / 100, currency: paid.data[0].currency, arrivalDate: new Date(paid.data[0].arrival_date * 1000).toISOString() }
-      const pending = await stripe.payouts.list({ status: 'pending', limit: 1 })
-      if (pending.data[0]) nextPayout = { amount: pending.data[0].amount / 100, currency: pending.data[0].currency, arrivalDate: new Date(pending.data[0].arrival_date * 1000).toISOString() }
-    } catch {}
+    const payoutAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+    for (const account of payoutAccounts) {
+      try {
+        const client = getStripeClient(account)
+        const paid = await client.payouts.list({ status: 'paid', limit: 1 })
+        const pending = await client.payouts.list({ status: 'pending', limit: 1 })
+        const accountLast = paid.data[0] ? { amount: paid.data[0].amount / 100, currency: paid.data[0].currency, arrivalDate: new Date(paid.data[0].arrival_date * 1000).toISOString(), account } : null
+        const accountNext = pending.data[0] ? { amount: pending.data[0].amount / 100, currency: pending.data[0].currency, arrivalDate: new Date(pending.data[0].arrival_date * 1000).toISOString(), account } : null
+        payoutsByAccount[account] = { last: accountLast, next: accountNext }
+        // Pick the most recent across accounts
+        if (accountLast && (!lastPayout || accountLast.arrivalDate > lastPayout.arrivalDate)) lastPayout = accountLast
+        if (accountNext && (!nextPayout || accountNext.arrivalDate < nextPayout.arrivalDate)) nextPayout = accountNext
+      } catch {}
+    }
 
     return NextResponse.json({
       ok: true,
       mode: 'proof',
       windows: Object.keys(windows),
       results,
-      payouts: { last: lastPayout, next: nextPayout }
+      payouts: { last: lastPayout, next: nextPayout, byAccount: payoutsByAccount }
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'failed' }, { status: 500 })

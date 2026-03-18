@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 function hasTag(desc: string | null | undefined, tag: 'pi' | 'inv'): boolean {
   if (!desc) return false
@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       const stripeCustomerId = sub?.stripeCustomerId
       if (!stripeCustomerId) { results.push({ id: p.id, note: 'no_customer' }); continue }
 
+      const stripe = getStripeClient((sub.stripeAccountKey as StripeAccountKey) || 'SU')
       const targetTs = p.processedAt || p.createdAt
       const targetMinor = Math.round(Number(p.amount) * 100)
       let resolvedInv: string | null = null

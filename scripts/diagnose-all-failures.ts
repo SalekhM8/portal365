@@ -7,7 +7,8 @@ const prisma = new PrismaClient()
 const accounts = {
   SU: process.env.STRIPE_SECRET_KEY,
   IQ: process.env.STRIPE_IQ_SECRET_KEY,
-  AURA: process.env.STRIPE_AURA_SECRET_KEY
+  AURA: process.env.STRIPE_AURA_SECRET_KEY,
+  AURAUP: process.env.STRIPE_AURAUP_SECRET_KEY
 }
 
 async function diagnose() {

@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
       console.log('✅ Admin subscription created successfully')
 
       // Get publishable key for the assigned account
-      const accountKey = (subscriptionResult.subscription as any).stripeAccountKey as StripeAccountKey || 'AURA'
+      const accountKey = (subscriptionResult.subscription as any).stripeAccountKey as StripeAccountKey || 'AURAUP'
       const publishableKey = getPublishableKey(accountKey)
 
       // Return same format as registration

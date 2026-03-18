@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Ensure BusinessEntity exists for SU/IQ/AURA
-    const displayNames: Record<string, string> = { SU: 'Sporting U', IQ: 'IQ Learning Centre', AURA: 'Aura MMA' }
+    const displayNames: Record<string, string> = { SU: 'Sporting U', IQ: 'IQ Learning Centre', AURA: 'Aura MMA', AURAUP: 'Aura Up' }
     const entity = await prisma.businessEntity.upsert({
       where: { name: acct },
       update: {},

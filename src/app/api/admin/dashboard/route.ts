@@ -8,7 +8,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions, hasPermission } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { VATCalculationEngine } from '@/lib/vat-routing'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 function parseEmergencyContact(raw: string | null | undefined): any {
   if (!raw) return {}
@@ -193,13 +193,14 @@ export async function GET() {
         } catch {}
       }
 
+      const defaultStripe = getStripeClient((process.env.STRIPE_DEFAULT_ACCOUNT as StripeAccountKey) || 'AURAUP')
       async function sumChargesMinusRefunds(created?: { gte?: number; lt?: number }) {
         let hasMore = true
         let startingAfter: string | undefined = undefined
         let grossMinor = 0
         let refundedMinor = 0
         while (hasMore) {
-          const batch: any = await stripe.charges.list({
+          const batch: any = await defaultStripe.charges.list({
             limit: 100,
             starting_after: startingAfter,
             ...(created ? { created } : {})
@@ -618,22 +619,30 @@ export async function GET() {
       }
     })
 
-    // Get CONFIRMED payments from recent months only (for performance)
-    const threeMonthsAgo = new Date()
-    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
-    
-    const recentConfirmedPayments = await prisma.payment.findMany({
-      where: { 
-        status: 'CONFIRMED',
-        createdAt: { gte: threeMonthsAgo }
-      },
-      select: { 
-        userId: true, 
-        stripeInvoiceId: true, 
-        description: true,
-        createdAt: true 
-      }
-    })
+    // Build failed user/invoice lookup so "resolved" failures do not reappear months later.
+    // We scope queries to failed users/invoices for performance.
+    const failedUserIds = Array.from(new Set(allFailedPayments.map((p: any) => p.userId)))
+    const failedInvoiceIds = new Set<string>()
+    for (const p of allFailedPayments) {
+      if (p.stripeInvoiceId) failedInvoiceIds.add(p.stripeInvoiceId)
+      const invMatch = (p.description || '').match(/\[inv:([^\]]+)\]/)
+      if (invMatch?.[1]) failedInvoiceIds.add(invMatch[1])
+    }
+
+    const recentConfirmedPayments = failedUserIds.length > 0
+      ? await prisma.payment.findMany({
+          where: {
+            status: 'CONFIRMED',
+            userId: { in: failedUserIds }
+          },
+          select: {
+            userId: true,
+            stripeInvoiceId: true,
+            description: true,
+            createdAt: true
+          }
+        })
+      : []
 
     // Build a set of resolved invoice IDs and track LATEST confirmed payment per user
     const resolvedInvoiceIds = new Set<string>()
@@ -654,6 +663,19 @@ export async function GET() {
       }
     }
 
+    // Also resolve by local invoice state for parsed [inv:...] IDs.
+    const closedInvoiceIds = new Set<string>()
+    if (failedInvoiceIds.size > 0) {
+      const localInvoices = await prisma.invoice.findMany({
+        where: {
+          stripeInvoiceId: { in: Array.from(failedInvoiceIds) },
+          status: { in: ['paid', 'void'] }
+        },
+        select: { stripeInvoiceId: true }
+      })
+      for (const inv of localInvoices) closedInvoiceIds.add(inv.stripeInvoiceId)
+    }
+
     // Filter out failed payments that have been resolved
     const unresolvedFailedPayments = allFailedPayments.filter((payment: any) => {
       // Check by invoice ID
@@ -664,6 +686,10 @@ export async function GET() {
       const invMatch = (payment.description || '').match(/\[inv:([^\]]+)\]/)
       if (invMatch?.[1] && resolvedInvoiceIds.has(invMatch[1])) {
         return false // Resolved
+      }
+      // Check local invoice state for parsed invoice IDs
+      if (invMatch?.[1] && closedInvoiceIds.has(invMatch[1])) {
+        return false // Resolved/voided in local invoice ledger
       }
       // Check if user has ANY confirmed payment AFTER this failure
       const latestConfirmed = userLatestConfirmedDate[payment.userId]
@@ -682,26 +708,28 @@ export async function GET() {
         const piMatch = desc.match(/\[pi:([^\]]+)\]/)
         const invMatch = desc.match(/\[inv:([^\]]+)\]/)
         let paymentIntentId: string | null = piMatch?.[1] || null
+        // Resolve account-specific Stripe client for enrichment
+        const sub = await prisma.subscription.findFirst({ where: { userId: p.userId }, orderBy: { createdAt: 'desc' } })
+        const enrichStripe = getStripeClient((sub?.stripeAccountKey as StripeAccountKey) || (process.env.STRIPE_DEFAULT_ACCOUNT as StripeAccountKey) || 'AURAUP')
         if (!paymentIntentId && invMatch?.[1]) {
-          const inv = await stripe.invoices.retrieve(invMatch[1])
+          const inv = await enrichStripe.invoices.retrieve(invMatch[1])
           paymentIntentId = (inv as any)?.payment_intent || null
         }
         if (!paymentIntentId) {
           // Fallback via Stripe customer: try to find a matching invoice around the payment time
-          const sub = await prisma.subscription.findFirst({ where: { userId: p.userId }, orderBy: { createdAt: 'desc' } })
           if (sub?.stripeCustomerId) {
-            const list = await stripe.invoices.list({ customer: sub.stripeCustomerId, limit: 5 })
+            const list = await enrichStripe.invoices.list({ customer: sub.stripeCustomerId, limit: 5 })
             const candidate = list.data.find(i => (i.amount_due || 0) === Math.round(Number(p.amount) * 100))
             if (candidate) paymentIntentId = (candidate as any)?.payment_intent || null
           }
         }
         if (paymentIntentId) {
-          const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
+          const pi = await enrichStripe.paymentIntents.retrieve(paymentIntentId)
           const latestChargeId = (pi as any)?.latest_charge as string | undefined
           let declineCode: string | undefined
           let failureMessage: string | undefined
           if (latestChargeId) {
-            const charge = await stripe.charges.retrieve(latestChargeId)
+            const charge = await enrichStripe.charges.retrieve(latestChargeId)
             declineCode = (charge as any)?.decline_code || (charge as any)?.outcome?.reason || (charge as any)?.failure_code
             failureMessage = (charge as any)?.failure_message || (charge as any)?.outcome?.seller_message
           }
@@ -1216,39 +1244,59 @@ export async function GET() {
       ...membershipIncompleteToDos
     ]
 
-    // Fetch Stripe payouts (last paid and next/pending)
+    // Fetch Stripe payouts aggregated across all accounts
     let lastPayout: any = null
     let nextPayout: any = null
     try {
-      const paidPayouts = await stripe.payouts.list({ status: 'paid', limit: 1 })
-      if (paidPayouts.data[0]) {
-        lastPayout = {
-          amount: Number(paidPayouts.data[0].amount) / 100,
-          currency: paidPayouts.data[0].currency.toUpperCase(),
-          arrivalDate: new Date(paidPayouts.data[0].arrival_date * 1000).toISOString().split('T')[0]
-        }
-      }
-      const pendingPayouts = await stripe.payouts.list({ status: 'pending', limit: 1 })
-      if (pendingPayouts.data[0]) {
-        nextPayout = {
-          amount: Number(pendingPayouts.data[0].amount) / 100,
-          currency: pendingPayouts.data[0].currency.toUpperCase(),
-          arrivalDate: new Date(pendingPayouts.data[0].arrival_date * 1000).toISOString().split('T')[0]
-        }
-      } else {
+      const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+      let totalLastAmount = 0
+      let latestArrival = ''
+      let totalPendingAmount = 0
+      let pendingArrival: string | null = null
+
+      await Promise.all(allAccounts.map(async (acct) => {
         try {
-          const bal = await stripe.balance.retrieve()
-          const pendingTotal = (bal.pending || []).reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0)
-          nextPayout = {
-            amount: pendingTotal / 100,
-            currency: (bal.pending?.[0]?.currency || 'gbp').toUpperCase(),
-            arrivalDate: null
+          const client = getStripeClient(acct)
+          const paid = await client.payouts.list({ status: 'paid', limit: 1 })
+          if (paid.data[0]) {
+            totalLastAmount += Number(paid.data[0].amount) / 100
+            const d = new Date(paid.data[0].arrival_date * 1000).toISOString().split('T')[0]
+            if (d > latestArrival) latestArrival = d
+          }
+          const pending = await client.payouts.list({ status: 'pending', limit: 1 })
+          if (pending.data[0]) {
+            totalPendingAmount += Number(pending.data[0].amount) / 100
+            const d = new Date(pending.data[0].arrival_date * 1000).toISOString().split('T')[0]
+            if (!pendingArrival || d < pendingArrival) pendingArrival = d
+          } else {
+            try {
+              const bal = await client.balance.retrieve()
+              const p = (bal.pending || []).reduce((s: number, b: any) => s + Number(b.amount || 0), 0)
+              totalPendingAmount += p / 100
+            } catch {}
           }
         } catch {}
+      }))
+
+      if (totalLastAmount > 0) {
+        lastPayout = { amount: totalLastAmount, currency: 'GBP', arrivalDate: latestArrival || null }
       }
+      nextPayout = { amount: totalPendingAmount, currency: 'GBP', arrivalDate: pendingArrival }
     } catch (e) {
       // Non-fatal; payouts not available
     }
+
+    // Per-account last month revenue from cached metrics
+    const perAccountLastMonth: Record<string, number> = {}
+    try {
+      for (const acct of ['SU', 'IQ', 'AURA', 'AURAUP'] as const) {
+        const setting = await prisma.systemSetting.findUnique({ where: { key: `metrics:ledger:lastMonthNet:${acct}` } })
+        if (setting) {
+          const parsed = JSON.parse(setting.value || '{}') as { amount?: number }
+          if (parsed?.amount != null) perAccountLastMonth[acct] = Number(parsed.amount)
+        }
+      }
+    } catch {}
 
     return NextResponse.json({
       parityMode: useStripeLedger ? 'stripe_ledger' : 'db',
@@ -1286,7 +1334,8 @@ export async function GET() {
         payouts: {
           last: lastPayout,
           upcoming: nextPayout
-        }
+        },
+        perAccountLastMonth
       },
       // 🚀 NEW: Real business analytics by membership type
       analytics: {

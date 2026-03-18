@@ -4,11 +4,12 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-// All 3 Stripe accounts - only create if key exists
+// All Stripe accounts - only create if key exists
 const stripeAccounts: Record<string, Stripe | null> = {
   SU: process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2025-05-28.basil' as any }) : null,
   IQ: process.env.STRIPE_IQ_SECRET_KEY ? new Stripe(process.env.STRIPE_IQ_SECRET_KEY, { apiVersion: '2025-05-28.basil' as any }) : null,
   AURA: process.env.STRIPE_AURA_SECRET_KEY ? new Stripe(process.env.STRIPE_AURA_SECRET_KEY, { apiVersion: '2025-05-28.basil' as any }) : null,
+  AURAUP: process.env.STRIPE_AURAUP_SECRET_KEY ? new Stripe(process.env.STRIPE_AURAUP_SECRET_KEY, { apiVersion: '2025-05-28.basil' as any }) : null,
 }
 
 async function diagnose() {

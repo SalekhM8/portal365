@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
  * VOID LATEST OPEN INVOICE
@@ -45,6 +45,7 @@ export async function POST(
     }
 
     const subscription = customer.subscriptions[0]
+    const stripe = getStripeClient((subscription.stripeAccountKey as StripeAccountKey) || 'SU')
 
     const openInvoices = await stripe.invoices.list({
       customer: subscription.stripeCustomerId,

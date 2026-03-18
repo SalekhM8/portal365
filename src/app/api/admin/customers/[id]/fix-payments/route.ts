@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
  * 🎯 FIX PAYMENTS FOR A SINGLE CUSTOMER (SURGICAL)
@@ -28,6 +28,7 @@ async function performFix(userId: string) {
 
   if (stripeCustomerId) {
     try {
+      const stripe = getStripeClient((sub?.stripeAccountKey as StripeAccountKey) || 'SU')
       const invoices = await stripe.invoices.list({ customer: stripeCustomerId, limit: 10 })
       hasPaidInvoice = invoices.data.some(inv => inv.status === 'paid')
       if (sub?.stripeSubscriptionId && sub.stripeSubscriptionId.startsWith('sub_')) {

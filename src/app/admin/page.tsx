@@ -171,6 +171,7 @@ interface BusinessMetrics {
     last?: { amount: number; currency: string; arrivalDate: string | null }
     upcoming?: { amount: number; currency: string; arrivalDate: string | null }
   }
+  perAccountLastMonth?: Record<string, number>
 }
 
 interface AnalyticsData {
@@ -211,7 +212,7 @@ function AdminDashboardContent() {
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [revenueMonths, setRevenueMonths] = useState<Array<{ month: string; totalNet: number; charges: number; refunds: number }>>([])
-  const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'AURA'|'ALL'>('AURA')
+  const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'AURA'|'AURAUP'|'ALL'>('AURAUP')
   const [revenueLoading, setRevenueLoading] = useState(false)
   const [revenueUpdatedAt, setRevenueUpdatedAt] = useState<string | null>(null)
   const revenueAbortRef = useRef<AbortController | null>(null)
@@ -379,7 +380,7 @@ function AdminDashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  const loadRevenueMonths = useCallback(async (account: 'SU' | 'IQ' | 'AURA' | 'ALL') => {
+  const loadRevenueMonths = useCallback(async (account: 'SU' | 'IQ' | 'AURA' | 'AURAUP' | 'ALL') => {
     try {
       revenueAbortRef.current?.abort()
       const controller = new AbortController()
@@ -1119,7 +1120,15 @@ function AdminDashboardContent() {
               £{businessMetrics?.totalRevenue.toLocaleString()}
             </div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
-              <span className="text-green-600">+12.3%</span> from last month
+              {(() => {
+                const last = businessMetrics?.monthlyRecurringLastMonth || 0
+                const prev = businessMetrics?.monthlyRecurringPrevMonth || 0
+                if (prev > 0 && last > 0) {
+                  const pct = ((last - prev) / prev * 100).toFixed(1)
+                  return <><span className={Number(pct) >= 0 ? 'text-green-600' : 'text-red-500'}>{Number(pct) >= 0 ? '+' : ''}{pct}%</span> from prior month</>
+                }
+                return 'All accounts combined'
+              })()}
             </p>
           </CardContent>
         </Card>
@@ -1140,6 +1149,16 @@ function AdminDashboardContent() {
             <p className="text-[10px] sm:text-xs text-muted-foreground">
               MTD: £{(businessMetrics?.monthlyRecurring || 0).toLocaleString()}
             </p>
+            {businessMetrics?.perAccountLastMonth && Object.keys(businessMetrics.perAccountLastMonth).length > 0 && (
+              <div className="mt-2 space-y-0.5">
+                {Object.entries(businessMetrics.perAccountLastMonth).filter(([, v]) => v > 0).map(([acct, amt]) => (
+                  <div key={acct} className="flex justify-between text-[10px] text-white/50">
+                    <span>{acct}</span>
+                    <span>£{amt.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -1540,7 +1559,7 @@ function AdminDashboardContent() {
                         </td>
                         <td className="p-4 border-r border-white/5">
                           <Badge variant="secondary" className="text-xs">
-                            {customer.account === 'AURA' ? 'AURA' : customer.account === 'IQ' ? 'IQ' : (customer.account === 'SU' ? 'SU' : '—')}
+                            {customer.account === 'AURAUP' ? 'AURAUP' : customer.account === 'AURA' ? 'AURA' : customer.account === 'IQ' ? 'IQ' : (customer.account === 'SU' ? 'SU' : '—')}
                           </Badge>
                         </td>
                         <td className="p-4 border-r border-white/5">
@@ -1857,6 +1876,7 @@ function AdminDashboardContent() {
                   value={revenueAccount}
                   onChange={(e) => setRevenueAccount(e.target.value as any)}
                 >
+                  <option value="AURAUP">AURAUP</option>
                   <option value="AURA">AURA</option>
                   <option value="SU">SU</option>
                   <option value="IQ">IQ</option>

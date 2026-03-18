@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
  * 🔍 DIAGNOSTIC: Find out why autopayments aren't being recorded
@@ -29,15 +29,25 @@ export async function POST(request: NextRequest) {
 
     console.log('🔍 Starting autopayment diagnostic...')
 
-    // 📊 Get today's paid invoices from Stripe (last 24 hours to be safe)
+    // 📊 Get today's paid invoices from ALL Stripe accounts (last 24 hours to be safe)
     const yesterday = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000)
-    const stripeInvoices = await stripe.invoices.list({
-      status: 'paid',
-      created: { gte: yesterday },
-      limit: 100
-    })
+    const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+    const allInvoiceData: Array<{ invoice: any; account: StripeAccountKey }> = []
+    for (const account of allAccounts) {
+      try {
+        const client = getStripeClient(account)
+        const stripeInvoices = await client.invoices.list({
+          status: 'paid',
+          created: { gte: yesterday },
+          limit: 100
+        })
+        for (const inv of stripeInvoices.data) {
+          allInvoiceData.push({ invoice: inv, account })
+        }
+      } catch {}
+    }
 
-    console.log(`📊 Found ${stripeInvoices.data.length} paid invoices in Stripe from last 24h`)
+    console.log(`📊 Found ${allInvoiceData.length} paid invoices across all Stripe accounts from last 24h`)
 
     const diagnosticResults = []
     let totalInvoices = 0
@@ -46,7 +56,7 @@ export async function POST(request: NextRequest) {
     let customerFallbackWorked = 0
     let completeFailures = 0
 
-    for (const invoice of stripeInvoices.data) {
+    for (const { invoice, account: invoiceAccount } of allInvoiceData) {
       totalInvoices++
       const result: any = {
         invoiceId: invoice.id,
@@ -55,6 +65,7 @@ export async function POST(request: NextRequest) {
         subscription: (invoice as any).subscription,
         billing_reason: invoice.billing_reason,
         created: new Date(invoice.created * 1000).toISOString(),
+        stripeAccount: invoiceAccount,
         status: 'UNKNOWN'
       }
 
@@ -118,7 +129,7 @@ export async function POST(request: NextRequest) {
         // 🔍 TEST 4: Try customer metadata fallback (what we'll add)
         if (!subscription && invoice.customer) {
           try {
-            const stripeCustomer = await stripe.customers.retrieve(invoice.customer as string)
+            const stripeCustomer = await getStripeClient(invoiceAccount).customers.retrieve(invoice.customer as string)
             const userId = (stripeCustomer as any).metadata?.userId
             
             if (userId) {

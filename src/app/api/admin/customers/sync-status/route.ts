@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 // Simple email-based sync endpoint for convenience
 export async function POST(request: NextRequest) {
@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
     const sub = await prisma.subscription.findFirst({ where: { userId: user.id }, orderBy: { createdAt: 'desc' } })
     if (!sub?.stripeCustomerId) return NextResponse.json({ error: 'No Stripe customer found for user' }, { status: 400 })
 
+    const stripe = getStripeClient((sub.stripeAccountKey as StripeAccountKey) || 'SU')
     const invoices = await stripe.invoices.list({ customer: sub.stripeCustomerId, limit: 10, status: 'paid' as any })
     const mostRecentPaid = invoices.data.sort((a,b) => (b.created || 0) - (a.created || 0))[0]
     if (!mostRecentPaid) return NextResponse.json({ error: 'No paid invoices found for this customer in Stripe' }, { status: 404 })

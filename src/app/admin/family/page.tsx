@@ -9,7 +9,7 @@ export default function AdminFamilyCreatePage() {
   const [childFirstName, setChildFirstName] = useState('')
   const [childLastName, setChildLastName] = useState('')
   const [planKey, setPlanKey] = useState('KIDS_UNLIMITED_UNDER14')
-  const [account, setAccount] = useState<'SU'|'IQ'>('IQ')
+  const [account, setAccount] = useState<'SU'|'IQ'|'AURA'|'AURAUP'>('AURAUP')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string|undefined>()
 
@@ -68,6 +68,8 @@ export default function AdminFamilyCreatePage() {
             <div>
               <label className="block text-sm mb-1">Stripe account</label>
               <select className="border rounded p-2 w-full" value={account} onChange={e=>setAccount(e.target.value as any)}>
+                <option value="AURAUP">Aura Up</option>
+                <option value="AURA">Aura MMA</option>
                 <option value="SU">Sporting U</option>
                 <option value="IQ">IQ Learning Centre</option>
               </select>

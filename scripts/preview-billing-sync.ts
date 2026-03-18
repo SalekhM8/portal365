@@ -10,9 +10,10 @@ import Stripe from 'stripe'
 
 const prisma = new PrismaClient()
 
-// All 3 Stripe accounts
+// All Stripe accounts
 const stripeClients: Record<string, Stripe> = {
   AURA: new Stripe(process.env.STRIPE_SECRET_KEY_AURA!, { apiVersion: '2025-04-30.basil' as any }),
+  AURAUP: new Stripe(process.env.STRIPE_SECRET_KEY_AURAUP || process.env.STRIPE_AURAUP_SECRET_KEY!, { apiVersion: '2025-04-30.basil' as any }),
   IQ: new Stripe(process.env.STRIPE_SECRET_KEY_IQ!, { apiVersion: '2025-04-30.basil' as any }),
   SU: new Stripe(process.env.STRIPE_SECRET_KEY_SU!, { apiVersion: '2025-04-30.basil' as any }),
 }
@@ -44,6 +45,7 @@ async function previewSync() {
       if (accountKey === 'IQ' || accountKey === 'iq') accountKey = 'IQ'
       if (accountKey === 'SU' || accountKey === 'su') accountKey = 'SU'
       if (accountKey === 'AURA' || accountKey === 'aura') accountKey = 'AURA'
+      if (accountKey === 'AURAUP' || accountKey === 'auraup') accountKey = 'AURAUP'
       
       const stripe = stripeClients[accountKey]
       

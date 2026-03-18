@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
  * 🔄 BACKFILL MISSING AUTOPAYMENTS
@@ -32,26 +32,34 @@ export async function POST(request: NextRequest) {
     // Get the date range for backfill (last 90 days to be safe)
     const ninetyDaysAgo = Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000)
     
-    // Fetch all paid invoices from Stripe
-    console.log('📡 Fetching paid invoices from Stripe...')
-    let allStripeInvoices: any[] = []
-    let hasMore = true
-    let startingAfter: string | undefined = undefined
+    // Fetch all paid invoices from ALL Stripe accounts
+    console.log('📡 Fetching paid invoices from all Stripe accounts...')
+    let allStripeInvoices: Array<{ invoice: any; account: StripeAccountKey }> = []
+    const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+    for (const account of allAccounts) {
+      let client: ReturnType<typeof getStripeClient>
+      try { client = getStripeClient(account) } catch { continue }
 
-    while (hasMore) {
-      const batch: any = await stripe.invoices.list({
-        status: 'paid',
-        created: { gte: ninetyDaysAgo },
-        limit: 100,
-        starting_after: startingAfter
-      })
-      
-      allStripeInvoices.push(...batch.data)
-      hasMore = batch.has_more
-      startingAfter = batch.data[batch.data.length - 1]?.id
+      let hasMore = true
+      let startingAfter: string | undefined = undefined
+
+      while (hasMore) {
+        const batch: any = await client.invoices.list({
+          status: 'paid',
+          created: { gte: ninetyDaysAgo },
+          limit: 100,
+          starting_after: startingAfter
+        })
+
+        for (const inv of batch.data) {
+          allStripeInvoices.push({ invoice: inv, account })
+        }
+        hasMore = batch.has_more
+        startingAfter = batch.data[batch.data.length - 1]?.id
+      }
     }
 
-    console.log(`📊 Found ${allStripeInvoices.length} paid invoices in Stripe (last 90 days)`)
+    console.log(`📊 Found ${allStripeInvoices.length} paid invoices across all Stripe accounts (last 90 days)`)
 
     // Get existing invoices to avoid duplicates
     const existingInvoices = await prisma.invoice.findMany({
@@ -66,7 +74,7 @@ export async function POST(request: NextRequest) {
     let skipped = 0
     let failed = 0
 
-    for (const invoice of allStripeInvoices) {
+    for (const { invoice, account: invoiceAccount } of allStripeInvoices) {
       const operationId = `backfill_${invoice.id}_${Date.now()}`
       
       try {
@@ -111,7 +119,7 @@ export async function POST(request: NextRequest) {
         // Method 3: Customer metadata fallback (the one that works)
         if (!subscription && invoice.customer) {
           try {
-            const stripeCustomer = await stripe.customers.retrieve(invoice.customer as string)
+            const stripeCustomer = await getStripeClient(invoiceAccount).customers.retrieve(invoice.customer as string)
             const userId = (stripeCustomer as any).metadata?.userId
             
             if (userId) {

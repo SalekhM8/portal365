@@ -7,7 +7,7 @@ import { getPlanDbFirst } from '@/lib/plans'
 // Multi-account Stripe manager
 // =============================================================================
 
-export type StripeAccountKey = 'SU' | 'IQ' | 'AURA'
+export type StripeAccountKey = 'SU' | 'IQ' | 'AURA' | 'AURAUP'
 
 type StripeAccountConfig = {
   secretKey?: string
@@ -34,6 +34,12 @@ const STRIPE_ACCOUNTS: Record<StripeAccountKey, StripeAccountConfig> = {
     publishableKey: process.env.NEXT_PUBLIC_STRIPE_AURA_PUBLISHABLE_KEY,
     webhookSecret: process.env.STRIPE_AURA_WEBHOOK_SECRET,
     label: 'Aura MMA'
+  },
+  AURAUP: {
+    secretKey: process.env.STRIPE_AURAUP_SECRET_KEY,
+    publishableKey: process.env.NEXT_PUBLIC_STRIPE_AURAUP_PUBLISHABLE_KEY,
+    webhookSecret: process.env.STRIPE_AURAUP_WEBHOOK_SECRET,
+    label: 'Aura Up'
   }
 }
 
@@ -122,9 +128,9 @@ export class SubscriptionProcessor {
       console.log('✅ VAT routing decision:', routing)
 
       // 2b. Choose Stripe account for this signup
-      // Default: ALL new signups go to AURA (as of Dec 2024)
+      // Default: ALL new signups go to AURAUP (as of Mar 2026)
       // Set STRIPE_DEFAULT_ACCOUNT env var to override (e.g., 'SU' or 'IQ' for legacy)
-      const defaultAccount = (process.env.STRIPE_DEFAULT_ACCOUNT as StripeAccountKey) || 'AURA'
+      const defaultAccount = (process.env.STRIPE_DEFAULT_ACCOUNT as StripeAccountKey) || 'AURAUP'
       let stripeAccount: StripeAccountKey = defaultAccount
 
       // If creating under a parent's payer account, prefer the parent's existing Stripe account
@@ -140,7 +146,7 @@ export class SubscriptionProcessor {
             orderBy: { updatedAt: 'desc' }
           })
           const payerAccount = (payerSub as any)?.stripeAccountKey as StripeAccountKey | undefined
-          if (payerAccount === 'SU' || payerAccount === 'IQ' || payerAccount === 'AURA') {
+          if (payerAccount === 'SU' || payerAccount === 'IQ' || payerAccount === 'AURA' || payerAccount === 'AURAUP') {
             stripeAccount = payerAccount
           }
         } catch {}
@@ -261,7 +267,7 @@ export class SubscriptionProcessor {
             cust = await stripeClient.customers.retrieve(customerIdToUse)
           } catch (e: any) {
             // If the stored customer belongs to another account, try all other accounts
-            const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA']
+            const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
             const otherAccounts = allAccounts.filter(a => a !== stripeAccount)
             for (const otherAccount of otherAccounts) {
               try {

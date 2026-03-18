@@ -1,6 +1,6 @@
 /**
  * Production script to sync nextBillingDate from Stripe for all active subscriptions
- * Supports multiple Stripe accounts (SU, AURA, CF)
+ * Supports multiple Stripe accounts (SU, AURA, AURAUP, CF)
  * 
  * Usage: DATABASE_URL="your-prod-url" npx tsx scripts/sync-billing-dates-prod.ts
  */
@@ -15,11 +15,14 @@ const prisma = new PrismaClient()
 
 // Build Stripe clients for each account
 const stripeClients: Record<string, Stripe | null> = {
-  SU: process.env.STRIPE_SECRET_KEY_SU 
-    ? new Stripe(process.env.STRIPE_SECRET_KEY_SU, { apiVersion: '2025-04-30.basil' as any }) 
+  SU: process.env.STRIPE_SECRET_KEY_SU
+    ? new Stripe(process.env.STRIPE_SECRET_KEY_SU, { apiVersion: '2025-04-30.basil' as any })
     : null,
   AURA: process.env.STRIPE_SECRET_KEY_AURA || process.env.STRIPE_SECRET_KEY
     ? new Stripe(process.env.STRIPE_SECRET_KEY_AURA || process.env.STRIPE_SECRET_KEY || '', { apiVersion: '2025-04-30.basil' as any })
+    : null,
+  AURAUP: process.env.STRIPE_SECRET_KEY_AURAUP || process.env.STRIPE_AURAUP_SECRET_KEY
+    ? new Stripe(process.env.STRIPE_SECRET_KEY_AURAUP || process.env.STRIPE_AURAUP_SECRET_KEY || '', { apiVersion: '2025-04-30.basil' as any })
     : null,
   CF: process.env.STRIPE_SECRET_KEY_CF
     ? new Stripe(process.env.STRIPE_SECRET_KEY_CF, { apiVersion: '2025-04-30.basil' as any })

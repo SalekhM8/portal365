@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
  * Backfill FAILED monthly renewals from Stripe into local DB
@@ -25,69 +25,75 @@ export async function POST(request: NextRequest) {
     let examined = 0
     let mapped = 0
 
-    let hasMore = true
-    let startingAfter: string | undefined
+    const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+    for (const account of allAccounts) {
+      let client: ReturnType<typeof getStripeClient>
+      try { client = getStripeClient(account) } catch { continue }
 
-    while (hasMore) {
-      const batch: any = await stripe.invoices.list({
-        created: { gte: Math.floor(since.getTime()/1000) },
-        limit: 100,
-        starting_after: startingAfter
-      })
+      let hasMore = true
+      let startingAfter: string | undefined
 
-      for (const inv of batch.data) {
-        examined++
-        const isFailed = (inv.status === 'uncollectible' || inv.status === 'open') && Number(inv.amount_due) > 0
-        if (!isFailed) continue
+      while (hasMore) {
+        const batch: any = await client.invoices.list({
+          created: { gte: Math.floor(since.getTime()/1000) },
+          limit: 100,
+          starting_after: startingAfter
+        })
 
-        const subscriptionId = (inv as any).subscription
-        let subscription = null as any
-        if (subscriptionId) {
-          subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
-        }
-        if (!subscription && inv.customer) {
-          try {
-            const sc = await stripe.customers.retrieve(inv.customer as string)
-            const userId = (sc as any).metadata?.userId
-            if (userId) {
-              subscription = await prisma.subscription.findFirst({ where: { userId }, include: { user: true }, orderBy: { createdAt: 'desc' } })
+        for (const inv of batch.data) {
+          examined++
+          const isFailed = (inv.status === 'uncollectible' || inv.status === 'open') && Number(inv.amount_due) > 0
+          if (!isFailed) continue
+
+          const subscriptionId = (inv as any).subscription
+          let subscription = null as any
+          if (subscriptionId) {
+            subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
+          }
+          if (!subscription && inv.customer) {
+            try {
+              const sc = await client.customers.retrieve(inv.customer as string)
+              const userId = (sc as any).metadata?.userId
+              if (userId) {
+                subscription = await prisma.subscription.findFirst({ where: { userId }, include: { user: true }, orderBy: { createdAt: 'desc' } })
+              }
+            } catch {}
+          }
+          if (!subscription) continue
+          mapped++
+
+          const amountDue = Number(inv.amount_due) / 100
+          const already = await prisma.payment.findFirst({
+            where: {
+              userId: subscription.userId,
+              status: 'FAILED',
+              amount: amountDue,
+              description: 'Failed monthly membership payment',
+              processedAt: { gte: new Date((inv.created || Date.now()/1000) * 1000 - 7*24*60*60*1000), lte: new Date((inv.created || Date.now()/1000) * 1000 + 7*24*60*60*1000) }
             }
-          } catch {}
+          })
+          if (already) continue
+
+          await prisma.payment.create({
+            data: {
+              userId: subscription.userId,
+              amount: amountDue,
+              currency: (inv.currency || 'gbp').toUpperCase(),
+              status: 'FAILED',
+              description: 'Failed monthly membership payment',
+              routedEntityId: subscription.routedEntityId,
+              failureReason: inv.collection_method === 'charge_automatically' ? 'Card charge failed' : 'Invoice unpaid',
+              processedAt: new Date((inv.created || Date.now()/1000) * 1000)
+            }
+          })
+          await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
+          await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
+          fixed++
         }
-        if (!subscription) continue
-        mapped++
 
-        const amountDue = Number(inv.amount_due) / 100
-        const already = await prisma.payment.findFirst({
-          where: {
-            userId: subscription.userId,
-            status: 'FAILED',
-            amount: amountDue,
-            description: 'Failed monthly membership payment',
-            processedAt: { gte: new Date((inv.created || Date.now()/1000) * 1000 - 7*24*60*60*1000), lte: new Date((inv.created || Date.now()/1000) * 1000 + 7*24*60*60*1000) }
-          }
-        })
-        if (already) continue
-
-        await prisma.payment.create({
-          data: {
-            userId: subscription.userId,
-            amount: amountDue,
-            currency: (inv.currency || 'gbp').toUpperCase(),
-            status: 'FAILED',
-            description: 'Failed monthly membership payment',
-            routedEntityId: subscription.routedEntityId,
-            failureReason: inv.collection_method === 'charge_automatically' ? 'Card charge failed' : 'Invoice unpaid',
-            processedAt: new Date((inv.created || Date.now()/1000) * 1000)
-          }
-        })
-        await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
-        await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
-        fixed++
+        hasMore = batch.has_more
+        startingAfter = batch.data[batch.data.length - 1]?.id
       }
-
-      hasMore = batch.has_more
-      startingAfter = batch.data[batch.data.length - 1]?.id
     }
 
     return NextResponse.json({ success: true, examined, mapped, fixed })

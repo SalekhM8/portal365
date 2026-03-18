@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { stripe } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,7 +54,8 @@ export async function POST(request: NextRequest) {
       let stripeInvoices: any[] = []
       for (const sub of subscriptions) {
         if (!sub.stripeSubscriptionId) continue
-        const invList: any = await stripe.invoices.list({
+        const subStripe = getStripeClient((sub.stripeAccountKey as StripeAccountKey) || 'SU')
+        const invList: any = await subStripe.invoices.list({
           customer: sub.stripeCustomerId,
           limit: 100
         })
@@ -66,7 +67,8 @@ export async function POST(request: NextRequest) {
       // Note: Stripe API does not support search by metadata directly here; customers typically have few charges
       let prorated: any[] = []
       if (subscriptions[0]?.stripeCustomerId) {
-        const charges: any = await stripe.charges.list({ customer: subscriptions[0].stripeCustomerId, limit: 100 })
+        const firstSubStripe = getStripeClient((subscriptions[0].stripeAccountKey as StripeAccountKey) || 'SU')
+        const charges: any = await firstSubStripe.charges.list({ customer: subscriptions[0].stripeCustomerId, limit: 100 })
         prorated = charges.data
           .filter((c: any) => c.paid && c.amount > 0 && c.metadata?.reason === 'prorated_first_period')
           .map((c: any) => ({

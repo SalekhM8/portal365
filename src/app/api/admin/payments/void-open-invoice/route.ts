@@ -10,7 +10,7 @@ type VoidRequestBody = {
   customerId?: string
 }
 
-const STRIPE_ACCOUNTS: StripeAccountKey[] = ['SU', 'IQ', 'AURA']
+const STRIPE_ACCOUNTS: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
 
 export async function POST(request: NextRequest) {
   try {
