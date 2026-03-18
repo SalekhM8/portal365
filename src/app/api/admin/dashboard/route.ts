@@ -1247,6 +1247,7 @@ export async function GET() {
     // Fetch Stripe payouts aggregated across all accounts
     let lastPayout: any = null
     let nextPayout: any = null
+    const payoutsByAccount: Record<string, { last?: number; pending?: number }> = {}
     try {
       const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
       let totalLastAmount = 0
@@ -1259,26 +1260,32 @@ export async function GET() {
           const client = getStripeClient(acct)
           const paid = await client.payouts.list({ status: 'paid', limit: 1 })
           if (paid.data[0]) {
-            totalLastAmount += Number(paid.data[0].amount) / 100
+            const amt = Number(paid.data[0].amount) / 100
+            totalLastAmount += amt
+            payoutsByAccount[acct] = { ...payoutsByAccount[acct], last: amt }
             const d = new Date(paid.data[0].arrival_date * 1000).toISOString().split('T')[0]
             if (d > latestArrival) latestArrival = d
           }
           const pending = await client.payouts.list({ status: 'pending', limit: 1 })
           if (pending.data[0]) {
-            totalPendingAmount += Number(pending.data[0].amount) / 100
+            const amt = Number(pending.data[0].amount) / 100
+            totalPendingAmount += amt
+            payoutsByAccount[acct] = { ...payoutsByAccount[acct], pending: amt }
             const d = new Date(pending.data[0].arrival_date * 1000).toISOString().split('T')[0]
             if (!pendingArrival || d < pendingArrival) pendingArrival = d
           } else {
             try {
               const bal = await client.balance.retrieve()
               const p = (bal.pending || []).reduce((s: number, b: any) => s + Number(b.amount || 0), 0)
-              totalPendingAmount += p / 100
+              const amt = p / 100
+              totalPendingAmount += amt
+              if (amt > 0) payoutsByAccount[acct] = { ...payoutsByAccount[acct], pending: amt }
             } catch {}
           }
         } catch {}
       }))
 
-      if (totalLastAmount > 0) {
+      if (totalLastAmount !== 0) {
         lastPayout = { amount: totalLastAmount, currency: 'GBP', arrivalDate: latestArrival || null }
       }
       nextPayout = { amount: totalPendingAmount, currency: 'GBP', arrivalDate: pendingArrival }
@@ -1286,14 +1293,20 @@ export async function GET() {
       // Non-fatal; payouts not available
     }
 
-    // Per-account last month revenue from cached metrics
+    // Per-account revenue from cached metrics
     const perAccountLastMonth: Record<string, number> = {}
+    const perAccountThisMonth: Record<string, number> = {}
     try {
       for (const acct of ['SU', 'IQ', 'AURA', 'AURAUP'] as const) {
-        const setting = await prisma.systemSetting.findUnique({ where: { key: `metrics:ledger:lastMonthNet:${acct}` } })
-        if (setting) {
-          const parsed = JSON.parse(setting.value || '{}') as { amount?: number }
+        const settingLast = await prisma.systemSetting.findUnique({ where: { key: `metrics:ledger:lastMonthNet:${acct}` } })
+        if (settingLast) {
+          const parsed = JSON.parse(settingLast.value || '{}') as { amount?: number }
           if (parsed?.amount != null) perAccountLastMonth[acct] = Number(parsed.amount)
+        }
+        const settingThis = await prisma.systemSetting.findUnique({ where: { key: `metrics:ledger:thisMonthNet:${acct}` } })
+        if (settingThis) {
+          const parsed = JSON.parse(settingThis.value || '{}') as { amount?: number }
+          if (parsed?.amount != null) perAccountThisMonth[acct] = Number(parsed.amount)
         }
       }
     } catch {}
@@ -1333,9 +1346,11 @@ export async function GET() {
         totalMembers: activeSubscriptions,
         payouts: {
           last: lastPayout,
-          upcoming: nextPayout
+          upcoming: nextPayout,
+          byAccount: payoutsByAccount
         },
-        perAccountLastMonth
+        perAccountLastMonth,
+        perAccountThisMonth
       },
       // 🚀 NEW: Real business analytics by membership type
       analytics: {

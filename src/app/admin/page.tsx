@@ -170,8 +170,10 @@ interface BusinessMetrics {
   payouts?: {
     last?: { amount: number; currency: string; arrivalDate: string | null }
     upcoming?: { amount: number; currency: string; arrivalDate: string | null }
+    byAccount?: Record<string, { last?: number; pending?: number }>
   }
   perAccountLastMonth?: Record<string, number>
+  perAccountThisMonth?: Record<string, number>
 }
 
 interface AnalyticsData {
@@ -1112,22 +1114,22 @@ function AdminDashboardContent() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 md:gap-6 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Total Revenue</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Monthly Revenue</CardTitle>
             <PoundSterling className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-xl sm:text-2xl font-bold">
-              £{businessMetrics?.totalRevenue.toLocaleString()}
+              £{(businessMetrics?.monthlyRecurring || 0).toLocaleString()}
             </div>
             <p className="text-[10px] sm:text-xs text-muted-foreground">
               {(() => {
+                const current = businessMetrics?.monthlyRecurring || 0
                 const last = businessMetrics?.monthlyRecurringLastMonth || 0
-                const prev = businessMetrics?.monthlyRecurringPrevMonth || 0
-                if (prev > 0 && last > 0) {
-                  const pct = ((last - prev) / prev * 100).toFixed(1)
-                  return <><span className={Number(pct) >= 0 ? 'text-green-600' : 'text-red-500'}>{Number(pct) >= 0 ? '+' : ''}{pct}%</span> from prior month</>
+                if (last > 0 && current > 0) {
+                  const pct = ((current - last) / last * 100).toFixed(1)
+                  return <><span className={Number(pct) >= 0 ? 'text-green-600' : 'text-red-500'}>{Number(pct) >= 0 ? '+' : ''}{pct}%</span> vs last month (£{last.toLocaleString()})</>
                 }
-                return 'All accounts combined'
+                return <>Last month: £{last.toLocaleString()}</>
               })()}
             </p>
           </CardContent>
@@ -1135,30 +1137,33 @@ function AdminDashboardContent() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 sm:pb-2">
-            <CardTitle className="text-xs sm:text-sm font-medium">Last Month Revenue</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Monthly Breakdown</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-xl sm:text-2xl font-bold">
-              £{(
-                (businessMetrics?.monthlyRecurringLastMonth ?? null) !== null
-                  ? (businessMetrics?.monthlyRecurringLastMonth || 0)
-                  : (businessMetrics?.monthlyRecurring || 0)
-              ).toLocaleString()}
-            </div>
-            <p className="text-[10px] sm:text-xs text-muted-foreground">
-              MTD: £{(businessMetrics?.monthlyRecurring || 0).toLocaleString()}
-            </p>
-            {businessMetrics?.perAccountLastMonth && Object.keys(businessMetrics.perAccountLastMonth).length > 0 && (
-              <div className="mt-2 space-y-0.5">
-                {Object.entries(businessMetrics.perAccountLastMonth).filter(([, v]) => v > 0).map(([acct, amt]) => (
-                  <div key={acct} className="flex justify-between text-[10px] text-white/50">
-                    <span>{acct}</span>
-                    <span>£{amt.toLocaleString()}</span>
+            <div className="space-y-1">
+              {businessMetrics?.perAccountThisMonth && Object.keys(businessMetrics.perAccountThisMonth).length > 0 ? (
+                Object.entries(businessMetrics.perAccountThisMonth).map(([acct, amt]) => (
+                  <div key={acct} className="flex justify-between items-center">
+                    <span className="text-[10px] sm:text-xs text-white/60">{acct}</span>
+                    <span className="text-sm sm:text-base font-semibold text-white">£{amt.toLocaleString()}</span>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              ) : (
+                <>
+                  {businessMetrics?.perAccountLastMonth && Object.keys(businessMetrics.perAccountLastMonth).length > 0 ? (
+                    Object.entries(businessMetrics.perAccountLastMonth).map(([acct, amt]) => (
+                      <div key={acct} className="flex justify-between items-center">
+                        <span className="text-[10px] sm:text-xs text-white/60">{acct}</span>
+                        <span className="text-sm sm:text-base font-semibold text-white">£{amt.toLocaleString()}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-[10px] sm:text-xs text-white/40">Run metrics cron to populate</p>
+                  )}
+                </>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -1181,17 +1186,27 @@ function AdminDashboardContent() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div>
-                <div className="text-[10px] sm:text-xs text-white/60 tracking-wide uppercase">Last payout</div>
-                <div className="text-lg sm:text-xl font-semibold text-white">{businessMetrics?.payouts?.last ? `£${businessMetrics.payouts.last.amount}` : '—'}</div>
+                <div className="text-[10px] sm:text-xs text-white/60 tracking-wide uppercase">Last payout (all)</div>
+                <div className="text-lg sm:text-xl font-semibold text-white">{businessMetrics?.payouts?.last ? `£${businessMetrics.payouts.last.amount.toLocaleString()}` : '—'}</div>
                 <div className="text-[10px] sm:text-xs text-white/60">{businessMetrics?.payouts?.last?.arrivalDate || ''}</div>
               </div>
               <div className="border-t border-white/10 pt-2">
-                <div className="text-[10px] sm:text-xs text-white/60 tracking-wide uppercase">Upcoming</div>
-                <div className="text-lg sm:text-xl font-semibold text-white">{businessMetrics?.payouts?.upcoming ? `£${businessMetrics.payouts.upcoming.amount}` : '—'}</div>
+                <div className="text-[10px] sm:text-xs text-white/60 tracking-wide uppercase">Upcoming (all)</div>
+                <div className="text-lg sm:text-xl font-semibold text-white">{businessMetrics?.payouts?.upcoming ? `£${businessMetrics.payouts.upcoming.amount.toLocaleString()}` : '—'}</div>
                 <div className="text-[10px] sm:text-xs text-white/60">{businessMetrics?.payouts?.upcoming?.arrivalDate || 'Estimated'}</div>
               </div>
+              {businessMetrics?.payouts?.byAccount && Object.keys(businessMetrics.payouts.byAccount).length > 0 && (
+                <div className="border-t border-white/10 pt-2 space-y-0.5">
+                  {Object.entries(businessMetrics.payouts.byAccount).map(([acct, vals]) => (
+                    <div key={acct} className="flex justify-between text-[10px] text-white/50">
+                      <span>{acct}</span>
+                      <span>£{(vals.last || 0).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
