@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
-import {
+import { 
+  calculateProratedCredit, 
+  decimalToNumber, 
   formatShortDate,
-  daysBetweenInclusive
+  daysBetweenInclusive 
 } from '@/lib/pause-credits'
 
 /**
@@ -16,12 +18,12 @@ import {
  * 2. Apply pause_collection in Stripe
  * 3. Update status to ACTIVE
  * 
- * PART 2 - END PAUSES:
+ * PART 2 - END PAUSES & APPLY CREDITS:
  * 1. Find pause windows with endDate <= today and status = ACTIVE or SCHEDULED
- * 2. Resume billing in Stripe (remove pause_collection)
- * 3. Update status to CREDIT_APPLIED
- * Note: No credit invoice items are created because pause_collection with
- * 'void' behavior already skips charging during the pause period.
+ * 2. Calculate settlement (only partial months)
+ * 3. Create negative InvoiceItem in Stripe for settlement
+ * 4. Resume billing in Stripe (remove pause_collection)
+ * 5. Update status to CREDIT_APPLIED
  * 
  * Schedule: Run daily via Vercel Cron at 22:00 UTC
  * Endpoint: GET /api/admin/cron/apply-pause-credits
@@ -215,55 +217,147 @@ export async function GET(request: NextRequest) {
         })
 
         // ═══════════════════════════════════════════════════════════════
-        // CREDIT LOGIC: Since pause_collection uses 'void' behavior,
-        // Stripe already skips charging during the pause by voiding the
-        // invoice. No additional credit invoice item is needed.
-        //
-        // Creating a negative invoice item here would DOUBLE-compensate
-        // the customer (void = not charged + credit = reduced next bill).
-        //
-        // We still calculate pause days for record-keeping, but do NOT
-        // create any Stripe invoice items.
+        // CALCULATE CREDIT - accounts for prorated first-month payments!
         // ═══════════════════════════════════════════════════════════════
+        
+        // Get subscription start date and first billing date from Stripe
+        let subscriptionStart = new Date(sub.createdAt)
+        let firstBillingDate = new Date(sub.createdAt)
+        firstBillingDate.setUTCMonth(firstBillingDate.getUTCMonth() + 1)
+        firstBillingDate.setUTCDate(1) // 1st of next month
+        
+        // Look up actual prorated payment (first CONFIRMED payment for this user)
+        const firstPayment = await prisma.payment.findFirst({
+          where: { 
+            userId: sub.userId,
+            status: 'CONFIRMED'
+          },
+          orderBy: { createdAt: 'asc' }
+        })
+        
+        const proratedAmount = firstPayment ? decimalToNumber(firstPayment.amount) : null
+        const monthlyPrice = decimalToNumber(sub.monthlyPrice)
+        
+        console.log(`📊 Window ${windowId}:`)
+        console.log(`   Subscription started: ${subscriptionStart.toISOString().split('T')[0]}`)
+        console.log(`   First billing: ${firstBillingDate.toISOString().split('T')[0]}`)
+        console.log(`   Prorated payment: £${proratedAmount ?? 'N/A'}`)
+        console.log(`   Monthly price: £${monthlyPrice}`)
 
-        const pauseStart = new Date(window.startDate)
-        const pauseEnd = new Date(window.endDate)
-        const totalPausedDays = daysBetweenInclusive(pauseStart, pauseEnd)
-
-        console.log(`📊 Window ${windowId}: ${totalPausedDays} days paused (${formatShortDate(pauseStart)} - ${formatShortDate(pauseEnd)})`)
-        console.log(`   ℹ️ No credit invoice item created (void behavior already skipped billing)`)
-
-        // Mark pause window as completed (no credit applied)
-        await (prisma as any).subscriptionPauseWindow.update({
-          where: { id: window.id },
-          data: {
-            pausedDays: totalPausedDays,
-            creditAmount: 0,
-            creditAppliedAt: new Date(),
-            status: 'CREDIT_APPLIED'
-          }
+        // Calculate credit using the prorated-aware function
+        const credit = calculateProratedCredit({
+          pauseStart: new Date(window.startDate),
+          pauseEnd: new Date(window.endDate),
+          subscriptionStart,
+          firstBillingDate,
+          proratedAmount,
+          monthlyPrice
         })
 
-        // Create audit log
-        try {
-          await prisma.subscriptionAuditLog.create({
-            data: {
+        console.log(`   Total days: ${credit.totalDays}`)
+        console.log(`   Total credit: £${credit.totalCredit}`)
+        for (const b of credit.breakdown) {
+          console.log(`     - ${b.period}: ${b.daysPaused}/${b.daysInPeriod} days @ £${b.dailyRate}/day = £${b.credit}`)
+        }
+
+        // Only create invoice item if there's credit to apply
+        if (credit.totalCredit > 0) {
+          // Build description
+          const description = credit.breakdown
+            .map(b => `${b.period}: ${b.daysPaused} days`)
+            .join(', ')
+
+          // Create negative invoice item (CREDIT)
+          const invoiceItem = await stripe.invoiceItems.create({
+            customer: sub.stripeCustomerId,
+            amount: -credit.totalCreditPence, // NEGATIVE for credit
+            currency: 'gbp',
+            description: `Pause credit: ${description}`,
+            metadata: {
+              pauseWindowId: window.id,
               subscriptionId: sub.id,
-              action: 'PAUSE_ENDED',
-              performedBy: 'SYSTEM',
-              performedByName: 'System Cron',
-              reason: `Pause ended - ${totalPausedDays} days. No credit needed (void behavior already skipped billing).`,
-              operationId: `pause_end_${window.id}_${Date.now()}`,
-              metadata: JSON.stringify({
-                pauseWindowId: window.id,
-                totalDays: totalPausedDays,
-                creditAmount: 0,
-                note: 'pause_collection:void already prevents charging during pause'
-              })
+              totalPausedDays: String(credit.totalDays),
+              proratedPayment: String(proratedAmount ?? 'N/A'),
+              startDate: formatShortDate(new Date(window.startDate)),
+              endDate: formatShortDate(new Date(window.endDate)),
+              reason: 'pause_credit',
+              appliedAt: new Date().toISOString()
             }
           })
-        } catch (auditErr) {
-          console.warn(`⚠️ Failed to create audit log for window ${windowId}:`, auditErr)
+
+          console.log(`✅ Created credit ${invoiceItem.id}: -£${credit.totalCredit}`)
+          results.creditsApplied++
+
+          // Update the pause window
+          await (prisma as any).subscriptionPauseWindow.update({
+            where: { id: window.id },
+            data: {
+              pausedDays: credit.totalDays,
+              creditAmount: credit.totalCredit,
+              creditAppliedAt: new Date(),
+              stripeInvoiceItemId: invoiceItem.id,
+              status: 'CREDIT_APPLIED'
+            }
+          })
+
+          // Create audit log
+          try {
+            await prisma.subscriptionAuditLog.create({
+              data: {
+                subscriptionId: sub.id,
+                action: 'PAUSE_ENDED',
+                performedBy: 'SYSTEM',
+                performedByName: 'System Cron',
+                reason: `Pause ended, credit applied: £${credit.totalCredit}`,
+                operationId: `pause_end_${window.id}_${Date.now()}`,
+                metadata: JSON.stringify({
+                  pauseWindowId: window.id,
+                  stripeInvoiceItemId: invoiceItem.id,
+                  totalDays: credit.totalDays,
+                  totalCredit: credit.totalCredit,
+                  proratedPayment: proratedAmount,
+                  breakdown: credit.breakdown
+                })
+              }
+            })
+          } catch (auditErr) {
+            console.warn(`⚠️ Failed to create audit log for window ${windowId}:`, auditErr)
+          }
+
+        } else {
+          // No credit needed - just mark as completed
+          console.log(`ℹ️ Window ${windowId}: No credit to apply`)
+          
+          await (prisma as any).subscriptionPauseWindow.update({
+            where: { id: window.id },
+            data: {
+              pausedDays: credit.totalDays,
+              creditAmount: 0,
+              creditAppliedAt: new Date(),
+              status: 'CREDIT_APPLIED'
+            }
+          })
+
+          // Create audit log
+          try {
+            await prisma.subscriptionAuditLog.create({
+              data: {
+                subscriptionId: sub.id,
+                action: 'PAUSE_COMPLETED',
+                performedBy: 'SYSTEM',
+                performedByName: 'System Cron',
+                reason: `Pause completed - ${credit.totalDays} days, no credit to apply`,
+                operationId: `pause_complete_${window.id}_${Date.now()}`,
+                metadata: JSON.stringify({
+                  pauseWindowId: window.id,
+                  totalDays: credit.totalDays,
+                  creditAmount: 0
+                })
+              }
+            })
+          } catch (auditErr) {
+            console.warn(`⚠️ Failed to create audit log for window ${windowId}:`, auditErr)
+          }
         }
 
         results.pausesEnded++
