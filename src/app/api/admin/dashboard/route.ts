@@ -483,8 +483,7 @@ export async function GET() {
           }
         }
       },
-      orderBy: { createdAt: 'desc' },
-      take: 500
+      orderBy: { createdAt: 'desc' }
     })
 
     const familyParentIds = Array.from(
