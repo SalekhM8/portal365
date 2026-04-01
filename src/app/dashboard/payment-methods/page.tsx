@@ -19,6 +19,7 @@ function PaymentMethodsInner() {
   const pkParam = searchParams.get('pk')
   const [clientSecret, setClientSecret] = useState<string | null>(null) // For SetupIntent form only
   const [currentPaymentMethod, setCurrentPaymentMethod] = useState<any>(null)
+  const [publishableKey, setPublishableKey] = useState<string | null>(pkParam)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -170,10 +171,7 @@ function PaymentMethodsInner() {
         setCurrentPaymentMethod(data.currentPaymentMethod)
         setClientSecret(data.setupIntentClientSecret)
         if (data.publishableKey) {
-          // Preload the Stripe instance for this account
-          await loadStripe(data.publishableKey)
-        } else if (pkParam) {
-          await loadStripe(pkParam)
+          setPublishableKey(data.publishableKey)
         }
       } else {
         setError(data.error || 'Failed to load payment methods')
@@ -259,12 +257,7 @@ function PaymentMethodsInner() {
         <CardContent>
           {clientSecret && (
             <Elements
-              // elements will lazy-init with the pk that matches the client secret
-              stripe={(async () => {
-                if (pkParam) return loadStripe(pkParam)
-                const pk = (await fetch('/api/customers/payment-methods').then(r => r.json()).catch(() => ({})))?.publishableKey
-                return pk ? loadStripe(pk) : null as any
-              })() as any}
+              stripe={publishableKey ? loadStripe(publishableKey) : null}
               options={{
                 clientSecret,
                 appearance: { theme: 'stripe' }
