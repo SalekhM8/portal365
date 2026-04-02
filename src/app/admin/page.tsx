@@ -77,6 +77,7 @@ interface VATStatus {
 interface CustomerDetail {
   id: string
   account?: string
+  stripeCustomerId?: string | null
   name: string
   email: string
   phone: string
@@ -263,6 +264,14 @@ function AdminDashboardContent() {
     customerName: string;
   } | null>(null)
   
+  // Admin update payment method modal
+  const [showUpdatePM, setShowUpdatePM] = useState(false)
+  const [updatePMClientSecret, setUpdatePMClientSecret] = useState('')
+  const [updatePMPublishableKey, setUpdatePMPublishableKey] = useState('')
+  const [updatePMLoading, setUpdatePMLoading] = useState(false)
+  const [updatePMError, setUpdatePMError] = useState('')
+  const [updatePMSuccess, setUpdatePMSuccess] = useState(false)
+
   // 🚀 NEW: Membership management states
   const [membershipAction, setMembershipAction] = useState<'pause' | 'resume' | 'cancel' | null>(null)
   const [membershipActionLoading, setMembershipActionLoading] = useState(false)
@@ -699,6 +708,71 @@ function AdminDashboardContent() {
     }
   }
 
+  // Publishable key mapping for admin PM update (account key → env var)
+  const PK_MAP: Record<string, string> = {
+    SU: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '',
+    IQ: process.env.NEXT_PUBLIC_STRIPE_IQ_PUBLISHABLE_KEY || '',
+    AURA: process.env.NEXT_PUBLIC_STRIPE_AURA_PUBLISHABLE_KEY || '',
+    AURAUP: process.env.NEXT_PUBLIC_STRIPE_AURAUP_PUBLISHABLE_KEY || '',
+  }
+
+  const handleUpdatePaymentMethod = async () => {
+    if (!selectedCustomer?.stripeCustomerId || !selectedCustomer?.account) {
+      setUpdatePMError('No Stripe customer found for this member')
+      return
+    }
+    setUpdatePMLoading(true)
+    setUpdatePMError('')
+    setUpdatePMSuccess(false)
+    try {
+      const res = await fetch('/api/admin/payment-methods/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: selectedCustomer.account, stripeCustomerId: selectedCustomer.stripeCustomerId })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.clientSecret) {
+        setUpdatePMError(data.error || 'Failed to create setup intent')
+        return
+      }
+      setUpdatePMClientSecret(data.clientSecret)
+      setUpdatePMPublishableKey(PK_MAP[selectedCustomer.account] || PK_MAP.AURAUP)
+      setShowUpdatePM(true)
+    } catch (err) {
+      setUpdatePMError('Network error')
+    } finally {
+      setUpdatePMLoading(false)
+    }
+  }
+
+  const handleFinalizePM = async (setupIntentId: string) => {
+    if (!selectedCustomer?.stripeCustomerId || !selectedCustomer?.account) return
+    try {
+      const res = await fetch('/api/admin/payment-methods/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: selectedCustomer.account,
+          setupIntentId,
+          stripeCustomerId: selectedCustomer.stripeCustomerId
+        })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setUpdatePMSuccess(true)
+        setTimeout(() => {
+          setShowUpdatePM(false)
+          setUpdatePMSuccess(false)
+          setUpdatePMClientSecret('')
+        }, 2000)
+      } else {
+        setUpdatePMError(data.error || 'Failed to set payment method')
+      }
+    } catch {
+      setUpdatePMError('Network error finalizing payment method')
+    }
+  }
+
   const handlePasswordReset = async (customerId: string) => {
     if (!confirm('Are you sure you want to reset this customer\'s password? They will need to use the new temporary password to log in.')) {
       return
@@ -997,15 +1071,28 @@ function AdminDashboardContent() {
 
   // Filter functions
   const filteredCustomers = customers.filter(customer => {
-    const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         customer.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const term = searchTerm.toLowerCase()
+    const matchesSearch = customer.name.toLowerCase().includes(term) ||
+                         customer.email.toLowerCase().includes(term) ||
+                         (customer.phone || '').toLowerCase().includes(term) ||
+                         (customer.emergencyContact?.addressInfo?.postcode || '').toLowerCase().includes(term)
     const matchesStatus = statusFilter === 'all' || customer.status === statusFilter
     const matchesPlan = planFilter === 'all' || customer.membershipType === planFilter
     return matchesSearch && matchesStatus && matchesPlan
   })
 
   const filteredPayments = payments.filter(payment => {
-    const matchesSearch = payment.customerName.toLowerCase().includes(searchTerm.toLowerCase())
+    const term = searchTerm.toLowerCase()
+    // Search by customer name directly, plus cross-reference customer list for email/phone/postcode
+    const nameMatch = payment.customerName.toLowerCase().includes(term)
+    const customerMatch = !nameMatch && term.length > 0 && customers.some(c =>
+      c.id === payment.customerId && (
+        c.email.toLowerCase().includes(term) ||
+        (c.phone || '').toLowerCase().includes(term) ||
+        (c.emergencyContact?.addressInfo?.postcode || '').toLowerCase().includes(term)
+      )
+    )
+    const matchesSearch = nameMatch || customerMatch
     const matchesStatus = statusFilter === 'all' || payment.status === statusFilter
     return matchesSearch && matchesStatus
   })
@@ -1451,7 +1538,7 @@ function AdminDashboardContent() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="Search customers..."
+                  placeholder="Name, email, phone, postcode..."
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setPaymentsServerFiltered(false) }}
                   className="pl-10 w-64"
@@ -1677,7 +1764,7 @@ function AdminDashboardContent() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="Search payments..."
+                  placeholder="Name, email, phone, postcode..."
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setPaymentsServerFiltered(false) }}
                   className="pl-10 w-64"
@@ -2142,6 +2229,8 @@ function AdminDashboardContent() {
             }
           }} className="border-white/20 text-white hover:bg-white/10 w-full">Change Plan (Admin)</Button>
           <Button variant="outline" onClick={() => handlePasswordReset(selectedCustomer.id)} disabled={resetPasswordLoading} className="border-blue-500/20 text-blue-400 hover:bg-blue-500/10 w-full">{resetPasswordLoading ? 'Resetting…' : 'Reset Password'}</Button>
+          <Button variant="outline" onClick={handleUpdatePaymentMethod} disabled={updatePMLoading || !selectedCustomer.stripeCustomerId} className="border-purple-500/20 text-purple-400 hover:bg-purple-500/10 w-full">{updatePMLoading ? 'Setting up…' : 'Update Payment Method'}</Button>
+          {updatePMError && <div className="text-red-400 text-xs">{updatePMError}</div>}
                   </div>
                   </div>
                 )}
@@ -2152,6 +2241,38 @@ function AdminDashboardContent() {
               <Button variant="outline" onClick={() => setSelectedCustomer(null)} className="bg-white text-black hover:bg-white/90">Close</Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Payment Method Modal */}
+      {showUpdatePM && updatePMClientSecret && updatePMPublishableKey && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            {updatePMSuccess ? (
+              <div className="text-center space-y-3 py-4">
+                <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
+                  <CreditCard className="h-6 w-6 text-green-400" />
+                </div>
+                <h3 className="text-lg font-bold text-white">Payment Method Updated</h3>
+                <p className="text-white/60 text-sm">The new card is now the default for this customer.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-white">Update Payment Method</h3>
+                  <button onClick={() => { setShowUpdatePM(false); setUpdatePMClientSecret(''); setUpdatePMError('') }} className="text-white/60 hover:text-white text-xl">&times;</button>
+                </div>
+                <p className="text-white/60 text-sm mb-4">Enter new card details for <strong className="text-white">{selectedCustomer?.name}</strong>. This will become their default payment method.</p>
+                {updatePMError && <div className="text-red-400 text-xs mb-3">{updatePMError}</div>}
+                <Elements
+                  stripe={loadStripe(updatePMPublishableKey)}
+                  options={{ clientSecret: updatePMClientSecret, appearance: { theme: 'night', variables: { colorPrimary: '#a855f7' } } }}
+                >
+                  <AdminPMForm onFinalize={handleFinalizePM} onError={setUpdatePMError} />
+                </Elements>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2843,6 +2964,54 @@ function AdminSetupForm({ subscriptionId, onSuccess, onError }: { subscriptionId
           Cancel
         </Button>
       </div>
+    </form>
+  )
+}
+
+function AdminPMForm({ onFinalize, onError }: { onFinalize: (setupIntentId: string) => void; onError: (e: string) => void }) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!stripe || !elements) return
+    setIsProcessing(true)
+    setError(null)
+    try {
+      const result = await stripe.confirmSetup({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: 'if_required'
+      })
+      if (result.error) {
+        const msg = result.error.message || 'Failed to set up payment method'
+        setError(msg)
+        onError(msg)
+      } else if (result.setupIntent?.id && result.setupIntent.status === 'succeeded') {
+        onFinalize(result.setupIntent.id)
+      } else {
+        setError('Setup did not complete')
+        onError('Setup did not complete')
+      }
+    } catch {
+      setError('Unexpected error')
+      onError('Unexpected error')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
+        <PaymentElement />
+      </div>
+      {error && <div className="text-red-400 text-xs">{error}</div>}
+      <Button type="submit" disabled={!stripe || isProcessing} className="w-full bg-purple-600 text-white hover:bg-purple-700">
+        {isProcessing ? 'Processing…' : 'Save Payment Method'}
+      </Button>
     </form>
   )
 }

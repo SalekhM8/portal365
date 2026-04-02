@@ -926,6 +926,7 @@ export async function GET() {
       return {
         id: customer.id,
         account: (subscription?.stripeAccountKey as any) ?? null,
+        stripeCustomerId: subscription?.stripeCustomerId || null,
         name: `${customer.firstName} ${customer.lastName}`,
         email: customer.email,
         phone: effectivePhone,

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
-import { 
-  calculateProratedCredit, 
-  decimalToNumber, 
-  formatShortDate,
-  daysBetweenInclusive 
+import {
+  calculateSettlementBreakdown,
+  decimalToNumber,
+  formatShortDate
 } from '@/lib/pause-credits'
 
 /**
@@ -13,15 +12,17 @@ import {
  * 
  * Runs daily at 10pm to:
  * 
- * PART 1 - START PAUSES:
- * 1. Find pause windows with startDate <= today and status = SCHEDULED
- * 2. Apply pause_collection in Stripe
+ * PART 1 - START PAUSES (applies void BEFORE billing):
+ * 1. Find pause windows with startDate <= TOMORROW and status = SCHEDULED
+ *    (picks up pauses the night before so void is active before ~3am billing)
+ * 2. Apply pause_collection with behavior: 'void' in Stripe
  * 3. Update status to ACTIVE
- * 
- * PART 2 - END PAUSES & APPLY CREDITS:
+ *
+ * PART 2 - END PAUSES & APPLY SETTLEMENT:
  * 1. Find pause windows with endDate <= today and status = ACTIVE or SCHEDULED
- * 2. Calculate settlement (only partial months)
- * 3. Create negative InvoiceItem in Stripe for settlement
+ * 2. Calculate settlement: only PARTIAL months get credits
+ *    (full months are handled by void - no charge means no credit needed)
+ * 3. Create negative InvoiceItem in Stripe for partial month settlement only
  * 4. Resume billing in Stripe (remove pause_collection)
  * 5. Update status to CREDIT_APPLIED
  * 
@@ -67,8 +68,12 @@ export async function GET(request: NextRequest) {
       : new Date()
     
     today.setUTCHours(0, 0, 0, 0)
-    
-    console.log(`🕐 [pause-cron] Running for date: ${today.toISOString().split('T')[0]}`)
+
+    // Tomorrow's date - apply void BEFORE billing day (billing ~3am, cron runs 10pm)
+    const tomorrow = new Date(today)
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+
+    console.log(`🕐 [pause-cron] Running for date: ${today.toISOString().split('T')[0]}, starting pauses with startDate <= ${tomorrow.toISOString().split('T')[0]}`)
 
     // ═══════════════════════════════════════════════════════════════
     // PART 1: START SCHEDULED PAUSES THAT BEGIN TODAY
@@ -76,7 +81,7 @@ export async function GET(request: NextRequest) {
     
     const pausesToStart = await (prisma as any).subscriptionPauseWindow.findMany({
       where: {
-        startDate: { lte: today },
+        startDate: { lte: tomorrow }, // Pick up pauses starting tomorrow so void is applied BEFORE billing
         endDate: { gt: today }, // End date is still in future
         status: 'SCHEDULED'
       },
@@ -217,83 +222,63 @@ export async function GET(request: NextRequest) {
         })
 
         // ═══════════════════════════════════════════════════════════════
-        // CALCULATE CREDIT - accounts for prorated first-month payments!
+        // CALCULATE SETTLEMENT - only partial months need credits
+        // Full months: void already prevented billing, no credit needed
+        // Partial months: customer was charged full month, credit the paused days
         // ═══════════════════════════════════════════════════════════════
-        
-        // Get subscription start date and first billing date from Stripe
-        let subscriptionStart = new Date(sub.createdAt)
-        let firstBillingDate = new Date(sub.createdAt)
-        firstBillingDate.setUTCMonth(firstBillingDate.getUTCMonth() + 1)
-        firstBillingDate.setUTCDate(1) // 1st of next month
-        
-        // Look up actual prorated payment (first CONFIRMED payment for this user)
-        const firstPayment = await prisma.payment.findFirst({
-          where: { 
-            userId: sub.userId,
-            status: 'CONFIRMED'
-          },
-          orderBy: { createdAt: 'asc' }
-        })
-        
-        const proratedAmount = firstPayment ? decimalToNumber(firstPayment.amount) : null
-        const monthlyPrice = decimalToNumber(sub.monthlyPrice)
-        
-        console.log(`📊 Window ${windowId}:`)
-        console.log(`   Subscription started: ${subscriptionStart.toISOString().split('T')[0]}`)
-        console.log(`   First billing: ${firstBillingDate.toISOString().split('T')[0]}`)
-        console.log(`   Prorated payment: £${proratedAmount ?? 'N/A'}`)
-        console.log(`   Monthly price: £${monthlyPrice}`)
 
-        // Calculate credit using the prorated-aware function
-        const credit = calculateProratedCredit({
-          pauseStart: new Date(window.startDate),
-          pauseEnd: new Date(window.endDate),
-          subscriptionStart,
-          firstBillingDate,
-          proratedAmount,
+        const monthlyPrice = decimalToNumber(sub.monthlyPrice)
+
+        const settlement = calculateSettlementBreakdown({
+          startDate: new Date(window.startDate),
+          endDate: new Date(window.endDate),
           monthlyPrice
         })
 
-        console.log(`   Total days: ${credit.totalDays}`)
-        console.log(`   Total credit: £${credit.totalCredit}`)
-        for (const b of credit.breakdown) {
-          console.log(`     - ${b.period}: ${b.daysPaused}/${b.daysInPeriod} days @ £${b.dailyRate}/day = £${b.credit}`)
+        console.log(`📊 Window ${windowId}:`)
+        console.log(`   Monthly price: £${monthlyPrice}`)
+        console.log(`   Total paused days: ${settlement.totalDays}`)
+        console.log(`   Full months skipped (void handled): ${settlement.fullMonthsSkipped.join(', ') || 'none'}`)
+        console.log(`   Partial month settlement: £${settlement.totalSettlementAmount}`)
+        for (const p of settlement.partialMonths) {
+          console.log(`     - ${p.month}: ${p.pausedDays}/${p.totalDaysInMonth} days = £${p.creditAmount}`)
         }
 
-        // Only create invoice item if there's credit to apply
-        if (credit.totalCredit > 0) {
-          // Build description
-          const description = credit.breakdown
-            .map(b => `${b.period}: ${b.daysPaused} days`)
+        // Only create invoice item for PARTIAL months (customer already paid full month)
+        // Full months: void prevented billing, no credit needed
+        if (settlement.totalSettlementAmount > 0) {
+          // Build description from partial months
+          const description = settlement.partialMonths
+            .map(p => `${p.month}: ${p.pausedDays} days`)
             .join(', ')
 
-          // Create negative invoice item (CREDIT)
+          // Create negative invoice item (CREDIT) - partial months only
           const invoiceItem = await stripe.invoiceItems.create({
             customer: sub.stripeCustomerId,
-            amount: -credit.totalCreditPence, // NEGATIVE for credit
+            amount: -settlement.totalSettlementPence, // NEGATIVE for credit
             currency: 'gbp',
-            description: `Pause credit: ${description}`,
+            description: `Pause credit (partial month): ${description}`,
             metadata: {
               pauseWindowId: window.id,
               subscriptionId: sub.id,
-              totalPausedDays: String(credit.totalDays),
-              proratedPayment: String(proratedAmount ?? 'N/A'),
+              totalPausedDays: String(settlement.totalDays),
+              fullMonthsSkipped: settlement.fullMonthsSkipped.join(', '),
               startDate: formatShortDate(new Date(window.startDate)),
               endDate: formatShortDate(new Date(window.endDate)),
-              reason: 'pause_credit',
+              reason: 'pause_partial_month_settlement',
               appliedAt: new Date().toISOString()
             }
           })
 
-          console.log(`✅ Created credit ${invoiceItem.id}: -£${credit.totalCredit}`)
+          console.log(`✅ Created credit ${invoiceItem.id}: -£${settlement.totalSettlementAmount}`)
           results.creditsApplied++
 
           // Update the pause window
           await (prisma as any).subscriptionPauseWindow.update({
             where: { id: window.id },
             data: {
-              pausedDays: credit.totalDays,
-              creditAmount: credit.totalCredit,
+              pausedDays: settlement.totalDays,
+              creditAmount: settlement.totalSettlementAmount,
               creditAppliedAt: new Date(),
               stripeInvoiceItemId: invoiceItem.id,
               status: 'CREDIT_APPLIED'
@@ -308,15 +293,15 @@ export async function GET(request: NextRequest) {
                 action: 'PAUSE_ENDED',
                 performedBy: 'SYSTEM',
                 performedByName: 'System Cron',
-                reason: `Pause ended, credit applied: £${credit.totalCredit}`,
+                reason: `Pause ended, partial month credit: £${settlement.totalSettlementAmount}`,
                 operationId: `pause_end_${window.id}_${Date.now()}`,
                 metadata: JSON.stringify({
                   pauseWindowId: window.id,
                   stripeInvoiceItemId: invoiceItem.id,
-                  totalDays: credit.totalDays,
-                  totalCredit: credit.totalCredit,
-                  proratedPayment: proratedAmount,
-                  breakdown: credit.breakdown
+                  totalDays: settlement.totalDays,
+                  settlementCredit: settlement.totalSettlementAmount,
+                  fullMonthsSkipped: settlement.fullMonthsSkipped,
+                  partialMonths: settlement.partialMonths
                 })
               }
             })
@@ -325,13 +310,13 @@ export async function GET(request: NextRequest) {
           }
 
         } else {
-          // No credit needed - just mark as completed
-          console.log(`ℹ️ Window ${windowId}: No credit to apply`)
-          
+          // No partial months - full months handled entirely by void
+          console.log(`ℹ️ Window ${windowId}: No credit needed (${settlement.fullMonthsSkipped.length} full month(s) handled by void)`)
+
           await (prisma as any).subscriptionPauseWindow.update({
             where: { id: window.id },
             data: {
-              pausedDays: credit.totalDays,
+              pausedDays: settlement.totalDays,
               creditAmount: 0,
               creditAppliedAt: new Date(),
               status: 'CREDIT_APPLIED'
@@ -346,11 +331,12 @@ export async function GET(request: NextRequest) {
                 action: 'PAUSE_COMPLETED',
                 performedBy: 'SYSTEM',
                 performedByName: 'System Cron',
-                reason: `Pause completed - ${credit.totalDays} days, no credit to apply`,
+                reason: `Pause completed - ${settlement.totalDays} days, ${settlement.fullMonthsSkipped.length} full month(s) voided, no credit needed`,
                 operationId: `pause_complete_${window.id}_${Date.now()}`,
                 metadata: JSON.stringify({
                   pauseWindowId: window.id,
-                  totalDays: credit.totalDays,
+                  totalDays: settlement.totalDays,
+                  fullMonthsSkipped: settlement.fullMonthsSkipped,
                   creditAmount: 0
                 })
               }
