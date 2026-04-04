@@ -129,7 +129,7 @@ export async function POST(
     try {
       // STEP 1: Retrieve subscription to get current period dates
       const currentSub = await stripeClient.subscriptions.retrieve(pausedSubscription.stripeSubscriptionId)
-      const customerId = currentSub.customer as string
+      const customerId = (currentSub as any).customer as string
 
       // STEP 2: Calculate and collect proration BEFORE resuming
       const now = new Date()
@@ -145,7 +145,7 @@ export async function POST(
       const recentInvoices = await stripeClient.invoices.list({ customer: customerId, limit: 5 })
       const alreadyPaid = recentInvoices.data.find((inv: any) =>
         inv.metadata?.reason === 'resume_proration' && inv.status === 'paid'
-        && inv.metadata?.subscriptionPeriod === String(currentSub.current_period_start)
+        && inv.metadata?.subscriptionPeriod === String((currentSub as any).current_period_start)
       )
 
       if (alreadyPaid) {
@@ -173,7 +173,7 @@ export async function POST(
             collection_method: 'charge_automatically',
             auto_advance: true,
             pending_invoice_items_behavior: 'include',
-            metadata: { reason: 'resume_proration', operationId, subscriptionPeriod: String(currentSub.current_period_start) }
+            metadata: { reason: 'resume_proration', operationId, subscriptionPeriod: String((currentSub as any).current_period_start) }
           })
 
           // Finalize and pay — fails here = resume aborted
