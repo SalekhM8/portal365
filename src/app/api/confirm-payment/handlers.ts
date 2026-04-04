@@ -74,15 +74,16 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
   }, { idempotencyKey: `start-sub:${subscription.id}:${trialEndTimestamp}` })
 
   // 🔄 Update subscription with Stripe ID but keep as PENDING_PAYMENT until webhook confirms payment
-  await prisma.subscription.update({ 
-    where: { id: subscription.id }, 
-    data: { 
+  await prisma.subscription.update({
+    where: { id: subscription.id },
+    data: {
       stripeSubscriptionId: stripeSubscription.id,
       // Mark as ACTIVE immediately; Stripe will be TRIALING until first billing, but active for access
       status: 'ACTIVE',
-      nextBillingDate 
-    } 
+      nextBillingDate
+    }
   })
+  await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
 
   console.log(`✅ Payment method setup completed for ${subscription.user.email}`)
   console.log(`🔄 Subscription status: PENDING_PAYMENT (will activate via webhook after payment)`)

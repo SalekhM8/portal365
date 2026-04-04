@@ -227,24 +227,16 @@ export async function POST(request: NextRequest) {
         message: stripeError instanceof Error ? stripeError.message : String(stripeError),
         stack: stripeError instanceof Error ? stripeError.stack : undefined
       })
+      // Clean up orphaned User + Membership to avoid broken "Complete setup" state
+      try {
+        await prisma.user.delete({ where: { id: user.id } })
+      } catch (cleanupErr) {
+        console.error('⚠️ Failed to clean up user after Stripe error:', cleanupErr)
+      }
       return NextResponse.json({
-        success: true, // User and membership created, but payment failed
-        user: {
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email
-        },
-        membership: {
-          type: validatedData.membershipType,
-          price: membership.monthlyPrice,
-          status: membership.status
-        },
-        subscription: {
-          error: 'Payment setup failed',
-          details: stripeError instanceof Error ? stripeError.message : 'Unknown error'
-        }
-      }, { status: 207 }) // Multi-status: user created, payment failed
+        success: false,
+        error: 'Payment setup failed. Please try again.',
+      }, { status: 500 })
     }
     
   } catch (error) {
