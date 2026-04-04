@@ -167,9 +167,34 @@ function RegisterDetailsContent() {
       setError('Passwords do not match. Please check and try again.')
       return
     }
-    
+
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long.')
+      return
+    }
+
+    if (!formData.phone.trim()) {
+      setError('Phone number is required.')
+      return
+    }
+
+    if (!formData.address.trim()) {
+      setError('Address is required.')
+      return
+    }
+
+    if (!formData.postcode.trim()) {
+      setError('Postcode is required.')
+      return
+    }
+
+    if (!formData.dateOfBirth) {
+      setError('Date of birth is required.')
+      return
+    }
+
+    if (!formData.emergencyContact.name.trim() || !formData.emergencyContact.phone.trim() || !formData.emergencyContact.relationship.trim()) {
+      setError('All emergency contact fields are required (name, phone, and relationship).')
       return
     }
 
@@ -342,7 +367,7 @@ function RegisterDetailsContent() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="phone" className="text-white/90">Phone Number</Label>
+                        <Label htmlFor="phone" className="text-white/90">Phone Number *</Label>
                         <Input
                           id="phone"
                           type="tel"
@@ -350,26 +375,29 @@ function RegisterDetailsContent() {
                           onChange={(e) => handleInputChange('phone', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
                           placeholder="Enter phone number"
+                          required
                         />
                       </div>
                       <div className="space-y-2 sm:col-span-2">
-                        <Label htmlFor="address" className="text-white/90">Address</Label>
+                        <Label htmlFor="address" className="text-white/90">Address *</Label>
                         <Input
                           id="address"
                           value={formData.address}
                           onChange={(e) => handleInputChange('address', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
                           placeholder="House/Flat, Street, City"
+                          required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="postcode" className="text-white/90">Post Code</Label>
+                        <Label htmlFor="postcode" className="text-white/90">Post Code *</Label>
                         <Input
                           id="postcode"
                           value={formData.postcode}
                           onChange={(e) => handleInputChange('postcode', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
                           placeholder="e.g., UB1 1AA"
+                          required
                         />
                       </div>
                     </div>
@@ -414,13 +442,14 @@ function RegisterDetailsContent() {
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="dateOfBirth" className="text-white/90">Date of Birth</Label>
+                        <Label htmlFor="dateOfBirth" className="text-white/90">Date of Birth *</Label>
                         <Input
                           id="dateOfBirth"
                           type="date"
                           value={formData.dateOfBirth}
                           onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
+                          required
                         />
                       </div>
                     </div>
@@ -483,17 +512,18 @@ function RegisterDetailsContent() {
                     </h3>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
-                        <Label htmlFor="emergencyName" className="text-white/90">Contact Name</Label>
+                        <Label htmlFor="emergencyName" className="text-white/90">Contact Name *</Label>
                         <Input
                           id="emergencyName"
                           value={formData.emergencyContact.name}
                           onChange={(e) => handleInputChange('emergencyContact.name', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
                           placeholder="Emergency contact name"
+                          required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="emergencyPhone" className="text-white/90">Contact Phone</Label>
+                        <Label htmlFor="emergencyPhone" className="text-white/90">Contact Phone *</Label>
                         <Input
                           id="emergencyPhone"
                           type="tel"
@@ -501,17 +531,19 @@ function RegisterDetailsContent() {
                           onChange={(e) => handleInputChange('emergencyContact.phone', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
                           placeholder="Emergency contact phone"
+                          required
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="emergencyRelationship" className="text-white/90">Relationship</Label>
+                      <Label htmlFor="emergencyRelationship" className="text-white/90">Relationship *</Label>
                       <Input
                         id="emergencyRelationship"
                         value={formData.emergencyContact.relationship}
                         onChange={(e) => handleInputChange('emergencyContact.relationship', e.target.value)}
                         className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
                         placeholder="Relationship to you"
+                        required
                       />
                     </div>
                   </div>

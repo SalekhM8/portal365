@@ -10,15 +10,15 @@ const registerSchema = z.object({
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  postcode: z.string().optional(),
-  dateOfBirth: z.string().optional(),
+  phone: z.string().min(1, 'Phone number is required'),
+  address: z.string().min(1, 'Address is required'),
+  postcode: z.string().min(1, 'Postcode is required'),
+  dateOfBirth: z.string().min(1, 'Date of birth is required'),
   emergencyContact: z.object({
-    name: z.string(),
-    phone: z.string(),
-    relationship: z.string()
-  }).optional(),
+    name: z.string().min(1, 'Emergency contact name is required'),
+    phone: z.string().min(1, 'Emergency contact phone is required'),
+    relationship: z.string().min(1, 'Emergency contact relationship is required')
+  }),
   guardian: z.object({
     name: z.string().min(1),
     phone: z.string().min(1)
