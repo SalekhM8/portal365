@@ -133,8 +133,8 @@ export async function POST(
 
       // STEP 2: Calculate and collect proration BEFORE resuming
       const now = new Date()
-      const periodEnd = new Date(currentSub.current_period_end * 1000)
-      const periodStart = new Date(currentSub.current_period_start * 1000)
+      const periodEnd = new Date((currentSub as any).current_period_end * 1000)
+      const periodStart = new Date((currentSub as any).current_period_start * 1000)
       const totalDaysInPeriod = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24))
       const remainingDays = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       const monthlyPrice = Number(pausedSubscription.monthlyPrice) || 0
