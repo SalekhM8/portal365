@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
+import React, { useEffect, useState, Suspense, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -214,10 +214,13 @@ function AdminDashboardContent() {
   const [businessMetrics, setBusinessMetrics] = useState<BusinessMetrics | null>(null)
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
-  const [revenueMonths, setRevenueMonths] = useState<Array<{ month: string; totalNet: number; charges: number; refunds: number }>>([])
-  const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'AURA'|'AURAUP'|'ALL'>('AURAUP')
+  const [revenueMonths, setRevenueMonths] = useState<Array<{ month: string; totalNet: number; charges: number; refunds: number; payouts: number; stripeFees: number }>>([])
+  const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'AURA'|'AURAUP'|'ALL'>('AURA')
   const [revenueLoading, setRevenueLoading] = useState(false)
   const [revenueUpdatedAt, setRevenueUpdatedAt] = useState<string | null>(null)
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
+  const [payoutDetails, setPayoutDetails] = useState<Record<string, Array<{ id: string; amount: number; date: string; account: string; status: string }>>>({})
+  const [payoutLoading, setPayoutLoading] = useState<string | null>(null)
   const revenueAbortRef = useRef<AbortController | null>(null)
   const [loading, setLoading] = useState(false)
   const [initialLoadDone, setInitialLoadDone] = useState(false)
@@ -413,6 +416,22 @@ function AdminDashboardContent() {
       setRevenueLoading(false)
     }
   }, [])
+
+  const loadPayoutDetails = useCallback(async (month: string, account: string) => {
+    if (payoutDetails[`${account}:${month}`]) return // already loaded
+    setPayoutLoading(month)
+    try {
+      const res = await fetch(`/api/admin/analytics/payouts?month=${month}&account=${account}`, { cache: 'no-store' })
+      const j = await res.json()
+      if (j?.ok && Array.isArray(j.payouts)) {
+        setPayoutDetails(prev => ({ ...prev, [`${account}:${month}`]: j.payouts }))
+      }
+    } catch (err) {
+      console.error('Failed to load payout details', err)
+    } finally {
+      setPayoutLoading(null)
+    }
+  }, [payoutDetails])
 
   useEffect(() => {
     if (activeTab === 'analytics') {
@@ -1962,13 +1981,13 @@ function AdminDashboardContent() {
         {/* VAT Monitor Tab */}
         {/* Business Analytics Tab */}
         <TabsContent value="analytics" className="space-y-6">
-          {/* Monthly Revenue (Stripe Net) */}
+          {/* Monthly Revenue */}
       <Card className="mt-6 border border-white/15 bg-white/[0.03] backdrop-blur-xl shadow-2xl">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <CardTitle>Monthly Revenue (Stripe Net)</CardTitle>
-              <CardDescription>Exact Stripe net volume per month (succeeded charges minus refunds)</CardDescription>
+              <CardTitle>Monthly Revenue</CardTitle>
+              <CardDescription>Bank deposits (payouts) and charge breakdown per month</CardDescription>
             </div>
             <div className="flex flex-col items-end gap-1 text-xs text-white/70">
               <div className="flex items-center gap-2">
@@ -1978,8 +1997,8 @@ function AdminDashboardContent() {
                   value={revenueAccount}
                   onChange={(e) => setRevenueAccount(e.target.value as any)}
                 >
-                  <option value="AURAUP">AURAUP</option>
                   <option value="AURA">AURA</option>
+                  <option value="AURAUP">AURAUP</option>
                   <option value="SU">SU</option>
                   <option value="IQ">IQ</option>
                   <option value="ALL">All</option>
@@ -2019,21 +2038,89 @@ function AdminDashboardContent() {
               <table className="w-full text-sm text-white/90">
                 <thead className="bg-white/[0.04]">
                   <tr className="text-left uppercase tracking-wide text-[11px] text-white/60">
+                    <th className="py-3 px-4"></th>
                     <th className="py-3 px-4">Month</th>
-                    <th className="py-3 px-4">Total Net</th>
+                    <th className="py-3 px-4 font-bold text-white/80">Bank Deposits</th>
+                    <th className="py-3 px-4">Stripe Fees</th>
                     <th className="py-3 px-4">Charges</th>
                     <th className="py-3 px-4">Refunds</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {revenueMonths.map((m) => (
-                    <tr key={m.month} className="border-t border-white/5 hover:bg-white/[0.03] transition-colors">
-                      <td className="py-3 px-4 font-medium text-white">{m.month}</td>
-                      <td className="py-3 px-4">{formatMoney(m.totalNet || 0)}</td>
-                      <td className="py-3 px-4">{formatMoney(m.charges || 0)}</td>
-                      <td className="py-3 px-4 text-red-300">{formatMoney(m.refunds || 0)}</td>
-                    </tr>
-                  ))}
+                  {revenueMonths.map((m) => {
+                    const isExpanded = expandedMonth === m.month
+                    const detailKey = `${revenueAccount}:${m.month}`
+                    const details = payoutDetails[detailKey]
+                    return (
+                      <React.Fragment key={m.month}>
+                        <tr
+                          className="border-t border-white/5 hover:bg-white/[0.03] transition-colors cursor-pointer"
+                          onClick={() => {
+                            if (isExpanded) {
+                              setExpandedMonth(null)
+                            } else {
+                              setExpandedMonth(m.month)
+                              loadPayoutDetails(m.month, revenueAccount)
+                            }
+                          }}
+                        >
+                          <td className="py-3 px-4 w-8 text-white/40">
+                            {payoutLoading === m.month ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>&#9654;</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-medium text-white">{m.month}</td>
+                          <td className="py-3 px-4 font-bold text-emerald-400 text-base">{formatMoney(m.payouts || 0)}</td>
+                          <td className="py-3 px-4 text-white/50">{formatMoney(m.stripeFees || 0)}</td>
+                          <td className="py-3 px-4 text-white/70">{formatMoney(m.charges || 0)}</td>
+                          <td className="py-3 px-4 text-red-300">{formatMoney(m.refunds || 0)}</td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={6} className="bg-white/[0.02] px-8 py-4">
+                              {!details ? (
+                                <div className="flex items-center gap-2 text-white/50 text-xs">
+                                  <Loader2 className="h-3 w-3 animate-spin" /> Loading payouts...
+                                </div>
+                              ) : details.length === 0 ? (
+                                <div className="text-white/50 text-xs">No payouts for this month.</div>
+                              ) : (
+                                <div>
+                                  <div className="text-xs text-white/50 mb-2 uppercase tracking-wide">{details.length} payout{details.length !== 1 ? 's' : ''} in {m.month}</div>
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="text-white/40 uppercase tracking-wide">
+                                        <th className="py-1 px-2 text-left">Date</th>
+                                        <th className="py-1 px-2 text-left">Amount</th>
+                                        {revenueAccount === 'ALL' && <th className="py-1 px-2 text-left">Account</th>}
+                                        <th className="py-1 px-2 text-left">Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {details.map((po) => (
+                                        <tr key={po.id} className="border-t border-white/5">
+                                          <td className="py-1.5 px-2 text-white/70">{po.date}</td>
+                                          <td className="py-1.5 px-2 font-medium text-emerald-400">{formatMoney(po.amount)}</td>
+                                          {revenueAccount === 'ALL' && <td className="py-1.5 px-2 text-white/50">{po.account}</td>}
+                                          <td className="py-1.5 px-2">
+                                            <span className={`px-1.5 py-0.5 rounded text-[10px] ${po.status === 'paid' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                              {po.status}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

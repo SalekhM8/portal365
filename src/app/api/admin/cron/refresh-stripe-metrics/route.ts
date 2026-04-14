@@ -11,7 +11,7 @@ export const revalidate = 0
 const MONTH_LOOKBACK = Number(process.env.STRIPE_METRICS_MONTHS ?? 12)
 
 type MonthWindow = { key: string; startUnix: number; endUnix: number }
-type Bucket = { netMinor: number; chargesMinor: number; refundsMinor: number }
+type Bucket = { netMinor: number; chargesMinor: number; refundsMinor: number; payoutsMinor: number; feesMinor: number }
 
 function startOfMonthUTC(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0))
@@ -41,7 +41,9 @@ function mergeBuckets(a?: Bucket, b?: Bucket): Bucket {
   return {
     netMinor: (a?.netMinor ?? 0) + (b?.netMinor ?? 0),
     chargesMinor: (a?.chargesMinor ?? 0) + (b?.chargesMinor ?? 0),
-    refundsMinor: (a?.refundsMinor ?? 0) + (b?.refundsMinor ?? 0)
+    refundsMinor: (a?.refundsMinor ?? 0) + (b?.refundsMinor ?? 0),
+    payoutsMinor: (a?.payoutsMinor ?? 0) + (b?.payoutsMinor ?? 0),
+    feesMinor: (a?.feesMinor ?? 0) + (b?.feesMinor ?? 0)
   }
 }
 
@@ -52,11 +54,13 @@ function decimalFromMinor(valueMinor: number) {
 }
 
 function bucketToDecimal(bucket?: Bucket) {
-  const data = bucket ?? { netMinor: 0, chargesMinor: 0, refundsMinor: 0 }
+  const data = bucket ?? { netMinor: 0, chargesMinor: 0, refundsMinor: 0, payoutsMinor: 0, feesMinor: 0 }
   return {
     totalNet: decimalFromMinor(data.netMinor),
     charges: decimalFromMinor(data.chargesMinor),
-    refunds: decimalFromMinor(data.refundsMinor)
+    refunds: decimalFromMinor(data.refundsMinor),
+    payouts: decimalFromMinor(data.payoutsMinor),
+    stripeFees: decimalFromMinor(data.feesMinor)
   }
 }
 
@@ -66,6 +70,9 @@ async function collectMonthlyBuckets(account: StripeAccountKey, windows: MonthWi
   const rangeStart = windows[0].startUnix
   const rangeEnd = windows[windows.length - 1].endUnix
 
+  const emptyBucket = (): Bucket => ({ netMinor: 0, chargesMinor: 0, refundsMinor: 0, payoutsMinor: 0, feesMinor: 0 })
+
+  // 1. Collect charges (existing logic)
   let hasMore = true
   let startingAfter: string | undefined
 
@@ -84,13 +91,57 @@ async function collectMonthlyBuckets(account: StripeAccountKey, windows: MonthWi
       const key = formatMonthKey(new Date(createdTs * 1000))
       const amountMinor = Number(ch.amount || 0)
       const refundMinor = Number((ch as any).amount_refunded || 0)
-      const bucket = buckets.get(key) ?? { netMinor: 0, chargesMinor: 0, refundsMinor: 0 }
+      const bucket = buckets.get(key) ?? emptyBucket()
       bucket.chargesMinor += amountMinor
       bucket.refundsMinor += refundMinor
       bucket.netMinor += amountMinor - refundMinor
       buckets.set(key, bucket)
     }
 
+    hasMore = batch.has_more
+    startingAfter = batch.data[batch.data.length - 1]?.id
+  }
+
+  // 2. Collect payouts (grouped by arrival date — what actually hit the bank)
+  hasMore = true
+  startingAfter = undefined
+  while (hasMore) {
+    const batch: any = await stripe.payouts.list({
+      limit: 100,
+      starting_after: startingAfter,
+      arrival_date: { gte: rangeStart, lt: rangeEnd },
+      status: 'paid'
+    })
+    for (const po of batch.data) {
+      const arrivalTs = Number((po as any).arrival_date || 0)
+      if (!arrivalTs || arrivalTs < rangeStart || arrivalTs >= rangeEnd) continue
+      const key = formatMonthKey(new Date(arrivalTs * 1000))
+      const bucket = buckets.get(key) ?? emptyBucket()
+      bucket.payoutsMinor += Number(po.amount || 0)
+      buckets.set(key, bucket)
+    }
+    hasMore = batch.has_more
+    startingAfter = batch.data[batch.data.length - 1]?.id
+  }
+
+  // 3. Collect Stripe fees from balance transactions
+  hasMore = true
+  startingAfter = undefined
+  while (hasMore) {
+    const batch: any = await stripe.balanceTransactions.list({
+      limit: 100,
+      starting_after: startingAfter,
+      created: { gte: rangeStart, lt: rangeEnd },
+      type: 'charge'
+    })
+    for (const bt of batch.data) {
+      const createdTs = Number((bt as any).created || 0)
+      if (!createdTs || createdTs < rangeStart || createdTs >= rangeEnd) continue
+      const key = formatMonthKey(new Date(createdTs * 1000))
+      const bucket = buckets.get(key) ?? emptyBucket()
+      bucket.feesMinor += Number(bt.fee || 0)
+      buckets.set(key, bucket)
+    }
     hasMore = batch.has_more
     startingAfter = batch.data[batch.data.length - 1]?.id
   }

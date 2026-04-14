@@ -9,7 +9,7 @@ export default function AdminFamilyCreatePage() {
   const [childFirstName, setChildFirstName] = useState('')
   const [childLastName, setChildLastName] = useState('')
   const [planKey, setPlanKey] = useState('KIDS_UNLIMITED_UNDER14')
-  const [account, setAccount] = useState<'SU'|'IQ'|'AURA'|'AURAUP'>('AURAUP')
+  const [account, setAccount] = useState<'SU'|'IQ'|'AURA'|'AURAUP'>('AURA')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string|undefined>()
 

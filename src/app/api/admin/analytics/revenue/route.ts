@@ -15,6 +15,8 @@ type MonthlyMetricRow = {
   totalNet: Prisma.Decimal
   charges: Prisma.Decimal
   refunds: Prisma.Decimal
+  payouts: Prisma.Decimal
+  stripeFees: Prisma.Decimal
   lastUpdatedAt: Date
 }
 
@@ -49,7 +51,9 @@ export async function GET(req: NextRequest) {
         month: row.month,
         totalNet: Number(row.totalNet),
         charges: Number(row.charges),
-        refunds: Number(row.refunds)
+        refunds: Number(row.refunds),
+        payouts: Number(row.payouts ?? 0),
+        stripeFees: Number(row.stripeFees ?? 0)
       }))
 
     return NextResponse.json({
