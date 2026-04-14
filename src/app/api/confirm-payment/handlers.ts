@@ -146,7 +146,6 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
     collection_method: 'charge_automatically',
     trial_end: trialEndTimestamp,
     proration_behavior: 'none',
-    payment_behavior: 'default_incomplete',
     metadata: { userId: dbSub.userId, membershipType: dbSub.membershipType, routedEntityId: dbSub.routedEntityId, dbSubscriptionId: dbSub.id }
   }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
 

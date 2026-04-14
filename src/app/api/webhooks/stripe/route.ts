@@ -65,7 +65,9 @@ export async function POST(request: NextRequest) {
               await activateFromPaymentIntent(pi, accountKeyVerified)
             }
           }
-        } catch {}
+        } catch (piError) {
+          console.error('❌ payment_intent.succeeded handler error:', piError)
+        }
         break
       default:
         // ignore

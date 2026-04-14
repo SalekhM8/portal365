@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing setupIntentId or paymentIntentId' }, { status: 400 })
     }
   } catch (error) {
+    console.error('❌ confirm-payment error:', error)
     return NextResponse.json({ success: false, error: 'Confirmation failed' }, { status: 500 })
   }
 } 
