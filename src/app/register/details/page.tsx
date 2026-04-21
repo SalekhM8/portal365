@@ -586,7 +586,9 @@ function RegisterDetailsContent() {
                         <AlertTriangle className="h-4 w-4 text-amber-300" />
                       </div>
                       <p className="text-sm leading-relaxed text-amber-100">
-                        Your first payment will be a prorated payment that calculates how much you owe for the rest of the month. For cancellations, you must give a 14-day notice.
+                        {startOnFirst
+                          ? 'No payment today. Your first charge will be on the 1st of next month. For cancellations, you must give a 14-day notice.'
+                          : 'Your first payment will be a prorated payment that calculates how much you owe for the rest of the month. For cancellations, you must give a 14-day notice.'}
                       </p>
                     </div>
                   </div>
