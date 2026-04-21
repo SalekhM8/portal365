@@ -281,7 +281,7 @@ function RegisterDetailsContent() {
       <div className="relative container mx-auto px-4 sm:px-6 py-8 max-w-4xl">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-8">
-          <Link href={`/register?business=${selectedBusiness}`} className="text-white/60 hover:text-white transition-colors">
+          <Link href={startOnFirst ? '/migrate' : `/register?business=${selectedBusiness}`} className="text-white/60 hover:text-white transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
