@@ -64,7 +64,7 @@ export default function MigratePage() {
 
           <div className="flex items-center justify-center gap-2 text-green-400">
             <CheckCircle2 className="h-5 w-5" />
-            <span>Immediate access • No proration • First charge Feb 1st</span>
+            <span>Immediate access &bull; No proration &bull; First charge May 1st</span>
           </div>
         </div>
 
@@ -82,7 +82,7 @@ export default function MigratePage() {
                 <Badge variant="outline" className="text-orange-400 border-orange-400/30">Mixed Martial Arts</Badge>
               </h2>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {plans.filter(p => (p.preferredEntities || []).includes('aura_mma')).map((plan) => (
+                {plans.filter(p => p.migrationOnly && (p.preferredEntities || []).includes('aura_mma')).map((plan) => (
                   <PlanCard key={plan.key} plan={plan} business="aura_mma" />
                 ))}
               </div>
@@ -95,7 +95,7 @@ export default function MigratePage() {
                 <Badge variant="outline" className="text-pink-400 border-pink-400/30">Ladies Only</Badge>
               </h2>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {plans.filter(p => (p.preferredEntities || []).includes('aura_womens')).map((plan) => (
+                {plans.filter(p => p.migrationOnly && (p.preferredEntities || []).includes('aura_womens')).map((plan) => (
                   <PlanCard key={plan.key} plan={plan} business="aura_womens" accentColor="pink" />
                 ))}
               </div>
