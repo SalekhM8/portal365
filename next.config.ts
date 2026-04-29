@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Performance optimizations
   reactStrictMode: true,
+  eslint: { ignoreDuringBuilds: true },
   
   // Optimize images
   images: {

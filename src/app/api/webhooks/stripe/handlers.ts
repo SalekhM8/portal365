@@ -872,3 +872,92 @@ export async function activateFromPaymentIntent(pi: any, account?: StripeAccount
     console.warn('activateFromPaymentIntent: unable to write prorated payment row', e)
   }
 }
+
+/**
+ * Webhook safety net for SetupIntent-based migration signups.
+ * If the client-side success page fails to call /api/confirm-payment,
+ * this handler ensures the subscription is still activated.
+ */
+export async function activateFromSetupIntent(si: any, account?: StripeAccountKey) {
+  const metadata = si?.metadata || {}
+  const dbSubId = metadata.dbSubscriptionId
+  const userId = metadata.userId
+
+  if (!dbSubId && !userId) {
+    console.log('⚠️ setup_intent.succeeded: no dbSubscriptionId or userId in metadata, skipping')
+    return
+  }
+
+  let dbSub = null as any
+  if (dbSubId) {
+    dbSub = await prisma.subscription.findUnique({ where: { id: dbSubId } })
+  }
+  if (!dbSub && userId) {
+    dbSub = await prisma.subscription.findFirst({
+      where: { userId, status: 'PENDING_PAYMENT' },
+      orderBy: { createdAt: 'desc' }
+    })
+  }
+  if (!dbSub) {
+    console.log(`⚠️ setup_intent.succeeded: no matching DB subscription found (dbSubId=${dbSubId}, userId=${userId})`)
+    return
+  }
+
+  // Already activated (by success page or previous webhook) — idempotent no-op
+  if (dbSub.status === 'ACTIVE' && dbSub.stripeSubscriptionId?.startsWith('sub_')) {
+    console.log(`✅ setup_intent.succeeded: subscription ${dbSub.id} already ACTIVE with ${dbSub.stripeSubscriptionId}, skipping`)
+    return
+  }
+
+  // Only proceed if still stuck as PENDING_PAYMENT
+  if (dbSub.status !== 'PENDING_PAYMENT') {
+    console.log(`⚠️ setup_intent.succeeded: subscription ${dbSub.id} status is ${dbSub.status}, not PENDING_PAYMENT, skipping`)
+    return
+  }
+
+  console.log(`🔄 setup_intent.succeeded: activating stuck subscription ${dbSub.id} for user ${dbSub.userId}`)
+
+  const stripeAccount = (dbSub as any).stripeAccountKey || account || 'SU'
+  const stripe = getStripeClient(stripeAccount)
+
+  // Attach payment method to customer
+  const paymentMethodId = si.payment_method as string
+  if (paymentMethodId) {
+    await stripe.customers.update(dbSub.stripeCustomerId, {
+      invoice_settings: { default_payment_method: paymentMethodId }
+    })
+  }
+
+  // Create the real Stripe subscription with trial until next billing date
+  const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any
+  const priceId = await getOrCreatePrice(
+    { monthlyPrice: Number(dbSub.monthlyPrice), name: dbSub.membershipType },
+    stripeAccount
+  )
+  const trialEndTimestamp = Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000)
+
+  const stripeSubscription = await stripe.subscriptions.create({
+    customer: dbSub.stripeCustomerId,
+    items: [{ price: priceId }],
+    default_payment_method: paymentMethodId || undefined,
+    collection_method: 'charge_automatically',
+    trial_end: trialEndTimestamp,
+    metadata: {
+      userId: dbSub.userId,
+      membershipType: dbSub.membershipType,
+      routedEntityId: dbSub.routedEntityId,
+      dbSubscriptionId: dbSub.id
+    }
+  }, { idempotencyKey: `setup-webhook-sub:${dbSub.id}:${trialEndTimestamp}` })
+
+  await prisma.subscription.update({
+    where: { id: dbSub.id },
+    data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' }
+  })
+  await prisma.membership.updateMany({
+    where: { userId: dbSub.userId },
+    data: { status: 'ACTIVE' }
+  })
+
+  console.log(`✅ setup_intent.succeeded: activated subscription ${dbSub.id} → ${stripeSubscription.id}`)
+}

@@ -294,7 +294,6 @@ function AdminDashboardContent() {
   const [showChangePlanModal, setShowChangePlanModal] = useState(false)
   const [newPlanKey, setNewPlanKey] = useState<string>('FULL_ADULT')
   const [effectiveMode, setEffectiveMode] = useState<'now' | 'period_end'>('now')
-  const [settlementMode, setSettlementMode] = useState<'defer' | 'charge_now'>('defer')
   const [availablePlans, setAvailablePlans] = useState<Array<{key: string, displayName: string, monthlyPrice: number, migrationOnly?: boolean}>>([])
   const [plansLoading, setPlansLoading] = useState(false)
   const [preview, setPreview] = useState<any>(null)
@@ -2841,16 +2840,6 @@ function AdminDashboardContent() {
                 </div>
                 <p className="text-xs text-white/60 mt-1">Start now flips access immediately; period-end switches access on the 1st.</p>
               </div>
-              {effectiveMode === 'now' && (
-                <div>
-                  <Label className="text-white mb-2 block">Settlement</Label>
-                  <div className="flex gap-2">
-                    <Button variant={settlementMode==='defer'?'default':'outline'} className={settlementMode==='defer'?'':'border-white/20 text-white'} onClick={() => setSettlementMode('defer')}>Defer to next invoice</Button>
-                    <Button variant={settlementMode==='charge_now'?'default':'outline'} className={settlementMode==='charge_now'?'':'border-white/20 text-white'} onClick={() => setSettlementMode('charge_now')}>Charge now</Button>
-                  </div>
-                  <p className="text-xs text-white/60 mt-1">If the user is in trial, we will charge/refund the exact delta now.</p>
-                </div>
-              )}
               <div>
                 <Button
                   variant="outline"
@@ -2891,7 +2880,7 @@ function AdminDashboardContent() {
                   try {
                     const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/change-plan`, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ newMembershipType: newPlanKey, effective: effectiveMode, settlement: settlementMode })
+                      body: JSON.stringify({ newMembershipType: newPlanKey, effective: effectiveMode, settlement: 'charge_now' })
                     })
                     const json = await resp.json()
                     if (resp.ok && json.success) {

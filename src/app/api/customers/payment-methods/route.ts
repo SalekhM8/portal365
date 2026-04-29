@@ -58,7 +58,8 @@ export async function GET(request: NextRequest) {
       payment_method_types: ['card'],
       metadata: {
         userId: user.id,
-        subscriptionId: subscription.id
+        dbSubscriptionId: subscription.id,
+        reason: 'payment_method_setup'
       }
     })
 

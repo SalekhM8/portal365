@@ -188,11 +188,15 @@ export async function POST(
       monthlyPrice: decimalToNumber(subscription.monthlyPrice)
     })
 
-    // Check if pause should start IMMEDIATELY (today or past)
+    // Check if pause should start IMMEDIATELY (today, tomorrow, or past)
+    // Apply 1 day early to ensure Stripe void is active before billing at ~3am
+    // (matches cron logic which also picks up pauses starting tomorrow)
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
     const startNormalized = new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()))
-    const shouldStartImmediately = startNormalized <= today
+    const shouldStartImmediately = startNormalized <= tomorrow
 
     // Create the pause window
     const pauseWindow = await (prisma as any).subscriptionPauseWindow.create({
@@ -216,9 +220,8 @@ export async function POST(
       try {
         const stripe = getStripeClient((subscription.stripeAccountKey as StripeAccountKey) || 'SU')
         
-        // Calculate resume date (day after end date)
+        // Calculate resume date (end date itself — resumes before next billing on 1st)
         const resumeDate = new Date(end)
-        resumeDate.setUTCDate(resumeDate.getUTCDate() + 1)
         const resumeTimestamp = Math.floor(resumeDate.getTime() / 1000)
 
         // Apply pause_collection with automatic resume

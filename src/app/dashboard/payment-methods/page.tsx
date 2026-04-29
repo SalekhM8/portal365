@@ -22,6 +22,7 @@ function PaymentMethodsInner() {
   const [publishableKey, setPublishableKey] = useState<string | null>(pkParam)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [pendingSub, setPendingSub] = useState<string | null>(searchParams.get('sub') || searchParams.get('family_sub'))
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -263,7 +264,8 @@ function PaymentMethodsInner() {
                 appearance: { theme: 'stripe' }
               }}
             >
-              <PaymentMethodForm onSuccess={() => {
+              <PaymentMethodForm pendingSub={pendingSub} onSuccess={() => {
+                setPendingSub(null)
                 fetchPaymentMethods()
               }} />
             </Elements>
@@ -282,14 +284,12 @@ export default function PaymentMethodsPage() {
   )
 }
 
-function PaymentMethodForm({ onSuccess }: { onSuccess: () => void }) {
+function PaymentMethodForm({ pendingSub, onSuccess }: { pendingSub: string | null, onSuccess: () => void }) {
   const stripe = useStripe()
   const elements = useElements()
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : undefined
-  const familySubParam = params?.get('family_sub') || null
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -303,8 +303,7 @@ function PaymentMethodForm({ onSuccess }: { onSuccess: () => void }) {
       const result = await stripe.confirmSetup({
         elements,
         confirmParams: {
-          // Preserve family_sub so the page can finalize child activation after redirect
-          return_url: `${window.location.origin}/dashboard/payment-methods?updated=true${familySubParam ? `&family_sub=${encodeURIComponent(familySubParam)}` : ''}`,
+          return_url: `${window.location.origin}/dashboard/payment-methods?updated=true${pendingSub ? `&sub=${encodeURIComponent(pendingSub)}` : ''}`,
         },
         redirect: 'if_required'
       })
@@ -320,13 +319,13 @@ function PaymentMethodForm({ onSuccess }: { onSuccess: () => void }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ setupIntentId })
           })
-          // If this update originated from family activation, finalize the child subscription now
-          if (familySubParam) {
+          // Activate pending subscription (migration signup or family child)
+          if (pendingSub) {
             try {
               await fetch('/api/confirm-payment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ setupIntentId, subscriptionId: familySubParam })
+                body: JSON.stringify({ setupIntentId, subscriptionId: pendingSub })
               })
             } catch {}
           }

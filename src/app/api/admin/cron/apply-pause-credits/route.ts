@@ -107,9 +107,8 @@ export async function GET(request: NextRequest) {
 
         const stripe = getStripeClient((sub.stripeAccountKey as StripeAccountKey) || 'SU')
         
-        // Calculate resume date (day after end date)
+        // Calculate resume date (end date itself — resumes before next billing on 1st)
         const resumeDate = new Date(window.endDate)
-        resumeDate.setUTCDate(resumeDate.getUTCDate() + 1)
         const resumeTimestamp = Math.floor(resumeDate.getTime() / 1000)
 
         // Apply pause_collection

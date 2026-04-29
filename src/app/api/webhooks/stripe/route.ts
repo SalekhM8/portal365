@@ -69,6 +69,28 @@ export async function POST(request: NextRequest) {
           console.error('❌ payment_intent.succeeded handler error:', piError)
         }
         break
+      case 'setup_intent.succeeded':
+        // Safety net for migration signups: activate if success page didn't
+        try {
+          const si: any = event.data.object
+          const siMeta = si.metadata || {}
+          // Handle both metadata formats: original uses dbSubscriptionId+reason,
+          // retry/complete-setup uses subscriptionId+userId
+          const hasDbSubId = siMeta?.dbSubscriptionId || siMeta?.subscriptionId
+          if (hasDbSubId) {
+            // Normalize: ensure dbSubscriptionId is set for the handler
+            if (!siMeta.dbSubscriptionId && siMeta.subscriptionId) {
+              si.metadata.dbSubscriptionId = siMeta.subscriptionId
+            }
+            const { activateFromSetupIntent } = await import('./handlers') as any
+            if (activateFromSetupIntent) {
+              await activateFromSetupIntent(si, accountKeyVerified)
+            }
+          }
+        } catch (siError) {
+          console.error('❌ setup_intent.succeeded handler error:', siError)
+        }
+        break
       default:
         // ignore
         break
