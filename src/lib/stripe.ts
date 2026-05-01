@@ -261,6 +261,7 @@ export class SubscriptionProcessor {
             })
         // Retrieve customer to determine if a default PM exists and ensure account alignment
         let hasDefaultPm = false
+        let defaultPmId: string | null = null
         try {
           let cust: any
           try {
@@ -287,17 +288,88 @@ export class SubscriptionProcessor {
             }
           }
           hasDefaultPm = !('deleted' in cust) && !!(cust as any)?.invoice_settings?.default_payment_method
+          if (hasDefaultPm) {
+            defaultPmId = (cust as any).invoice_settings.default_payment_method
+          }
         } catch {
           // If we cannot determine, assume no default PM to force on-session
           hasDefaultPm = false
+          defaultPmId = null
         }
 
-        // Admin/migration flow: no proration, first charge on 1st of next month.
-        // Create the subscription immediately when a default PM exists,
-        // otherwise create a SetupIntent to collect a card on-session.
+        // With a default PM on file we can finalise immediately.
+        //  - Family child activation (payerUserId set) → charge prorated first period off-session
+        //    on the parent's saved card, then create the trialing-until-1st sub on top.
+        //  - Migration / pure admin flow (no payerUserId) → no proration, first charge on 1st.
         if (hasDefaultPm) {
           const priceIdImmediate = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name }, stripeAccount)
           const trialEndTs = Math.floor(startDate.getTime() / 1000)
+
+          let proratedAmountPence = 0
+          let proratePaymentIntentId: string | null = null
+
+          if (request.payerUserId && defaultPmId) {
+            // Calculate prorated amount for remainder of current month
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+            const daysRemaining = daysInMonth - now.getDate() + 1
+            const fullAmountPence = membershipDetails.monthlyPrice * 100
+            proratedAmountPence = Math.round(fullAmountPence * (daysRemaining / daysInMonth))
+
+            if (proratedAmountPence > 0) {
+              try {
+                const prorateIntent = await getStripeClient(stripeAccount).paymentIntents.create({
+                  amount: proratedAmountPence,
+                  currency: 'gbp',
+                  customer: customerIdToUse,
+                  payment_method: defaultPmId,
+                  confirm: true,
+                  off_session: true,
+                  description: `${membershipDetails.name || request.membershipType} - prorated first period (family child)`,
+                  metadata: {
+                    userId: request.userId,
+                    payerUserId: request.payerUserId,
+                    membershipType: request.membershipType,
+                    routedEntityId: routing.selectedEntityId,
+                    dbSubscriptionId: dbSubscription.id,
+                    reason: 'family_child_prorated_first_period',
+                    familyActivation: 'true'
+                  }
+                }, { idempotencyKey: `family-child-prorate:${dbSubscription.id}` })
+
+                if (prorateIntent.status !== 'succeeded') {
+                  throw new Error(`Prorated charge did not succeed (status: ${prorateIntent.status})`)
+                }
+                proratePaymentIntentId = prorateIntent.id
+
+                // Record Payment row so the portal "Last Payment" / "Total Paid" widgets show it.
+                // Idempotent: skip if a row already exists for this PI.
+                const existingPayment = await prisma.payment.findFirst({
+                  where: {
+                    userId: request.userId,
+                    status: 'CONFIRMED',
+                    description: { contains: prorateIntent.id }
+                  }
+                })
+                if (!existingPayment) {
+                  await prisma.payment.create({
+                    data: {
+                      userId: request.userId,
+                      amount: proratedAmountPence / 100,
+                      currency: 'GBP',
+                      status: 'CONFIRMED',
+                      description: `Initial subscription payment (prorated) [pi:${prorateIntent.id}]`,
+                      routedEntityId: routing.selectedEntityId,
+                      processedAt: new Date()
+                    }
+                  })
+                }
+              } catch (e: any) {
+                console.error('❌ Family child prorate charge failed:', e?.code, e?.message)
+                throw new Error(`Prorated charge failed: ${e?.message || e?.code || 'unknown'}`)
+              }
+            }
+          }
+
           const childStripeSub = await getStripeClient(stripeAccount).subscriptions.create({
             customer: customerIdToUse,
             items: [{ price: priceIdImmediate }],
@@ -307,7 +379,9 @@ export class SubscriptionProcessor {
               userId: request.userId,
               membershipType: request.membershipType,
               routedEntityId: routing.selectedEntityId,
-              dbSubscriptionId: dbSubscription.id
+              dbSubscriptionId: dbSubscription.id,
+              ...(request.payerUserId ? { payerUserId: request.payerUserId, familyActivation: 'true' } : {}),
+              ...(proratePaymentIntentId ? { proratePaymentIntentId } : {})
             }
           }, { idempotencyKey: `admin-child-sub:${dbSubscription.id}:${trialEndTs}` })
 
@@ -330,13 +404,18 @@ export class SubscriptionProcessor {
             }
           })
 
-          console.log('✅ Child subscription created (zero prorate, default PM present):', childStripeSub.id)
+          console.log(
+            request.payerUserId
+              ? `✅ Family child subscription created with prorate £${proratedAmountPence / 100}: ${childStripeSub.id}`
+              : `✅ Admin/migration subscription created (zero prorate): ${childStripeSub.id}`
+          )
           return {
             subscription: dbSubscription,
             clientSecret: undefined as any,
             routing,
-            proratedAmount: 0,
-            nextBillingDate: startDate.toISOString().split('T')[0]
+            proratedAmount: proratedAmountPence / 100,
+            nextBillingDate: startDate.toISOString().split('T')[0],
+            paymentStatus: 'succeeded'
           }
         }
 
