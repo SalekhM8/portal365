@@ -22,6 +22,25 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
     return NextResponse.json({ success: true, message: 'Subscription already active', subscription: { id: subscription.id, status: 'ACTIVE' }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
   }
 
+  // 🛡️ Safety guard: only admin/migration flows (setup_placeholder_*) or already-activated subs (sub_*)
+  // may activate via the SetupIntent path at zero prorate. Regular signups carry a pi_* placeholder
+  // and MUST settle their prorate via the PaymentIntent checkout — never free.
+  const placeholderId = subscription.stripeSubscriptionId || ''
+  if (placeholderId.startsWith('pi_')) {
+    return NextResponse.json({
+      success: false,
+      error: 'This subscription requires payment via the prorated checkout. Please complete payment on the payment page.',
+      code: 'PRORATE_REQUIRED'
+    }, { status: 400 })
+  }
+  if (!placeholderId.startsWith('setup_placeholder_') && !placeholderId.startsWith('sub_')) {
+    return NextResponse.json({
+      success: false,
+      error: 'Subscription is not in a state that can be activated via SetupIntent.',
+      code: 'INVALID_STATE'
+    }, { status: 400 })
+  }
+
   const proratedAmount = parseFloat((setupIntent as any).metadata?.proratedAmount || '0')
   const nextBillingDate = new Date((setupIntent as any).metadata?.nextBillingDate || subscription.nextBillingDate)
   const nextBillingKey = nextBillingDate.toISOString().split('T')[0]
