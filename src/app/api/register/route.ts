@@ -3,6 +3,7 @@ import { z } from 'zod'
 import * as bcrypt from 'bcryptjs'
 import { prisma } from '../../../lib/prisma'
 import { SubscriptionProcessor, getPublishableKey, type StripeAccountKey } from '../../../lib/stripe'
+import { isValidUKPhone, isValidUKPostcode } from '@/lib/uk-validation'
 
 // Validation schema
 const registerSchema = z.object({
@@ -10,18 +11,18 @@ const registerSchema = z.object({
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  phone: z.string().min(1, 'Phone number is required'),
+  phone: z.string().min(1, 'Phone number is required').refine(isValidUKPhone, 'Please enter a valid UK phone number (e.g. 07911 123456 or +44 7911 123456)'),
   address: z.string().min(1, 'Address is required'),
-  postcode: z.string().min(1, 'Postcode is required'),
+  postcode: z.string().min(1, 'Postcode is required').refine(isValidUKPostcode, 'Please enter a valid UK postcode (e.g. SW1A 1AA)'),
   dateOfBirth: z.string().min(1, 'Date of birth is required'),
   emergencyContact: z.object({
     name: z.string().min(1, 'Emergency contact name is required'),
-    phone: z.string().min(1, 'Emergency contact phone is required'),
+    phone: z.string().min(1, 'Emergency contact phone is required').refine(isValidUKPhone, 'Please enter a valid UK phone number for the emergency contact (e.g. 07911 123456)'),
     relationship: z.string().min(1, 'Emergency contact relationship is required')
   }),
   guardian: z.object({
     name: z.string().min(1),
-    phone: z.string().min(1)
+    phone: z.string().min(1).refine(isValidUKPhone, 'Please enter a valid UK phone number for the guardian (e.g. 07911 123456)')
   }).optional(),
   guardianConsent: z.boolean().optional(),
   // Accept dynamic plan keys (DB-backed) as well as legacy keys

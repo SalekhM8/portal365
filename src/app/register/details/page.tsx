@@ -35,6 +35,7 @@ import Link from 'next/link'
 import { signIn } from 'next-auth/react'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
 import { getPlanDbFirst } from '@/lib/plans'
+import { isValidUKPhone, isValidUKPostcode } from '@/lib/uk-validation'
 
 const businessConfigs = {
   aura_mma: {
@@ -178,6 +179,11 @@ function RegisterDetailsContent() {
       return
     }
 
+    if (!isValidUKPhone(formData.phone)) {
+      setError('Please enter a valid UK phone number (e.g. 07911 123456 or +44 7911 123456).')
+      return
+    }
+
     if (!formData.address.trim()) {
       setError('Address is required.')
       return
@@ -188,6 +194,11 @@ function RegisterDetailsContent() {
       return
     }
 
+    if (!isValidUKPostcode(formData.postcode)) {
+      setError('Please enter a valid UK postcode (e.g. SW1A 1AA).')
+      return
+    }
+
     if (!formData.dateOfBirth) {
       setError('Date of birth is required.')
       return
@@ -195,6 +206,16 @@ function RegisterDetailsContent() {
 
     if (!formData.emergencyContact.name.trim() || !formData.emergencyContact.phone.trim() || !formData.emergencyContact.relationship.trim()) {
       setError('All emergency contact fields are required (name, phone, and relationship).')
+      return
+    }
+
+    if (!isValidUKPhone(formData.emergencyContact.phone)) {
+      setError('Please enter a valid UK phone number for the emergency contact (e.g. 07911 123456 or +44 7911 123456).')
+      return
+    }
+
+    if (formData.guardian.phone && formData.guardian.phone.trim() && !isValidUKPhone(formData.guardian.phone)) {
+      setError('Please enter a valid UK phone number for the guardian (e.g. 07911 123456 or +44 7911 123456).')
       return
     }
 
@@ -377,10 +398,12 @@ function RegisterDetailsContent() {
                         <Input
                           id="phone"
                           type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
                           value={formData.phone}
                           onChange={(e) => handleInputChange('phone', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
-                          placeholder="Enter phone number"
+                          placeholder="e.g. 07911 123456"
                           required
                         />
                       </div>
@@ -489,10 +512,13 @@ function RegisterDetailsContent() {
                           <Label htmlFor="guardianPhone" className="text-white/90">Guardian Phone</Label>
                           <Input
                             id="guardianPhone"
+                            type="tel"
+                            inputMode="tel"
+                            autoComplete="tel"
                             value={formData.guardian.phone}
                             onChange={(e) => handleInputChange('guardian.phone', e.target.value)}
                             className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
-                            placeholder="Contact number"
+                            placeholder="e.g. 07911 123456"
                             required
                           />
                         </div>
@@ -533,10 +559,12 @@ function RegisterDetailsContent() {
                         <Input
                           id="emergencyPhone"
                           type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
                           value={formData.emergencyContact.phone}
                           onChange={(e) => handleInputChange('emergencyContact.phone', e.target.value)}
                           className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40"
-                          placeholder="Emergency contact phone"
+                          placeholder="e.g. 07911 123456"
                           required
                         />
                       </div>
