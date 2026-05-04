@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { getStripeClient, getWebhookSecrets, type StripeAccountKey } from '@/lib/stripe'
-import { handlePaymentSucceeded, handlePaymentFailed, handleSubscriptionUpdated, handleSubscriptionCancelled, handlePaymentActionRequired } from './handlers'
+import { handlePaymentSucceeded, handlePaymentFailed, handleSubscriptionUpdated, handleSubscriptionCancelled, handlePaymentActionRequired, handlePaymentIntentCanceled } from './handlers'
 
 // Support multiple Stripe accounts: try all configured webhook secrets, capture which one verifies
 
@@ -52,6 +52,12 @@ export async function POST(request: NextRequest) {
         break
       case 'customer.subscription.deleted':
         await handleSubscriptionCancelled(event.data.object, accountKeyVerified)
+        break
+      case 'payment_intent.canceled':
+        // Fires when Smart Retries exhausts its 4 attempts and Stripe cancels the PI.
+        // We spin up a fresh off-session PI against the customer's default card so the
+        // member is auto-recovered without admin intervention.
+        await handlePaymentIntentCanceled(event.data.object, accountKeyVerified)
         break
       case 'payment_intent.succeeded':
         // Handle async success (e.g., Klarna) to activate pending signups

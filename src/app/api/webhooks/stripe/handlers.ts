@@ -4,6 +4,7 @@ import { sendDunningAttemptSms, sendSuspendedSms, sendSuccessSms, sendActionRequ
 import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActionRequiredEmail } from '@/lib/email'
 import { isAutoSuspendEnabled, isPauseCollectionEnabled } from '@/lib/flags'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { recoverCanceledPiInvoice } from '@/lib/canceled-pi-recovery'
 
 function resolveNotificationEmail(user?: { email?: string | null; communicationPrefs?: string | null }): string | null {
   if (!user) return null
@@ -960,4 +961,66 @@ export async function activateFromSetupIntent(si: any, account?: StripeAccountKe
   })
 
   console.log(`✅ setup_intent.succeeded: activated subscription ${dbSub.id} → ${stripeSubscription.id}`)
+}
+
+/**
+ * payment_intent.canceled — fires when Stripe Smart Retries gives up after the
+ * 4th attempt. The invoice stays open but the PI is dead. We immediately spin up
+ * a fresh off-session PI against the customer's default card so they don't have
+ * to wait for the daily cron sweep.
+ *
+ * Only acts on PIs attached to a subscription invoice. One-shot: if the new PI
+ * also declines, the daily cron will keep retrying.
+ */
+export async function handlePaymentIntentCanceled(pi: any, account?: StripeAccountKey) {
+  const operationId = `webhook_pi_canceled_${pi.id}_${Date.now()}`
+  try {
+    const invoiceId = pi.invoice as string | null | undefined
+    if (!invoiceId) {
+      console.log(`ℹ️ [${operationId}] PI ${pi.id} not attached to an invoice, ignoring`)
+      return
+    }
+
+    const stripe = getStripeClient(account || 'SU')
+
+    // Pull the invoice to confirm it's still open + on a subscription
+    let invoice: any
+    try {
+      invoice = await stripe.invoices.retrieve(invoiceId)
+    } catch (err: any) {
+      console.warn(`⚠️ [${operationId}] Could not retrieve invoice ${invoiceId}: ${err?.message || err}`)
+      return
+    }
+
+    if (invoice.status !== 'open') {
+      console.log(`ℹ️ [${operationId}] Invoice ${invoiceId} status=${invoice.status}, no recovery needed`)
+      return
+    }
+
+    const subscriptionId =
+      invoice.subscription ||
+      invoice?.lines?.data?.[0]?.subscription ||
+      invoice?.lines?.data?.[0]?.parent?.subscription_details?.subscription
+    if (!subscriptionId) {
+      console.log(`ℹ️ [${operationId}] Invoice ${invoiceId} not on a subscription, skipping recovery`)
+      return
+    }
+
+    console.log(`🔁 [${operationId}] Smart Retries gave up on PI ${pi.id} for invoice ${invoiceId} — attempting fresh charge`)
+    const result = await recoverCanceledPiInvoice({
+      stripe,
+      account: account || 'SU',
+      invoiceId,
+      trigger: 'webhook',
+      idempotencySuffix: pi.id // dedupe across webhook replays
+    })
+
+    if (result.kind === 'success') {
+      console.log(`✅ [${operationId}] Fresh PI ${result.newPiId} succeeded for £${result.amount.toFixed(2)} on invoice ${invoiceId}`)
+    } else {
+      console.log(`ℹ️ [${operationId}] Fresh charge did not succeed (${result.kind}):`, result)
+    }
+  } catch (error) {
+    console.error(`❌ [${operationId}] payment_intent.canceled handler failed:`, error)
+  }
 }
