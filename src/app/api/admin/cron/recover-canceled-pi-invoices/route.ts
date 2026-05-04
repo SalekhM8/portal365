@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 import { recoverCanceledPiInvoice, type RecoveryResult } from '@/lib/canceled-pi-recovery'
+import { getToDoListFailedPayments } from '@/lib/admin-todo-list'
 
 /**
- * DAILY CRON: Recover open invoices whose PaymentIntent was canceled by Stripe Smart Retries.
+ * DAILY CRON: Recover invoices in the admin "Payments to-do" list whose PaymentIntent
+ * was canceled by Stripe Smart Retries.
  *
- * Stripe Smart Retries hard-caps at 4 attempts (~3 days for IQ tuning). After the 4th
- * attempt fails, Stripe asynchronously cancels the PaymentIntent and stops retrying. The
- * invoice stays open at amount_remaining > 0 with no live PI — the member would otherwise
- * sit stuck until an admin manually re-charged them.
+ * SCOPE: This cron is intentionally locked to the admin to-do list — i.e. the same set
+ * of failed payments the dashboard surfaces as outstanding actions. It will NEVER touch
+ * an invoice that has been admin-dismissed, voided, or already resolved by a later
+ * confirmed payment. Source of truth: getToDoListFailedPayments() in src/lib/admin-todo-list.ts.
  *
- * This cron sweeps any open invoice with attempt_count >= 4 across all configured Stripe
- * accounts, creates a fresh off-session PI against the customer's default card, and marks
- * the invoice paid_out_of_band on success. Runs daily for up to ~14 days per invoice (we
- * cap by invoice age — anything older than 14 days requires manual intervention).
+ * For each to-do row we resolve the customer's subscription (to find the right Stripe
+ * account), pick the underlying Stripe invoice id (from the Payment row column or the
+ * [inv:xxx] description marker), and call recoverCanceledPiInvoice — which only acts if
+ * the invoice is still open with amount_remaining > 0 and the existing PI is dead.
  *
  * Schedule: daily 09:00 UTC (Vercel Cron — see vercel.json)
  * Endpoint: GET /api/admin/cron/recover-canceled-pi-invoices
@@ -24,10 +27,7 @@ import { recoverCanceledPiInvoice, type RecoveryResult } from '@/lib/canceled-pi
  *
  * Query params:
  *   ?dry_run=true   — preview without creating PIs (default: false / live)
- *   ?max_age_days=N — only consider invoices created within N days (default: 14)
  */
-
-const ALL_ACCOUNTS: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
 
 function getAuthSecret(request: NextRequest): string | null {
   const authHeader = request.headers.get('authorization')
@@ -36,12 +36,12 @@ function getAuthSecret(request: NextRequest): string | null {
 }
 
 type PerInvoiceResult = {
-  account: StripeAccountKey
-  invoiceId: string
-  customerId: string | null
+  account: StripeAccountKey | null
+  paymentRowId: string
+  userId: string
+  invoiceId: string | null
   amountGBP: number
-  attemptCount: number
-  outcome: RecoveryResult['kind']
+  outcome: RecoveryResult['kind'] | 'skipped'
   detail: string
 }
 
@@ -56,120 +56,134 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url)
   const dryRun = searchParams.get('dry_run') === 'true'
-  const maxAgeDays = Math.max(1, Number(searchParams.get('max_age_days') || '14'))
-  const maxAgeSeconds = maxAgeDays * 24 * 60 * 60
-  const sinceUnix = Math.floor(Date.now() / 1000) - maxAgeSeconds
 
   const perInvoice: PerInvoiceResult[] = []
   const summary: Record<string, number> = {
-    scanned: 0,
+    todoRows: 0,
     eligible: 0,
     success: 0,
     declined: 0,
     requires_action: 0,
     no_pm: 0,
     no_subscription: 0,
+    invoice_not_open: 0,
     error: 0,
     skipped: 0
   }
 
-  for (const account of ALL_ACCOUNTS) {
-    let stripe
-    try {
-      stripe = getStripeClient(account)
-    } catch {
-      // Account not configured in this environment — skip silently
+  // Source of truth: the admin to-do list. Same query the dashboard uses.
+  const todo = await getToDoListFailedPayments()
+  summary.todoRows = todo.length
+
+  for (const row of todo) {
+    const invoiceId = row.stripeInvoiceId || row.parsedInvoiceId
+    if (!invoiceId) {
+      summary.skipped += 1
+      perInvoice.push({
+        account: null,
+        paymentRowId: row.paymentId,
+        userId: row.userId,
+        invoiceId: null,
+        amountGBP: row.amount,
+        outcome: 'skipped',
+        detail: 'No stripeInvoiceId or [inv:xxx] marker — cannot map to Stripe invoice'
+      })
       continue
     }
 
-    // Stripe API doesn't filter by attempt_count, so list all open invoices in window
-    // and filter client-side. Page through with auto_paging via list-with-cursor.
-    let startingAfter: string | undefined = undefined
-    while (true) {
-      let page
-      try {
-        page = await stripe.invoices.list({
-          status: 'open',
-          created: { gte: sinceUnix },
-          limit: 100,
-          ...(startingAfter ? { starting_after: startingAfter } : {})
-        })
-      } catch (err: any) {
-        console.error(`[recover-pi-cron] Failed to list ${account} invoices:`, err?.message || err)
-        break
-      }
+    // Resolve which Stripe account this user's subscription lives on
+    const sub = await prisma.subscription.findFirst({
+      where: { userId: row.userId, status: { notIn: ['CANCELLED'] } },
+      orderBy: { updatedAt: 'desc' },
+      select: { stripeAccountKey: true, stripeCustomerId: true, id: true }
+    })
+    if (!sub) {
+      summary.no_subscription += 1
+      perInvoice.push({
+        account: null,
+        paymentRowId: row.paymentId,
+        userId: row.userId,
+        invoiceId,
+        amountGBP: row.amount,
+        outcome: 'no_subscription',
+        detail: 'No active subscription found for user'
+      })
+      continue
+    }
 
-      for (const inv of page.data) {
-        summary.scanned += 1
-        const attemptCount = Number(inv.attempt_count || 0)
-        const amountRemaining = Number(inv.amount_remaining || 0)
-        const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id || null
+    const account = (sub.stripeAccountKey as StripeAccountKey) || 'SU'
+    let stripe
+    try {
+      stripe = getStripeClient(account)
+    } catch (err: any) {
+      summary.error += 1
+      perInvoice.push({
+        account,
+        paymentRowId: row.paymentId,
+        userId: row.userId,
+        invoiceId,
+        amountGBP: row.amount,
+        outcome: 'error',
+        detail: `Stripe client unavailable for account ${account}: ${err?.message || err}`
+      })
+      continue
+    }
 
-        // Only invoices Stripe has fully given up on
-        if (attemptCount < 4 || amountRemaining <= 0) continue
+    summary.eligible += 1
 
-        summary.eligible += 1
+    if (dryRun) {
+      summary.skipped += 1
+      perInvoice.push({
+        account,
+        paymentRowId: row.paymentId,
+        userId: row.userId,
+        invoiceId,
+        amountGBP: row.amount,
+        outcome: 'skipped',
+        detail: 'DRY RUN — would attempt fresh PI'
+      })
+      continue
+    }
 
-        if (dryRun) {
-          perInvoice.push({
-            account,
-            invoiceId: inv.id!,
-            customerId,
-            amountGBP: amountRemaining / 100,
-            attemptCount,
-            outcome: 'success' as RecoveryResult['kind'],
-            detail: 'DRY RUN — would attempt fresh PI'
-          })
-          summary.skipped += 1
-          continue
-        }
-
-        try {
-          const result = await recoverCanceledPiInvoice({
-            stripe,
-            account,
-            invoiceId: inv.id!,
-            trigger: 'cron'
-          })
-          summary[result.kind] = (summary[result.kind] || 0) + 1
-          perInvoice.push({
-            account,
-            invoiceId: inv.id!,
-            customerId,
-            amountGBP: amountRemaining / 100,
-            attemptCount,
-            outcome: result.kind,
-            detail:
-              result.kind === 'success'
-                ? `new PI ${result.newPiId} → £${result.amount.toFixed(2)} settled`
-                : 'message' in result
-                  ? result.message
-                  : JSON.stringify(result)
-          })
-        } catch (err: any) {
-          summary.error += 1
-          perInvoice.push({
-            account,
-            invoiceId: inv.id!,
-            customerId,
-            amountGBP: amountRemaining / 100,
-            attemptCount,
-            outcome: 'error',
-            detail: err?.message || String(err)
-          })
-        }
-      }
-
-      if (!page.has_more) break
-      startingAfter = page.data[page.data.length - 1]?.id
-      if (!startingAfter) break
+    try {
+      const result = await recoverCanceledPiInvoice({
+        stripe,
+        account,
+        invoiceId,
+        trigger: 'cron'
+      })
+      summary[result.kind] = (summary[result.kind] || 0) + 1
+      perInvoice.push({
+        account,
+        paymentRowId: row.paymentId,
+        userId: row.userId,
+        invoiceId,
+        amountGBP: row.amount,
+        outcome: result.kind,
+        detail:
+          result.kind === 'success'
+            ? `new PI ${result.newPiId} → £${result.amount.toFixed(2)} settled`
+            : 'message' in result
+              ? result.message
+              : JSON.stringify(result)
+      })
+    } catch (err: any) {
+      summary.error += 1
+      perInvoice.push({
+        account,
+        paymentRowId: row.paymentId,
+        userId: row.userId,
+        invoiceId,
+        amountGBP: row.amount,
+        outcome: 'error',
+        detail: err?.message || String(err)
+      })
     }
   }
 
   return NextResponse.json({
     ok: true,
     dryRun,
-    maxAgeDays,
     durationMs: Date.now() - startTime,
     summary,
     invoices: perInvoice
