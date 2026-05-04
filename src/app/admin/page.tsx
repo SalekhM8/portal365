@@ -228,6 +228,7 @@ function AdminDashboardContent() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
+  const [highlightedFamilyId, setHighlightedFamilyId] = useState<string | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null)
   const [memberMemberships, setMemberMemberships] = useState<Array<{ userId: string; memberName: string; membershipType: string; status: string; nextBilling: string | null; subscriptionId: string | null; cancelAtPeriodEnd: boolean }>>([])
   const [membershipsLoading, setMembershipsLoading] = useState(false)
@@ -392,6 +393,32 @@ function AdminDashboardContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
+
+  // When arriving on the families tab with ?family=<id>, scroll that family into
+  // view and briefly highlight it. Triggered by clicking "Part of family under X"
+  // on a customer modal, and also works on direct URL load.
+  useEffect(() => {
+    if (activeTab !== 'families') return
+    const targetFamilyId = searchParams.get('family')
+    if (!targetFamilyId) return
+    if (families.length === 0) return // wait until families have loaded
+
+    const handle = window.setTimeout(() => {
+      const el = document.getElementById(`family-${targetFamilyId}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setHighlightedFamilyId(targetFamilyId)
+        window.setTimeout(() => setHighlightedFamilyId((cur) => (cur === targetFamilyId ? null : cur)), 2500)
+      }
+      // Strip the family param so refreshes/back-nav don't loop the highlight
+      const params = new URLSearchParams(Array.from(searchParams.entries()))
+      params.delete('family')
+      router.replace(`/admin?${params.toString()}`, { scroll: false })
+    }, 50)
+
+    return () => window.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, searchParams, families.length])
 
   const loadRevenueMonths = useCallback(async (account: 'SU' | 'IQ' | 'AURA' | 'AURAUP' | 'ALL') => {
     try {
@@ -1719,7 +1746,15 @@ function AdminDashboardContent() {
                 <div className="text-sm text-white/70">No family groups found.</div>
               ) : (
                 families.map((family) => (
-                  <div key={family.familyId} className="border border-white/10 rounded-lg p-4 bg-white/5">
+                  <div
+                    key={family.familyId}
+                    id={`family-${family.familyId}`}
+                    className={`border rounded-lg p-4 bg-white/5 transition-all duration-500 ${
+                      highlightedFamilyId === family.familyId
+                        ? 'border-amber-400 ring-2 ring-amber-400/60'
+                        : 'border-white/10'
+                    }`}
+                  >
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
                       <div>
                         <p className="text-white font-semibold">
@@ -2145,9 +2180,23 @@ function AdminDashboardContent() {
                   {selectedCustomer.account && <> • {selectedCustomer.account}</>}
                 </p>
                 {selectedCustomer.familyContext?.isChild && (
-                  <p className="text-xs text-blue-300">
-                    Family member under {selectedCustomer.familyContext.parentName || 'parent account'}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const familyGroupId = selectedCustomer.familyContext?.familyGroupId
+                      setSelectedCustomer(null)
+                      const params = new URLSearchParams(Array.from(searchParams.entries()))
+                      params.set('tab', 'families')
+                      if (familyGroupId) params.set('family', familyGroupId)
+                      else params.delete('family')
+                      router.push(`/admin?${params.toString()}`, { scroll: false })
+                      setActiveTab('families')
+                    }}
+                    className="text-xs text-blue-300 hover:text-blue-200 underline underline-offset-2 inline-flex items-center gap-1"
+                    title="Open this family in the Families tab"
+                  >
+                    Family member under {selectedCustomer.familyContext.parentName || 'parent account'} →
+                  </button>
                 )}
                 {selectedCustomer.phone && selectedCustomer.phone !== 'N/A' && (
                   <div className="flex flex-wrap gap-2 mt-2">

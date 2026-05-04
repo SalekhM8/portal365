@@ -321,6 +321,12 @@ function RegisterDetailsContent() {
                       <User className="h-5 w-5" />
                       Personal Details
                     </h3>
+                    <Alert className="bg-amber-500/10 border-amber-500/30 text-amber-200">
+                      <AlertTriangle className="h-4 w-4 text-amber-300" />
+                      <AlertDescription className="text-amber-100">
+                        Enter the <span className="font-semibold">student's</span> details here — the person who will be training. <span className="font-semibold">Parent / guardian</span> details go in <span className="font-semibold">Emergency Contact</span> below.
+                      </AlertDescription>
+                    </Alert>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <Label htmlFor="firstName" className="text-white/90">First Name</Label>
