@@ -433,24 +433,34 @@ export function calculateProratedCredit(params: ProratedCreditParams): ProratedC
 }
 
 /**
- * Smart settlement breakdown - separates full months (no charge) from partial months (settlement)
- * 
- * Full months: Billing should be skipped via pause_collection (£0)
- * Partial months: Settlement credit applied to next invoice
- * 
- * Example: April 15 → July 16
- * - Apr: 16 days paused (15-30) out of 30 → PARTIAL → credit £26.67
- * - May: 31 days paused out of 31 → FULL MONTH → £0 (skip billing)
- * - Jun: 30 days paused out of 30 → FULL MONTH → £0 (skip billing)
- * - Jul: 16 days paused (1-16) out of 31 → PARTIAL → credit £25.81
- * - Total settlement: £52.48 (NOT £193!)
+ * Smart settlement breakdown — separates full months (no charge) from partial months
+ * and decides per partial month whether the next renewal should be CREDITED or
+ * additionally CHARGED.
+ *
+ * Three kinds of months:
+ * - Full month paused: Stripe pause_collection voided the invoice, nothing to do.
+ * - Partial month, pause started AFTER day 1 ("creditable"): customer was charged the
+ *   full month before pause took effect → credit the paused days against next renewal.
+ * - Partial month, pause covered day 1 ("non-creditable"): Stripe voided the invoice
+ *   for this month → customer was NOT charged. No credit. But the days between
+ *   pause-end and the end of the month were used by the customer and never billed,
+ *   so charge proration for `daysInMonth - pausedDaysInMonth` against next renewal.
+ *
+ * Example: April 15 → July 16, £50/month
+ * - Apr: 16 days paused (15-30) out of 30 → creditable → credit £26.67
+ * - May: 31/31 → full month → £0
+ * - Jun: 30/30 → full month → £0
+ * - Jul: 16 days paused (1-16) out of 31, non-creditable → charge for Jul 17-31 (15 days) = £24.19
+ * - Net effect on next renewal: -26.67 + 24.19 = -£2.48
  */
 export interface SettlementBreakdown {
   totalDays: number
   fullMonthsSkipped: string[] // ["May 2026", "Jun 2026"]
   partialMonths: PartialMonthSettlement[]
-  totalSettlementAmount: number // Only partial months
-  totalSettlementPence: number // For Stripe
+  totalSettlementAmount: number // Sum of creditable partial-month credits (positive £)
+  totalSettlementPence: number // For Stripe (positive pence — applied as a NEGATIVE invoice item)
+  totalChargeAmount: number // Sum of non-creditable post-resume charges (positive £)
+  totalChargePence: number // For Stripe (positive pence — applied as a POSITIVE invoice item)
   description: string
 }
 
@@ -460,7 +470,14 @@ export interface PartialMonthSettlement {
   monthNumber: number
   pausedDays: number
   totalDaysInMonth: number
-  creditAmount: number
+  creditAmount: number // £, only > 0 when creditable
+  // True when the customer was charged for this month before pause_collection took
+  // effect (pause started after day 1). False when the pause covered day 1 — Stripe
+  // voided the invoice, so there is nothing to refund and the unpaused tail of the
+  // month is unbilled time the customer used.
+  creditable: boolean
+  usedDays: number // days customer used after resume in this month (0 when creditable)
+  chargeAmount: number // £, only > 0 when non-creditable and usedDays > 0
 }
 
 export function calculateSettlementBreakdown(period: PausePeriod): SettlementBreakdown {
@@ -478,73 +495,89 @@ export function calculateSettlementBreakdown(period: PausePeriod): SettlementBre
   const partialMonths: PartialMonthSettlement[] = []
   let totalDays = 0
   let totalSettlement = 0
-  
+  let totalCharge = 0
+
   // Iterate month by month
   let current = new Date(start)
-  
+
   while (current <= end) {
     const year = current.getUTCFullYear()
     const monthNum = current.getUTCMonth()
     const daysInMonth = getDaysInMonth(current)
     const monthName = formatMonthYear(current)
     const shortMonthName = `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][monthNum]} ${year}`
-    
+
     // Calculate first and last day of this month
     const monthStart = new Date(Date.UTC(year, monthNum, 1))
     const monthEnd = new Date(Date.UTC(year, monthNum, daysInMonth))
-    
+
     // Calculate overlap of pause window with this month
     const overlapStart = start > monthStart ? start : monthStart
     const overlapEnd = end < monthEnd ? end : monthEnd
     const pausedDaysInMonth = daysBetweenInclusive(overlapStart, overlapEnd)
-    
+
     totalDays += pausedDaysInMonth
-    
+
     if (pausedDaysInMonth === daysInMonth) {
       // Full month paused - no charge, skip billing
       fullMonthsSkipped.push(shortMonthName)
     } else if (pausedDaysInMonth > 0) {
-      // Partial month - calculate settlement
+      // Partial month. Two flavours:
+      //  - "creditable": pause started AFTER day 1 → Stripe billed the full month
+      //    before pause_collection took effect. Refund the paused days.
+      //  - "non-creditable": pause covered day 1 → Stripe voided the month's
+      //    invoice, customer was not charged. The days between pause-end and the
+      //    end of the month are days the customer used but was never billed for,
+      //    so charge proration on those days against the next renewal.
+      const customerWasCharged = overlapStart.getTime() > monthStart.getTime()
       const dailyRate = monthlyPrice / daysInMonth
       const credit = pausedDaysInMonth * dailyRate
       const roundedCredit = Math.round(credit * 100) / 100
-      
+      const usedDays = customerWasCharged ? 0 : (daysInMonth - pausedDaysInMonth)
+      const charge = usedDays * dailyRate
+      const roundedCharge = Math.round(charge * 100) / 100
+
       partialMonths.push({
         month: shortMonthName,
         year,
         monthNumber: monthNum + 1,
         pausedDays: pausedDaysInMonth,
         totalDaysInMonth: daysInMonth,
-        creditAmount: roundedCredit
+        creditAmount: customerWasCharged ? roundedCredit : 0,
+        creditable: customerWasCharged,
+        usedDays,
+        chargeAmount: customerWasCharged ? 0 : roundedCharge
       })
-      
-      totalSettlement += roundedCredit
+
+      if (customerWasCharged) {
+        totalSettlement += roundedCredit
+      } else if (usedDays > 0) {
+        totalCharge += roundedCharge
+      }
     }
-    
+
     // Move to first day of next month
     current = new Date(Date.UTC(year, monthNum + 1, 1))
   }
-  
+
   totalSettlement = Math.round(totalSettlement * 100) / 100
+  totalCharge = Math.round(totalCharge * 100) / 100
   
   // Generate description
-  let description = ''
-  if (fullMonthsSkipped.length > 0 && partialMonths.length > 0) {
-    description = `${fullMonthsSkipped.length} month(s) skipped, £${totalSettlement.toFixed(2)} settlement for partial months`
-  } else if (fullMonthsSkipped.length > 0) {
-    description = `${fullMonthsSkipped.length} month(s) billing skipped - no settlement needed`
-  } else if (partialMonths.length > 0) {
-    description = `Settlement credit: £${totalSettlement.toFixed(2)} for ${totalDays} days`
-  } else {
-    description = 'No pause days calculated'
-  }
-  
+  const parts: string[] = []
+  if (fullMonthsSkipped.length > 0) parts.push(`${fullMonthsSkipped.length} full month(s) voided`)
+  if (totalSettlement > 0) parts.push(`credit £${totalSettlement.toFixed(2)}`)
+  if (totalCharge > 0) parts.push(`post-resume charge £${totalCharge.toFixed(2)}`)
+  const description = parts.length > 0 ? parts.join(', ') : 'No pause days calculated'
+
   return {
     totalDays,
     fullMonthsSkipped,
     partialMonths,
     totalSettlementAmount: totalSettlement,
     totalSettlementPence: Math.round(totalSettlement * 100),
+    totalChargeAmount: totalCharge,
+    totalChargePence: Math.round(totalCharge * 100),
     description
   }
 }

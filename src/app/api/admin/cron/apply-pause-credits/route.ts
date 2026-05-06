@@ -238,25 +238,31 @@ export async function GET(request: NextRequest) {
         console.log(`   Monthly price: £${monthlyPrice}`)
         console.log(`   Total paused days: ${settlement.totalDays}`)
         console.log(`   Full months skipped (void handled): ${settlement.fullMonthsSkipped.join(', ') || 'none'}`)
-        console.log(`   Partial month settlement: £${settlement.totalSettlementAmount}`)
+        console.log(`   Creditable partial settlement: £${settlement.totalSettlementAmount}`)
+        console.log(`   Post-resume charge: £${settlement.totalChargeAmount}`)
         for (const p of settlement.partialMonths) {
-          console.log(`     - ${p.month}: ${p.pausedDays}/${p.totalDaysInMonth} days = £${p.creditAmount}`)
+          if (p.creditable) {
+            console.log(`     - ${p.month}: paused ${p.pausedDays}/${p.totalDaysInMonth} → credit £${p.creditAmount}`)
+          } else {
+            console.log(`     - ${p.month}: paused ${p.pausedDays}/${p.totalDaysInMonth}, used ${p.usedDays} after resume → charge £${p.chargeAmount}`)
+          }
         }
 
-        // Only create invoice item for PARTIAL months (customer already paid full month)
-        // Full months: void prevented billing, no credit needed
+        let creditInvoiceItemId: string | null = null
+        let chargeInvoiceItemId: string | null = null
+
+        // Creditable partial months (customer paid full month, refund paused days)
         if (settlement.totalSettlementAmount > 0) {
-          // Build description from partial months
-          const description = settlement.partialMonths
+          const creditDesc = settlement.partialMonths
+            .filter(p => p.creditable)
             .map(p => `${p.month}: ${p.pausedDays} days`)
             .join(', ')
 
-          // Create negative invoice item (CREDIT) - partial months only
-          const invoiceItem = await stripe.invoiceItems.create({
+          const creditItem = await stripe.invoiceItems.create({
             customer: sub.stripeCustomerId,
             amount: -settlement.totalSettlementPence, // NEGATIVE for credit
             currency: 'gbp',
-            description: `Pause credit (partial month): ${description}`,
+            description: `Pause credit (partial month): ${creditDesc}`,
             metadata: {
               pauseWindowId: window.id,
               subscriptionId: sub.id,
@@ -268,81 +274,85 @@ export async function GET(request: NextRequest) {
               appliedAt: new Date().toISOString()
             }
           })
-
-          console.log(`✅ Created credit ${invoiceItem.id}: -£${settlement.totalSettlementAmount}`)
+          creditInvoiceItemId = creditItem.id
+          console.log(`✅ Created credit ${creditItem.id}: -£${settlement.totalSettlementAmount}`)
           results.creditsApplied++
+        }
 
-          // Update the pause window
-          await (prisma as any).subscriptionPauseWindow.update({
-            where: { id: window.id },
-            data: {
-              pausedDays: settlement.totalDays,
-              creditAmount: settlement.totalSettlementAmount,
-              creditAppliedAt: new Date(),
-              stripeInvoiceItemId: invoiceItem.id,
-              status: 'CREDIT_APPLIED'
+        // Non-creditable partial months (customer wasn't billed, charge for days used after resume)
+        if (settlement.totalChargeAmount > 0) {
+          const chargeDesc = settlement.partialMonths
+            .filter(p => !p.creditable && p.usedDays > 0)
+            .map(p => `${p.month}: ${p.usedDays} days used after resume`)
+            .join(', ')
+
+          const chargeItem = await stripe.invoiceItems.create({
+            customer: sub.stripeCustomerId,
+            amount: settlement.totalChargePence, // POSITIVE for charge
+            currency: 'gbp',
+            description: `Pause settlement (post-resume): ${chargeDesc}`,
+            metadata: {
+              pauseWindowId: window.id,
+              subscriptionId: sub.id,
+              totalPausedDays: String(settlement.totalDays),
+              fullMonthsSkipped: settlement.fullMonthsSkipped.join(', '),
+              startDate: formatShortDate(new Date(window.startDate)),
+              endDate: formatShortDate(new Date(window.endDate)),
+              reason: 'pause_post_resume_charge',
+              appliedAt: new Date().toISOString()
             }
           })
+          chargeInvoiceItemId = chargeItem.id
+          console.log(`✅ Created post-resume charge ${chargeItem.id}: +£${settlement.totalChargeAmount}`)
+        }
 
-          // Create audit log
-          try {
-            await prisma.subscriptionAuditLog.create({
-              data: {
-                subscriptionId: sub.id,
-                action: 'PAUSE_ENDED',
-                performedBy: 'SYSTEM',
-                performedByName: 'System Cron',
-                reason: `Pause ended, partial month credit: £${settlement.totalSettlementAmount}`,
-                operationId: `pause_end_${window.id}_${Date.now()}`,
-                metadata: JSON.stringify({
-                  pauseWindowId: window.id,
-                  stripeInvoiceItemId: invoiceItem.id,
-                  totalDays: settlement.totalDays,
-                  settlementCredit: settlement.totalSettlementAmount,
-                  fullMonthsSkipped: settlement.fullMonthsSkipped,
-                  partialMonths: settlement.partialMonths
-                })
-              }
-            })
-          } catch (auditErr) {
-            console.warn(`⚠️ Failed to create audit log for window ${windowId}:`, auditErr)
+        // Update the pause window
+        await (prisma as any).subscriptionPauseWindow.update({
+          where: { id: window.id },
+          data: {
+            pausedDays: settlement.totalDays,
+            creditAmount: settlement.totalSettlementAmount,
+            creditAppliedAt: new Date(),
+            stripeInvoiceItemId: creditInvoiceItemId,
+            status: 'CREDIT_APPLIED'
           }
+        })
 
-        } else {
-          // No partial months - full months handled entirely by void
-          console.log(`ℹ️ Window ${windowId}: No credit needed (${settlement.fullMonthsSkipped.length} full month(s) handled by void)`)
+        // Audit log
+        try {
+          const action = creditInvoiceItemId || chargeInvoiceItemId ? 'PAUSE_ENDED' : 'PAUSE_COMPLETED'
+          const reasonParts: string[] = []
+          if (settlement.totalSettlementAmount > 0) reasonParts.push(`credit £${settlement.totalSettlementAmount}`)
+          if (settlement.totalChargeAmount > 0) reasonParts.push(`post-resume charge £${settlement.totalChargeAmount}`)
+          if (settlement.fullMonthsSkipped.length > 0) reasonParts.push(`${settlement.fullMonthsSkipped.length} full month(s) voided`)
+          const reason = reasonParts.length > 0 ? `Pause ended: ${reasonParts.join(', ')}` : 'Pause completed - no settlement needed'
 
-          await (prisma as any).subscriptionPauseWindow.update({
-            where: { id: window.id },
+          await prisma.subscriptionAuditLog.create({
             data: {
-              pausedDays: settlement.totalDays,
-              creditAmount: 0,
-              creditAppliedAt: new Date(),
-              status: 'CREDIT_APPLIED'
+              subscriptionId: sub.id,
+              action,
+              performedBy: 'SYSTEM',
+              performedByName: 'System Cron',
+              reason,
+              operationId: `pause_end_${window.id}_${Date.now()}`,
+              metadata: JSON.stringify({
+                pauseWindowId: window.id,
+                creditInvoiceItemId,
+                chargeInvoiceItemId,
+                totalDays: settlement.totalDays,
+                settlementCredit: settlement.totalSettlementAmount,
+                postResumeCharge: settlement.totalChargeAmount,
+                fullMonthsSkipped: settlement.fullMonthsSkipped,
+                partialMonths: settlement.partialMonths
+              })
             }
           })
+        } catch (auditErr) {
+          console.warn(`⚠️ Failed to create audit log for window ${windowId}:`, auditErr)
+        }
 
-          // Create audit log
-          try {
-            await prisma.subscriptionAuditLog.create({
-              data: {
-                subscriptionId: sub.id,
-                action: 'PAUSE_COMPLETED',
-                performedBy: 'SYSTEM',
-                performedByName: 'System Cron',
-                reason: `Pause completed - ${settlement.totalDays} days, ${settlement.fullMonthsSkipped.length} full month(s) voided, no credit needed`,
-                operationId: `pause_complete_${window.id}_${Date.now()}`,
-                metadata: JSON.stringify({
-                  pauseWindowId: window.id,
-                  totalDays: settlement.totalDays,
-                  fullMonthsSkipped: settlement.fullMonthsSkipped,
-                  creditAmount: 0
-                })
-              }
-            })
-          } catch (auditErr) {
-            console.warn(`⚠️ Failed to create audit log for window ${windowId}:`, auditErr)
-          }
+        if (!creditInvoiceItemId && !chargeInvoiceItemId) {
+          console.log(`ℹ️ Window ${windowId}: No invoice items created (${settlement.fullMonthsSkipped.length} full month(s) handled by void)`)
         }
 
         results.pausesEnded++
