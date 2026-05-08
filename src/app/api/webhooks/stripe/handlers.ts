@@ -916,13 +916,45 @@ export async function activateFromSetupIntent(si: any, account?: StripeAccountKe
     return
   }
 
-  console.log(`🔄 setup_intent.succeeded: activating stuck subscription ${dbSub.id} for user ${dbSub.userId}`)
-
+  // 🛡️ Placeholder-shape guard. The placeholder string set in src/lib/stripe.ts is the
+  // only signal that distinguishes the two populations that can land here:
+  //   setup_placeholder_*  → migration / admin / family-child (no prorate exists; activate)
+  //   pi_*                 → regular signup (prorate PaymentIntent is the source of truth;
+  //                          activating here would trial_end past the current month and
+  //                          skip the prorate charge entirely — never do that)
+  //   sub_*                → already activated (line 908 above also catches this)
+  const placeholder: string = dbSub.stripeSubscriptionId || ''
   const stripeAccount = (dbSub as any).stripeAccountKey || account || 'SU'
   const stripe = getStripeClient(stripeAccount)
+  const paymentMethodId = si.payment_method as string
+
+  if (placeholder.startsWith('pi_')) {
+    // Regular signup whose prorate PI failed and the customer saved a new card via
+    // /dashboard/payment-methods. Refuse to activate via the SetupIntent rail. Attach
+    // the new card so the existing PI can be retried (manually by the customer or by
+    // the daily PI-recovery cron) — that is the only legitimate way to collect prorate.
+    if (paymentMethodId && dbSub.stripeCustomerId) {
+      try {
+        await stripe.customers.update(dbSub.stripeCustomerId, {
+          invoice_settings: { default_payment_method: paymentMethodId }
+        })
+        console.log(`   attached new pm ${paymentMethodId} to ${dbSub.stripeCustomerId} for prorate retry`)
+      } catch (e: any) {
+        console.warn(`   could not attach pm: ${e.message}`)
+      }
+    }
+    console.log(`⏭️ setup_intent.succeeded: refusing to activate ${dbSub.id} — pi_* placeholder, prorate must clear via PaymentIntent`)
+    return
+  }
+
+  if (!placeholder.startsWith('setup_placeholder_')) {
+    console.log(`⚠️ setup_intent.succeeded: unknown placeholder shape "${placeholder}" on ${dbSub.id}, refusing to activate`)
+    return
+  }
+
+  console.log(`🔄 setup_intent.succeeded: activating stuck subscription ${dbSub.id} for user ${dbSub.userId}`)
 
   // Attach payment method to customer
-  const paymentMethodId = si.payment_method as string
   if (paymentMethodId) {
     await stripe.customers.update(dbSub.stripeCustomerId, {
       invoice_settings: { default_payment_method: paymentMethodId }
