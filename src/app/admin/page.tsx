@@ -277,9 +277,11 @@ function AdminDashboardContent() {
   const [updatePMSuccess, setUpdatePMSuccess] = useState(false)
 
   // 🚀 NEW: Membership management states
-  const [membershipAction, setMembershipAction] = useState<'pause' | 'resume' | 'cancel' | null>(null)
+  const [membershipAction, setMembershipAction] = useState<'pause' | 'resume' | 'cancel' | 'reactivate' | null>(null)
   const [membershipActionLoading, setMembershipActionLoading] = useState(false)
   const [membershipActionReason, setMembershipActionReason] = useState('')
+  const [reactivateProrateAmount, setReactivateProrateAmount] = useState<string>('')
+  const [reactivateTrialEnd, setReactivateTrialEnd] = useState<string>('')
   const [cancelationType, setCancelationType] = useState<'immediate' | 'end_of_period'>('end_of_period')
   const [pauseBehavior, setPauseBehavior] = useState<'void' | 'keep_as_draft' | 'mark_uncollectible'>('void')
   const [showMembershipActionModal, setShowMembershipActionModal] = useState(false)
@@ -869,9 +871,12 @@ function AdminDashboardContent() {
         ? 'Schedule a pause for the selected months? (Automation will apply before month start)'
         : 'Are you sure you want to PAUSE this customer\'s membership? They will lose access immediately.',
       resume: 'Are you sure you want to RESUME this customer\'s membership? Billing will restart.',
-      cancel: cancelationType === 'immediate' 
+      cancel: cancelationType === 'immediate'
         ? 'Are you sure you want to IMMEDIATELY CANCEL this membership? This cannot be undone.'
-        : 'Are you sure you want to schedule this membership for CANCELLATION at period end?'
+        : 'Are you sure you want to schedule this membership for CANCELLATION at period end?',
+      reactivate: (Number(reactivateProrateAmount) || 0) > 0
+        ? `Reactivate this membership? £${(Number(reactivateProrateAmount) || 0).toFixed(2)} will be charged to the saved card NOW, then a new subscription will be created.`
+        : 'Reactivate this membership (no prorate)? A new subscription will be created and billing resumes on the trial end date.'
     }
 
     if (!confirm(confirmMessage[membershipAction])) {
@@ -913,6 +918,19 @@ function AdminDashboardContent() {
         requestBody.prorate = true
       } else if (membershipAction === 'resume') {
         requestBody.resumeImmediately = true
+      } else if (membershipAction === 'reactivate') {
+        const gbp = Number(reactivateProrateAmount) || 0
+        if (gbp < 0) { alert('Prorate amount cannot be negative'); setMembershipActionLoading(false); return }
+        requestBody.prorateAmountPence = Math.round(gbp * 100)
+        if (reactivateTrialEnd) {
+          const d = new Date(reactivateTrialEnd + 'T00:00:00Z')
+          if (isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+            alert('Trial end must be a future date')
+            setMembershipActionLoading(false)
+            return
+          }
+          requestBody.trialEndIso = d.toISOString()
+        }
       }
 
       const response = await fetch(endpoint, {
@@ -928,8 +946,8 @@ function AdminDashboardContent() {
       if (result.success) {
         // ✅ INDUSTRY STANDARD: Optimistic update with immediate DB refresh
         // Determine expected status based on action
-        const expectedStatus = membershipAction === 'pause' && pauseMode === 'immediate' ? 'PAUSED' : 
-                              membershipAction === 'resume' ? 'ACTIVE' : 'CANCELLED'
+        const expectedStatus = membershipAction === 'pause' && pauseMode === 'immediate' ? 'PAUSED' :
+                              (membershipAction === 'resume' || membershipAction === 'reactivate') ? 'ACTIVE' : 'CANCELLED'
         
         // Optimistically update the customer list immediately
 
@@ -965,6 +983,8 @@ function AdminDashboardContent() {
         setPauseMode('immediate')
         setPauseStartMonth('')
         setPauseEndMonth('')
+        setReactivateProrateAmount('')
+        setReactivateTrialEnd('')
         
         console.log(`✅ Membership ${membershipAction} successful for ${selectedCustomer.email}`)
       } else {
@@ -978,9 +998,16 @@ function AdminDashboardContent() {
     }
   }
 
-  const openMembershipActionModal = (action: 'pause' | 'resume' | 'cancel') => {
+  const openMembershipActionModal = (action: 'pause' | 'resume' | 'cancel' | 'reactivate') => {
     setMembershipAction(action)
     setMembershipActionReason('')
+    if (action === 'reactivate') {
+      // Default trial end = 1st of next month (UTC)
+      const now = new Date()
+      const next1 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+      setReactivateTrialEnd(next1.toISOString().slice(0, 10))
+      setReactivateProrateAmount('')
+    }
     setShowMembershipActionModal(true)
   }
 
@@ -2338,6 +2365,9 @@ function AdminDashboardContent() {
                 {(selectedCustomer.subscriptionStatus === 'PAUSED' || selectedCustomer.status === 'PAUSED') && (
           <Button variant="outline" onClick={() => openMembershipActionModal('resume')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Resume</Button>
                     )}
+                {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && (
+          <Button variant="outline" onClick={() => openMembershipActionModal('reactivate')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Reactivate</Button>
+                    )}
                     {selectedCustomer.cancelAtPeriodEnd && (<div className="text-orange-400 text-xs">⚠️ Scheduled for cancellation at period end</div>)}
                     {/* Admin tools moved here */}
         <div className="flex flex-col gap-2">
@@ -2762,6 +2792,45 @@ function AdminDashboardContent() {
               </div>
             )}
 
+            {membershipAction === 'reactivate' && (
+              <>
+                <div className="mb-4">
+                  <Label htmlFor="reactivateProrate" className="text-white mb-2 block">Prorate to charge now (£)</Label>
+                  <input
+                    id="reactivateProrate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0 = no charge (goodwill rest of month)"
+                    value={reactivateProrateAmount}
+                    onChange={(e) => setReactivateProrateAmount(e.target.value)}
+                    className="w-full p-3 bg-white/5 border border-white/20 rounded text-white placeholder:text-white/50"
+                  />
+                  <p className="text-xs text-white/60 mt-1">
+                    Leave blank or 0 to skip the prorate charge. Any amount entered is charged to the saved card immediately.
+                  </p>
+                </div>
+                <div className="mb-4">
+                  <Label htmlFor="reactivateTrialEnd" className="text-white mb-2 block">Next billing date (trial end)</Label>
+                  <input
+                    id="reactivateTrialEnd"
+                    type="date"
+                    value={reactivateTrialEnd}
+                    onChange={(e) => setReactivateTrialEnd(e.target.value)}
+                    className="w-full p-3 bg-white/5 border border-white/20 rounded text-white"
+                  />
+                  <p className="text-xs text-white/60 mt-1">
+                    The first full monthly charge will hit on this date. Defaults to the 1st of next month.
+                  </p>
+                </div>
+                <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-lg mb-4">
+                  <p className="text-blue-300 text-xs">
+                    A new Stripe subscription will be created on the existing customer (the old cancelled one stays cancelled in Stripe — that's how Stripe works). The customer's saved card will be used.
+                  </p>
+                </div>
+              </>
+            )}
+
             {membershipAction === 'cancel' && (
               <div className="mb-4">
                 <Label htmlFor="cancelationType" className="text-white mb-2 block">Cancellation Type</Label>
@@ -2788,7 +2857,7 @@ function AdminDashboardContent() {
               </Label>
               <textarea
                 id="membershipReason"
-                placeholder={`Why are you ${membershipAction === 'cancel' ? 'cancelling' : membershipAction === 'pause' ? 'pausing' : 'resuming'} this membership?`}
+                placeholder={`Why are you ${membershipAction === 'cancel' ? 'cancelling' : membershipAction === 'pause' ? 'pausing' : membershipAction === 'reactivate' ? 'reactivating' : 'resuming'} this membership?`}
                 value={membershipActionReason}
                 onChange={(e) => setMembershipActionReason(e.target.value)}
                 className="w-full p-3 bg-white/5 border border-white/20 rounded text-white placeholder:text-white/50 min-h-[80px]"
@@ -2823,7 +2892,7 @@ function AdminDashboardContent() {
                 disabled={membershipActionLoading || membershipActionReason.trim().length < 5}
                 className={`flex-1 ${
                   membershipAction === 'pause' ? 'bg-yellow-600 hover:bg-yellow-700' :
-                  membershipAction === 'resume' ? 'bg-green-600 hover:bg-green-700' :
+                  (membershipAction === 'resume' || membershipAction === 'reactivate') ? 'bg-green-600 hover:bg-green-700' :
                   'bg-red-600 hover:bg-red-700'
                 } text-white`}
               >
@@ -2836,6 +2905,7 @@ function AdminDashboardContent() {
                   <>
                     {membershipAction === 'pause' && 'Pause Membership'}
                     {membershipAction === 'resume' && 'Resume Membership'}
+                    {membershipAction === 'reactivate' && 'Reactivate Membership'}
                     {membershipAction === 'cancel' && `${cancelationType === 'immediate' ? 'Cancel Now' : 'Schedule Cancellation'}`}
                   </>
                 )}
