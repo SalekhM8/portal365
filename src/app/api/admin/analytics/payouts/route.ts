@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, ALL_STRIPE_ACCOUNTS } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,9 +30,9 @@ export async function GET(req: NextRequest) {
     const startUnix = Math.floor(startDate.getTime() / 1000)
     const endUnix = Math.floor(endDate.getTime() / 1000)
 
-    // For 'ALL' account, fetch from all 4 accounts
+    // For 'ALL' account, fetch from every configured Stripe account
     const accounts: StripeAccountKey[] = account === 'ALL' as any
-      ? ['SU', 'IQ', 'AURA', 'AURAUP']
+      ? [...ALL_STRIPE_ACCOUNTS]
       : [account]
 
     const allPayouts: Array<{ id: string; amount: number; date: string; account: string; status: string }> = []

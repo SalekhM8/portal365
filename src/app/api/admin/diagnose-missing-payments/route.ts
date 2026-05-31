@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, ALL_STRIPE_ACCOUNTS } from '@/lib/stripe'
 
 /**
  * 🔍 DIAGNOSTIC: Find out why autopayments aren't being recorded
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     // 📊 Get today's paid invoices from ALL Stripe accounts (last 24 hours to be safe)
     const yesterday = Math.floor((Date.now() - 24 * 60 * 60 * 1000) / 1000)
-    const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+    const allAccounts: readonly StripeAccountKey[] = ALL_STRIPE_ACCOUNTS
     const allInvoiceData: Array<{ invoice: any; account: StripeAccountKey }> = []
     for (const account of allAccounts) {
       try {

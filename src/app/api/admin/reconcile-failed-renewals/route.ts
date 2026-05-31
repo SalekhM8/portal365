@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, ALL_STRIPE_ACCOUNTS } from '@/lib/stripe'
 
 /**
  * Backfill FAILED monthly renewals from Stripe into local DB
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     let examined = 0
     let mapped = 0
 
-    const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+    const allAccounts: readonly StripeAccountKey[] = ALL_STRIPE_ACCOUNTS
     for (const account of allAccounts) {
       let client: ReturnType<typeof getStripeClient>
       try { client = getStripeClient(account) } catch { continue }

@@ -3,13 +3,14 @@ import { getServerSession } from 'next-auth/next'
 import { Prisma } from '@prisma/client'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import type { StripeAccountKey } from '@/lib/stripe'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
 export const runtime = 'nodejs'
 
-type AccountFilter = 'SU' | 'IQ' | 'AURA' | 'AURAUP' | 'ALL'
+type AccountFilter = StripeAccountKey | 'ALL'
 type MonthlyMetricRow = {
   month: string
   totalNet: Prisma.Decimal

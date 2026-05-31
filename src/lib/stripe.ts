@@ -7,7 +7,15 @@ import { getPlanDbFirst } from '@/lib/plans'
 // Multi-account Stripe manager
 // =============================================================================
 
-export type StripeAccountKey = 'SU' | 'IQ' | 'AURA' | 'AURAUP'
+// Single source of truth for the list of supported Stripe accounts.
+// Adding a new account = add the key here + add config entry in STRIPE_ACCOUNTS below.
+// Everywhere else uses ALL_STRIPE_ACCOUNTS or the derived StripeAccountKey type.
+export const ALL_STRIPE_ACCOUNTS = ['SU', 'IQ', 'AURA', 'AURAUP', 'AFC'] as const
+export type StripeAccountKey = typeof ALL_STRIPE_ACCOUNTS[number]
+
+export function isStripeAccountKey(value: unknown): value is StripeAccountKey {
+  return typeof value === 'string' && (ALL_STRIPE_ACCOUNTS as readonly string[]).includes(value)
+}
 
 type StripeAccountConfig = {
   secretKey?: string
@@ -40,6 +48,12 @@ const STRIPE_ACCOUNTS: Record<StripeAccountKey, StripeAccountConfig> = {
     publishableKey: process.env.NEXT_PUBLIC_STRIPE_AURAUP_PUBLISHABLE_KEY,
     webhookSecret: process.env.STRIPE_AURAUP_WEBHOOK_SECRET,
     label: 'Aura Up'
+  },
+  AFC: {
+    secretKey: process.env.STRIPE_AFC_SECRET_KEY,
+    publishableKey: process.env.NEXT_PUBLIC_STRIPE_AFC_PUBLISHABLE_KEY,
+    webhookSecret: process.env.STRIPE_AFC_WEBHOOK_SECRET,
+    label: 'Aura Fitness Centre'
   }
 }
 
@@ -146,7 +160,7 @@ export class SubscriptionProcessor {
             orderBy: { updatedAt: 'desc' }
           })
           const payerAccount = (payerSub as any)?.stripeAccountKey as StripeAccountKey | undefined
-          if (payerAccount === 'SU' || payerAccount === 'IQ' || payerAccount === 'AURA' || payerAccount === 'AURAUP') {
+          if (payerAccount && isStripeAccountKey(payerAccount)) {
             stripeAccount = payerAccount
           }
         } catch {}
@@ -268,8 +282,7 @@ export class SubscriptionProcessor {
             cust = await stripeClient.customers.retrieve(customerIdToUse)
           } catch (e: any) {
             // If the stored customer belongs to another account, try all other accounts
-            const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
-            const otherAccounts = allAccounts.filter(a => a !== stripeAccount)
+            const otherAccounts = ALL_STRIPE_ACCOUNTS.filter(a => a !== stripeAccount)
             for (const otherAccount of otherAccounts) {
               try {
                 const otherClient = getStripeClient(otherAccount)
