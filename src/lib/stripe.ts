@@ -87,6 +87,30 @@ export function getWebhookSecrets(): Array<{ account: StripeAccountKey; secret: 
 // Backward-compatible default client (SU). Existing code may still import { stripe }
 export const stripe = getStripeClient('SU')
 
+/**
+ * Clamp a Stripe trial_end timestamp (seconds since epoch) to a future value.
+ *
+ * Stripe rejects `subscriptions.create({ trial_end })` when the supplied value
+ * is not strictly in the future ("'trial_end' expects a unix timestamp ... in
+ * the future"). That can happen legitimately on flows whose `nextBillingDate`
+ * is "next 1st of month" but where the customer completes signup AFTER that
+ * 1st has already elapsed (delayed 3DS, weekend handoff, manual repair). In
+ * those cases the right behaviour is to roll forward to the 1st of the NEXT
+ * UTC month rather than fail the activation.
+ *
+ * The same clamping logic already lives inline in the admin migrations route
+ * (`src/app/api/admin/migrations/create-subscriptions/route.ts`). This helper
+ * centralises it so every site that calls `subscriptions.create({ trial_end })`
+ * is protected.
+ */
+export function clampTrialEndToFutureFirst(trialEndSec: number): number {
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (trialEndSec && trialEndSec > nowSec) return trialEndSec
+  const now = new Date()
+  const firstNextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0))
+  return Math.floor(firstNextMonth.getTime() / 1000)
+}
+
 // ============================================================================
 // SUBSCRIPTION PROCESSING - 1ST OF MONTH BILLING WITH PRORATED FIRST PAYMENT
 // ============================================================================
@@ -316,7 +340,7 @@ export class SubscriptionProcessor {
         //  - Migration / pure admin flow (no payerUserId) → no proration, first charge on 1st.
         if (hasDefaultPm) {
           const priceIdImmediate = await this.getOrCreatePrice({ monthlyPrice: membershipDetails.monthlyPrice, name: membershipDetails.name }, stripeAccount)
-          const trialEndTs = Math.floor(startDate.getTime() / 1000)
+          const trialEndTs = clampTrialEndToFutureFirst(Math.floor(startDate.getTime() / 1000))
 
           let proratedAmountPence = 0
           let proratePaymentIntentId: string | null = null
