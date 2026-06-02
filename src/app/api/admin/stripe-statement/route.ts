@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, ALL_STRIPE_ACCOUNTS } from '@/lib/stripe'
 
 // Force fresh reads for proof/debug
 export const dynamic = 'force-dynamic'
@@ -71,7 +71,7 @@ async function sumChargesMinusRefundsForClient(stripeClient: ReturnType<typeof g
 }
 
 async function sumBalanceSalesNet(created?: { gte?: number; lt?: number }) {
-  const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+  const allAccounts: readonly StripeAccountKey[] = ALL_STRIPE_ACCOUNTS
   let totalAmount = 0, totalCount = 0
   const firstIds: string[] = [], lastIds: string[] = []
   for (const account of allAccounts) {
@@ -88,7 +88,7 @@ async function sumBalanceSalesNet(created?: { gte?: number; lt?: number }) {
 }
 
 async function sumChargesMinusRefunds(created?: { gte?: number; lt?: number }) {
-  const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+  const allAccounts: readonly StripeAccountKey[] = ALL_STRIPE_ACCOUNTS
   let totalAmount = 0, totalCount = 0
   for (const account of allAccounts) {
     try {
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
     const payoutsByAccount: Record<string, { last: any; next: any }> = {}
     let lastPayout: any = null
     let nextPayout: any = null
-    const payoutAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+    const payoutAccounts: readonly StripeAccountKey[] = ALL_STRIPE_ACCOUNTS
     for (const account of payoutAccounts) {
       try {
         const client = getStripeClient(account)

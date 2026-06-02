@@ -981,7 +981,7 @@ export async function activateFromSetupIntent(si: any, account?: StripeAccountKe
       routedEntityId: dbSub.routedEntityId,
       dbSubscriptionId: dbSub.id
     }
-  }, { idempotencyKey: `setup-webhook-sub:${dbSub.id}:${trialEndTimestamp}` })
+  }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
 
   await prisma.subscription.update({
     where: { id: dbSub.id },

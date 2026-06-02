@@ -3,13 +3,14 @@ import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import type { StripeAccountKey } from '@/lib/stripe'
 
 export default function AdminFamilyCreatePage() {
   const [parentEmail, setParentEmail] = useState('')
   const [childFirstName, setChildFirstName] = useState('')
   const [childLastName, setChildLastName] = useState('')
   const [planKey, setPlanKey] = useState('KIDS_UNLIMITED_UNDER14')
-  const [account, setAccount] = useState<'SU'|'IQ'|'AURA'|'AURAUP'>('AURA')
+  const [account, setAccount] = useState<StripeAccountKey>('AURA')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string|undefined>()
 
@@ -70,6 +71,7 @@ export default function AdminFamilyCreatePage() {
               <select className="border rounded p-2 w-full" value={account} onChange={e=>setAccount(e.target.value as any)}>
                 <option value="AURAUP">Aura Up</option>
                 <option value="AURA">Aura MMA</option>
+                <option value="AFC">Aura Fitness Centre</option>
                 <option value="SU">Sporting U</option>
                 <option value="IQ">IQ Learning Centre</option>
               </select>

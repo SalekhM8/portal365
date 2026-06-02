@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
+import type { StripeAccountKey } from '@/lib/stripe'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
@@ -215,7 +216,7 @@ function AdminDashboardContent() {
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [revenueMonths, setRevenueMonths] = useState<Array<{ month: string; totalNet: number; charges: number; refunds: number; payouts: number; stripeFees: number }>>([])
-  const [revenueAccount, setRevenueAccount] = useState<'SU'|'IQ'|'AURA'|'AURAUP'|'ALL'>('AURA')
+  const [revenueAccount, setRevenueAccount] = useState<StripeAccountKey | 'ALL'>('AURA')
   const [revenueLoading, setRevenueLoading] = useState(false)
   const [revenueUpdatedAt, setRevenueUpdatedAt] = useState<string | null>(null)
   const [expandedMonth, setExpandedMonth] = useState<string | null>(null)
@@ -422,7 +423,7 @@ function AdminDashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, searchParams, families.length])
 
-  const loadRevenueMonths = useCallback(async (account: 'SU' | 'IQ' | 'AURA' | 'AURAUP' | 'ALL') => {
+  const loadRevenueMonths = useCallback(async (account: StripeAccountKey | 'ALL') => {
     try {
       revenueAbortRef.current?.abort()
       const controller = new AbortController()
@@ -761,6 +762,7 @@ function AdminDashboardContent() {
     IQ: process.env.NEXT_PUBLIC_STRIPE_IQ_PUBLISHABLE_KEY || '',
     AURA: process.env.NEXT_PUBLIC_STRIPE_AURA_PUBLISHABLE_KEY || '',
     AURAUP: process.env.NEXT_PUBLIC_STRIPE_AURAUP_PUBLISHABLE_KEY || '',
+    AFC: process.env.NEXT_PUBLIC_STRIPE_AFC_PUBLISHABLE_KEY || '',
   }
 
   const handleUpdatePaymentMethod = async () => {
@@ -1733,7 +1735,7 @@ function AdminDashboardContent() {
                         </td>
                         <td className="p-4 border-r border-white/5">
                           <Badge variant="secondary" className="text-xs">
-                            {customer.account === 'AURAUP' ? 'AURAUP' : customer.account === 'AURA' ? 'AURA' : customer.account === 'IQ' ? 'IQ' : (customer.account === 'SU' ? 'SU' : '—')}
+                            {customer.account || '—'}
                           </Badge>
                         </td>
                         <td className="p-4 border-r border-white/5">
@@ -2060,6 +2062,7 @@ function AdminDashboardContent() {
                 >
                   <option value="AURA">AURA</option>
                   <option value="AURAUP">AURAUP</option>
+                  <option value="AFC">AFC</option>
                   <option value="SU">SU</option>
                   <option value="IQ">IQ</option>
                   <option value="ALL">All</option>

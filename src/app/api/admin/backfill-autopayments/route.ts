@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, ALL_STRIPE_ACCOUNTS } from '@/lib/stripe'
 
 /**
  * 🔄 BACKFILL MISSING AUTOPAYMENTS
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     // Fetch all paid invoices from ALL Stripe accounts
     console.log('📡 Fetching paid invoices from all Stripe accounts...')
     let allStripeInvoices: Array<{ invoice: any; account: StripeAccountKey }> = []
-    const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+    const allAccounts: readonly StripeAccountKey[] = ALL_STRIPE_ACCOUNTS
     for (const account of allAccounts) {
       let client: ReturnType<typeof getStripeClient>
       try { client = getStripeClient(account) } catch { continue }

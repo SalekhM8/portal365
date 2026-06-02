@@ -8,7 +8,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions, hasPermission } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { VATCalculationEngine } from '@/lib/vat-routing'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, ALL_STRIPE_ACCOUNTS } from '@/lib/stripe'
 
 function parseEmergencyContact(raw: string | null | undefined): any {
   if (!raw) return {}
@@ -1249,7 +1249,7 @@ export async function GET() {
     let nextPayout: any = null
     const payoutsByAccount: Record<string, { last?: number; pending?: number }> = {}
     try {
-      const allAccounts: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+      const allAccounts: readonly StripeAccountKey[] = ALL_STRIPE_ACCOUNTS
       let totalLastAmount = 0
       let latestArrival = ''
       let totalPendingAmount = 0
@@ -1297,7 +1297,7 @@ export async function GET() {
     const perAccountLastMonth: Record<string, number> = {}
     const perAccountThisMonth: Record<string, number> = {}
     try {
-      for (const acct of ['SU', 'IQ', 'AURA', 'AURAUP'] as const) {
+      for (const acct of ALL_STRIPE_ACCOUNTS) {
         const settingLast = await prisma.systemSetting.findUnique({ where: { key: `metrics:ledger:lastMonthNet:${acct}` } })
         if (settingLast) {
           const parsed = JSON.parse(settingLast.value || '{}') as { amount?: number }

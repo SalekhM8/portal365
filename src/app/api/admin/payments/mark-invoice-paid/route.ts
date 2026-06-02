@@ -3,13 +3,13 @@ import { getServerSession } from 'next-auth/next'
 import type Stripe from 'stripe'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, ALL_STRIPE_ACCOUNTS } from '@/lib/stripe'
 
 type MarkPaidBody = {
   invoiceId?: string
 }
 
-const STRIPE_ACCOUNTS: StripeAccountKey[] = ['SU', 'IQ', 'AURA', 'AURAUP']
+const STRIPE_ACCOUNTS: readonly StripeAccountKey[] = ALL_STRIPE_ACCOUNTS
 
 export async function POST(request: NextRequest) {
   try {
