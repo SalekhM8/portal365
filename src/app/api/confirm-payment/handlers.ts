@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getStripeClient } from '@/lib/stripe' // getStripeClient for multi-account
+import { getStripeClient, clampTrialEndToFutureFirst } from '@/lib/stripe' // getStripeClient for multi-account
 import { prisma } from '@/lib/prisma'
 import { getPlanDbFirst } from '@/lib/plans'
 
@@ -81,7 +81,7 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
 
   const membershipDetails = await getPlanDbFirst(subscription.membershipType)
   const priceId = await getOrCreatePrice(membershipDetails, (subscription as any).stripeAccountKey || 'SU')
-  const trialEndTimestamp = Math.floor(nextBillingDate.getTime() / 1000)
+  const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(nextBillingDate.getTime() / 1000))
 
   const stripeSubscription = await stripe.subscriptions.create({
     customer: subscription.stripeCustomerId,
@@ -157,7 +157,7 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
   }
   const membershipDetails = await getPlanDbFirst(dbSub.membershipType)
   const priceId = await getOrCreatePrice(membershipDetails, (dbSub as any).stripeAccountKey || 'SU')
-  const trialEndTimestamp = Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000)
+  const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000))
 
   const stripeSubscription = await stripe.subscriptions.create({
     customer: paymentIntent.customer as string,

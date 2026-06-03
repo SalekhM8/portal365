@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { sendDunningAttemptSms, sendSuspendedSms, sendSuccessSms, sendActionRequiredSms } from '@/lib/notify'
 import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActionRequiredEmail } from '@/lib/email'
 import { isAutoSuspendEnabled, isPauseCollectionEnabled } from '@/lib/flags'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, clampTrialEndToFutureFirst } from '@/lib/stripe'
 import { recoverCanceledPiInvoice } from '@/lib/canceled-pi-recovery'
 
 function resolveNotificationEmail(user?: { email?: string | null; communicationPrefs?: string | null }): string | null {
@@ -817,7 +817,7 @@ export async function activateFromPaymentIntent(pi: any, account?: StripeAccount
     // Build price and create Stripe subscription starting next billing
     const membershipType = dbSub.membershipType
     const nextBilling = new Date(dbSub.nextBillingDate)
-    const trialEndTimestamp = Math.floor(nextBilling.getTime() / 1000)
+    const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(nextBilling.getTime() / 1000))
 
     // Get price via lightweight helper from confirm-payment handler (must be account-aware)
     const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any
@@ -967,7 +967,7 @@ export async function activateFromSetupIntent(si: any, account?: StripeAccountKe
     { monthlyPrice: Number(dbSub.monthlyPrice), name: dbSub.membershipType },
     stripeAccount
   )
-  const trialEndTimestamp = Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000)
+  const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000))
 
   const stripeSubscription = await stripe.subscriptions.create({
     customer: dbSub.stripeCustomerId,

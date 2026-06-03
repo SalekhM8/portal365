@@ -41,9 +41,34 @@ export async function POST(_request: NextRequest) {
     const stripe = getStripeClient((subscription as any).stripeAccountKey || 'SU')
 
     if (isPaymentIntentPlaceholder) {
-      // Try to reuse existing PaymentIntent; else create a replacement
+      // Try to reuse existing PaymentIntent; else create a replacement.
+      //
+      // 🛡️ Critical: if the existing PI is in flight (`processing`) or already
+      // paid (`succeeded`) we MUST NOT create a fresh PI — that produces a
+      // duplicate charge once the original settles. The June 2026 incident
+      // hit exactly this race: the original PI was `requires_action` when the
+      // customer first attempted, became `succeeded` while they sat on the
+      // page, and a retry click here issued a second PI off the same card.
       try {
         const existing = await stripe.paymentIntents.retrieve(id)
+        if (existing.status === 'succeeded') {
+          return NextResponse.json({
+            mode: 'payment_intent',
+            subscriptionId: subscription.id,
+            alreadyPaid: true,
+            clientSecret: existing.client_secret || null,
+            publishableKey: getPublishableKey((subscription as any).stripeAccountKey || 'SU')
+          })
+        }
+        if (existing.status === 'processing') {
+          return NextResponse.json({
+            mode: 'payment_intent',
+            subscriptionId: subscription.id,
+            paymentInFlight: true,
+            clientSecret: existing.client_secret || null,
+            publishableKey: getPublishableKey((subscription as any).stripeAccountKey || 'SU')
+          })
+        }
         const reusableStatuses = new Set([
           'requires_payment_method','requires_action','requires_confirmation'
         ])
