@@ -59,22 +59,22 @@ export async function POST(request: NextRequest) {
         // member is auto-recovered without admin intervention.
         await handlePaymentIntentCanceled(event.data.object, accountKeyVerified)
         break
-      case 'payment_intent.succeeded':
-        // Handle async success (e.g., Klarna) to activate pending signups
-        try {
-          const pi: any = event.data.object
-          const metadata = pi.metadata || {}
-          if (metadata?.reason === 'prorated_first_period' && metadata?.dbSubscriptionId) {
-            // Reuse our confirm-payment logic server-side
-            const { activateFromPaymentIntent } = await import('./handlers') as any
-            if (activateFromPaymentIntent) {
-              await activateFromPaymentIntent(pi, accountKeyVerified)
-            }
+      case 'payment_intent.succeeded': {
+        // Handle async success (e.g., Klarna) to activate pending signups.
+        // Do NOT swallow errors here: activateFromPaymentIntent is idempotent
+        // (PI-keyed payment row + race-safe sub create), so letting a failure
+        // propagate to the outer catch returns 500 and Stripe auto-retries —
+        // which self-heals the "active but unpaid" drop instead of hiding it.
+        const pi: any = event.data.object
+        const metadata = pi.metadata || {}
+        if (metadata?.reason === 'prorated_first_period' && metadata?.dbSubscriptionId) {
+          const { activateFromPaymentIntent } = await import('./handlers') as any
+          if (activateFromPaymentIntent) {
+            await activateFromPaymentIntent(pi, accountKeyVerified)
           }
-        } catch (piError) {
-          console.error('❌ payment_intent.succeeded handler error:', piError)
         }
         break
+      }
       case 'setup_intent.succeeded':
         // Safety net for migration signups: activate if success page didn't
         try {

@@ -812,65 +812,84 @@ export async function activateFromPaymentIntent(pi: any, account?: StripeAccount
   // Determine if a real Stripe subscription already exists (e.g., created via confirm-payment)
   const hasRealStripeSub = !!(dbSub.stripeSubscriptionId && (dbSub.stripeSubscriptionId as string).startsWith('sub_'))
 
-  // If no real Stripe subscription yet, create it now (account-aware price fetch)
+  // If no real Stripe subscription yet, create it now (account-aware price fetch).
+  //
+  // RACE-SAFETY: the browser success page (/api/confirm-payment) and this webhook
+  // both fire on payment success and both call subscriptions.create with the SAME
+  // idempotency key `start-sub:<dbSubId>:<trialEnd>`. When they run concurrently,
+  // Stripe rejects the loser with 409 "a request with this idempotency key is already
+  // in progress." Previously that threw out of this function BEFORE the payment-row
+  // write below — leaving the member ACTIVE (created by the other path) but with no
+  // payment row. Now we swallow a create failure IF the other path already produced a
+  // real sub, and fall through to the (idempotent) payment-row write regardless.
   if (!hasRealStripeSub) {
-    // Build price and create Stripe subscription starting next billing
-    const membershipType = dbSub.membershipType
-    const nextBilling = new Date(dbSub.nextBillingDate)
-    const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(nextBilling.getTime() / 1000))
+    try {
+      // Build price and create Stripe subscription starting next billing
+      const membershipType = dbSub.membershipType
+      const nextBilling = new Date(dbSub.nextBillingDate)
+      const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(nextBilling.getTime() / 1000))
 
-    // Get price via lightweight helper from confirm-payment handler (must be account-aware)
-    const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any
-    const accountForPrice = (dbSub as any).stripeAccountKey || account || 'SU'
-    const priceId = await getOrCreatePrice({ monthlyPrice: Number(dbSub.monthlyPrice), name: membershipType }, accountForPrice)
+      // Get price via lightweight helper from confirm-payment handler (must be account-aware)
+      const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any
+      const accountForPrice = (dbSub as any).stripeAccountKey || account || 'SU'
+      const priceId = await getOrCreatePrice({ monthlyPrice: Number(dbSub.monthlyPrice), name: membershipType }, accountForPrice)
 
-    const stripeSubscription = await stripe.subscriptions.create({
-      customer: pi.customer as string,
-      items: [{ price: priceId }],
-      collection_method: 'charge_automatically',
-      trial_end: trialEndTimestamp,
-      proration_behavior: 'none',
-      metadata: { userId: dbSub.userId, membershipType: dbSub.membershipType, routedEntityId: dbSub.routedEntityId, dbSubscriptionId: dbSub.id }
-    }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
+      const stripeSubscription = await stripe.subscriptions.create({
+        customer: pi.customer as string,
+        items: [{ price: priceId }],
+        collection_method: 'charge_automatically',
+        trial_end: trialEndTimestamp,
+        proration_behavior: 'none',
+        metadata: { userId: dbSub.userId, membershipType: dbSub.membershipType, routedEntityId: dbSub.routedEntityId, dbSubscriptionId: dbSub.id }
+      }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
 
-    await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
-    await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+      await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
+      await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+    } catch (subErr) {
+      // Did the concurrent confirm-payment call already create the real sub?
+      const refreshed = await prisma.subscription.findUnique({ where: { id: dbSub.id } })
+      const nowHasReal = !!(refreshed?.stripeSubscriptionId && (refreshed.stripeSubscriptionId as string).startsWith('sub_'))
+      if (!nowHasReal) {
+        // Genuine failure and no sub exists anywhere — rethrow so the route returns
+        // non-200 and Stripe retries (self-heal). Do not silently drop.
+        throw subErr
+      }
+      // Otherwise the other path won the race and the sub exists; ensure DB reflects
+      // ACTIVE, then fall through to write the payment row.
+      console.warn(`activateFromPaymentIntent: sub-create lost idempotency race for ${dbSub.id}, continuing to payment-row write`, (subErr as any)?.message)
+      await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+    }
   }
 
-  // Write initial prorated payment row if missing (idempotent)
-  try {
-    const amountReceived = (pi?.amount_received ?? pi?.amount ?? 0) as number
-    const currency = ((pi?.currency as string) || 'gbp').toUpperCase()
-    const amountPounds = amountReceived / 100
+  // Write initial prorated payment row if missing. Idempotent on the PaymentIntent id
+  // so this webhook and the success-page writer (confirm-payment) cannot duplicate it.
+  // NOTE: failures here are intentionally re-thrown so the webhook route returns non-200
+  // and Stripe retries — a dropped payment row must never be silent again.
+  const amountReceived = (pi?.amount_received ?? pi?.amount ?? 0) as number
+  const currency = ((pi?.currency as string) || 'gbp').toUpperCase()
+  const amountPounds = amountReceived / 100
 
-    if (amountPounds > 0) {
-      const existingPayment = await prisma.payment.findFirst({
-        where: {
+  if (amountPounds > 0) {
+    const existingPayment = await prisma.payment.findFirst({
+      where: {
+        userId: dbSub.userId,
+        description: { contains: `[pi:${pi?.id}]` }
+      }
+    })
+
+    if (!existingPayment) {
+      await prisma.payment.create({
+        data: {
           userId: dbSub.userId,
-          status: 'CONFIRMED',
           amount: amountPounds,
           currency,
-          description: { contains: 'Initial subscription payment (prorated)' }
-        },
-        orderBy: { createdAt: 'desc' }
+          status: 'CONFIRMED',
+          description: `Initial subscription payment (prorated) [pi:${pi?.id}] [sub:${dbSub.id}]`,
+          routedEntityId: dbSub.routedEntityId,
+          processedAt: new Date()
+        }
       })
-
-      if (!existingPayment) {
-        await prisma.payment.create({
-          data: {
-            userId: dbSub.userId,
-            amount: amountPounds,
-            currency,
-            status: 'CONFIRMED',
-            description: `Initial subscription payment (prorated) [pi:${pi?.id}] [sub:${dbSub.id}]`,
-            routedEntityId: dbSub.routedEntityId,
-            processedAt: new Date()
-          }
-        })
-      }
     }
-  } catch (e) {
-    console.warn('activateFromPaymentIntent: unable to write prorated payment row', e)
   }
 }
 
