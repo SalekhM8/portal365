@@ -170,8 +170,35 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
 
   const subscription = await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' }, include: { user: true } })
   await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
-  // Do not write a Payment here. The webhook (payment_intent.succeeded) is the single source of truth
-  // and will create the initial prorated payment row exactly once, idempotently.
+
+  // Write the prorated payment row here too — do NOT rely solely on the webhook.
+  // Historically (Sept 2025 "de dup") this write was removed and delegated entirely to
+  // the payment_intent.succeeded webhook. That made the webhook a single point of
+  // failure: if it lost the sub-create idempotency race (or otherwise threw), the
+  // member ended up ACTIVE with no payment row (the "active but unpaid" bug).
+  // Idempotent on the PaymentIntent id, so this writer and the webhook writer can both
+  // run without ever duplicating.
+  try {
+    const amountPounds = (paymentIntent.amount as number) / 100
+    if (amountPounds > 0) {
+      const existing = await prisma.payment.findFirst({ where: { userId: subscription.userId, description: { contains: `[pi:${paymentIntent.id}]` } } })
+      if (!existing) {
+        await prisma.payment.create({
+          data: {
+            userId: subscription.userId,
+            amount: amountPounds,
+            currency: (paymentIntent.currency as string).toUpperCase(),
+            status: 'CONFIRMED',
+            description: `Initial subscription payment (prorated) [pi:${paymentIntent.id}] [sub:${subscription.id}]`,
+            routedEntityId: subscription.routedEntityId,
+            processedAt: new Date()
+          }
+        })
+      }
+    }
+  } catch (e) {
+    console.error('handlePaymentIntentConfirmation: failed to write prorated payment row', e)
+  }
 
   return NextResponse.json({ success: true, message: 'Payment confirmed and subscription activated', subscription: { id: subscription.id, status: subscription.status, userId: subscription.userId }, user: { id: subscription.user.id, email: subscription.user.email, firstName: subscription.user.firstName, lastName: subscription.user.lastName } })
 }
