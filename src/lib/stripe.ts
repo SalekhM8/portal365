@@ -88,6 +88,26 @@ export function getWebhookSecrets(): Array<{ account: StripeAccountKey; secret: 
 export const stripe = getStripeClient('SU')
 
 /**
+ * Read the current billing period (unix seconds) from a Stripe subscription.
+ *
+ * IMPORTANT: as of stripe-node 18 (Basil API, 2025-06-30), `current_period_start`
+ * and `current_period_end` were MOVED off the subscription object and onto the
+ * subscription ITEM (`subscription.items.data[0]`). Reading them off the
+ * subscription now returns `undefined` → `NaN` once multiplied. That silently
+ * broke resume prorations (NaN math) and froze nextBillingDate at the trial-end
+ * for post-trial members. Always read the period via this helper.
+ */
+export function getSubscriptionPeriod(sub: any): { start: number | null; end: number | null } {
+  const item = sub?.items?.data?.[0]
+  const startSec = item?.current_period_start ?? sub?.current_period_start
+  const endSec = item?.current_period_end ?? sub?.current_period_end
+  return {
+    start: typeof startSec === 'number' && startSec > 0 ? startSec : null,
+    end: typeof endSec === 'number' && endSec > 0 ? endSec : null,
+  }
+}
+
+/**
  * Clamp a Stripe trial_end timestamp (seconds since epoch) to a future value.
  *
  * Stripe rejects `subscriptions.create({ trial_end })` when the supplied value

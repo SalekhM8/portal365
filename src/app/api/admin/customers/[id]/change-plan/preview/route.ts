@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, getSubscriptionPeriod } from '@/lib/stripe'
 import { getPlan } from '@/config/memberships'
 
 export async function POST(
@@ -37,9 +37,10 @@ export async function POST(
     const plan = getPlan(newMembershipType)
     const newMonthly = plan.monthlyPrice
 
+    const { end: cpEndSec } = getSubscriptionPeriod(stripeSub)
     let result: any = {
       stripeStatus,
-      nextBillingDate: new Date(((stripeSub as any).current_period_end || (stripeSub as any).trial_end) * 1000).toISOString().split('T')[0],
+      nextBillingDate: new Date(((cpEndSec || (stripeSub as any).trial_end) as number) * 1000).toISOString().split('T')[0],
       currentMonthly: currentPriceAmount,
       newMonthly
     }

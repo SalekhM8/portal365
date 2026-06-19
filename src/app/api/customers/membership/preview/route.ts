@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, getSubscriptionPeriod } from '@/lib/stripe'
 import { getPlan } from '@/config/memberships'
 
 export async function POST(request: NextRequest) {
@@ -57,8 +57,9 @@ export async function POST(request: NextRequest) {
     const currentPriceAmount = ((item?.price?.unit_amount || 0) / 100)
     const newMonthly = newDetails.monthlyPrice
 
-    // Calculate next billing date
-    const periodEnd = (stripeSubscription as any).current_period_end || (stripeSubscription as any).trial_end
+    // Calculate next billing date (stripe@18: period is on the item, not the subscription)
+    const { start: cpStartSec, end: cpEndSec } = getSubscriptionPeriod(stripeSubscription)
+    const periodEnd = cpEndSec || (stripeSubscription as any).trial_end
     const nextBillingDate = periodEnd ? new Date(periodEnd * 1000).toISOString().split('T')[0] : null
 
     // Calculate proration
@@ -78,9 +79,9 @@ export async function POST(request: NextRequest) {
     } else {
       // For active subscriptions, calculate based on billing cycle
       const now = new Date()
-      const periodStart = (stripeSubscription as any).current_period_start
-      const periodEndTs = (stripeSubscription as any).current_period_end
-      
+      const periodStart = cpStartSec
+      const periodEndTs = cpEndSec
+
       if (periodStart && periodEndTs) {
         const periodStartDate = new Date(periodStart * 1000)
         const periodEndDate = new Date(periodEndTs * 1000)
