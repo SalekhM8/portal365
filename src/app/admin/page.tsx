@@ -1008,7 +1008,19 @@ function AdminDashboardContent() {
       const now = new Date()
       const next1 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
       setReactivateTrialEnd(next1.toISOString().slice(0, 10))
-      setReactivateProrateAmount('')
+      // Pre-fill the prorate with the remainder-of-month amount so it isn't left
+      // blank (= £0 = a free reactivation). Admin can still clear it for goodwill.
+      const planMonthly =
+        (Object.values(MEMBERSHIP_PLANS).find((p: any) => p.key === selectedCustomer?.membershipType) as any)?.monthlyPrice ??
+        (availablePlans.find((p: any) => p.key === selectedCustomer?.membershipType) as any)?.monthlyPrice ?? 0
+      if (planMonthly > 0) {
+        const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate()
+        const remaining = Math.max(0, Math.ceil((next1.getTime() - now.getTime()) / 86400000))
+        const prorate = planMonthly * (remaining / daysInMonth)
+        setReactivateProrateAmount(prorate > 0 ? prorate.toFixed(2) : '')
+      } else {
+        setReactivateProrateAmount('')
+      }
     }
     setShowMembershipActionModal(true)
   }
@@ -2376,6 +2388,11 @@ function AdminDashboardContent() {
         <div className="flex flex-col gap-2">
           <Button variant="outline" onClick={async () => { if (!confirm('Delete this account? Only allowed when no active/trial/paused/past_due subs, no paid invoices, no confirmed payments.')) return; const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/delete`, { method: 'POST' }); const json = await resp.json(); if (resp.ok) { alert('Account deleted'); setSelectedCustomer(null); await fetchAdminData() } else { alert('Delete blocked: ' + (json.error || 'Unknown reason')) } }} className="border-red-500/20 text-red-400 hover:bg-red-500/10 w-full">Delete Account</Button>
           <Button variant="outline" onClick={async () => {
+            // Reset modal state every open so a previous "Start on next billing date"
+            // selection can't silently carry over and waive the proration.
+            setEffectiveMode('now')
+            setNewPlanKey('')
+            setPreview(null)
             setShowChangePlanModal(true)
             // Fetch all plans including migration-only ones
             if (availablePlans.length === 0) {

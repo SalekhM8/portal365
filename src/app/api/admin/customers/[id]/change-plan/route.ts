@@ -91,10 +91,12 @@ export async function POST(
     }
 
     if (effective === 'period_end') {
-      // Price change effective at next billing; no proration now
+      // Price change effective at next billing. Use create_prorations (NOT 'none')
+      // so the mid-cycle difference is added to the next invoice and collected —
+      // 'none' silently WAIVED the proration entirely.
       await stripe.subscriptions.update(stripeSub.id, {
         items: [{ id: item.id, price: (newPrice as any).id }],
-        proration_behavior: 'none',
+        proration_behavior: 'create_prorations',
         metadata: {
           ...(stripeSub as any).metadata,
           pending_plan: newMembershipType,

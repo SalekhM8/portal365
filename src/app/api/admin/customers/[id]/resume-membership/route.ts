@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient } from '@/lib/stripe'
+import { chargeProration, prorateRemainderOfMonth } from '@/lib/proration'
 
 /**
  * RESUME MEMBERSHIP - Enterprise-grade implementation
@@ -127,81 +128,49 @@ export async function POST(
     // Use correct Stripe account for this subscription (available to try and rollback scopes)
     const stripeClient = getStripeClient((pausedSubscription as any).stripeAccountKey || 'SU')
     try {
-      // STEP 1: Retrieve subscription to get current period dates
-      const currentSub = await stripeClient.subscriptions.retrieve(pausedSubscription.stripeSubscriptionId)
-      const customerId = (currentSub as any).customer as string
+      const account = ((pausedSubscription as any).stripeAccountKey || 'SU')
+      const customerId = (pausedSubscription as any).stripeCustomerId as string
 
-      // STEP 2: Calculate and collect proration BEFORE resuming
-      const now = new Date()
-      const periodEnd = new Date((currentSub as any).current_period_end * 1000)
-      const periodStart = new Date((currentSub as any).current_period_start * 1000)
-      const totalDaysInPeriod = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24))
-      const remainingDays = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      // STEP 2: charge the prorated remainder of THIS month BEFORE resuming.
+      // The gym bills on the 1st, so resuming mid-month owes for the days left
+      // until the 1st of next month. (Previously this read current_period_end off
+      // the subscription object, which is undefined in stripe@18 → NaN → the
+      // charge was silently skipped and members resumed for free.)
       const monthlyPrice = Number(pausedSubscription.monthlyPrice) || 0
+      const { amountPence, remainingDays, daysInMonth } = prorateRemainderOfMonth(monthlyPrice)
+      console.log(`📊 [${operationId}] Resume proration: ${remainingDays}/${daysInMonth} days @ £${monthlyPrice} => £${(amountPence / 100).toFixed(2)}`)
 
-      console.log(`📊 [${operationId}] Proration calc: start=${periodStart.toISOString()}, end=${periodEnd.toISOString()}, totalDays=${totalDaysInPeriod}, remaining=${remainingDays}, price=${monthlyPrice}`)
-
-      // Check if proration was already paid (retry safety)
-      const recentInvoices = await stripeClient.invoices.list({ customer: customerId, limit: 5 })
-      const alreadyPaid = recentInvoices.data.find((inv: any) =>
-        inv.metadata?.reason === 'resume_proration' && inv.status === 'paid'
-        && inv.metadata?.subscriptionPeriod === String((currentSub as any).current_period_start)
-      )
-
-      if (alreadyPaid) {
-        prorationCharged = (alreadyPaid.amount_paid || 0) / 100
-        console.log(`✅ [${operationId}] Proration already paid (retry): £${prorationCharged.toFixed(2)}`)
-      } else if (remainingDays > 0 && remainingDays <= totalDaysInPeriod && monthlyPrice > 0) {
-        const dailyRate = monthlyPrice / totalDaysInPeriod
-        const prorationAmount = Math.round(dailyRate * remainingDays * 100) // pence
-
-        if (prorationAmount > 0) {
-          console.log(`💰 [${operationId}] Charging proration: ${remainingDays} days at £${(prorationAmount / 100).toFixed(2)}`)
-
-          // Create invoice item — fails here = resume aborted, subscription stays paused
-          await stripeClient.invoiceItems.create({
-            customer: customerId,
-            amount: prorationAmount,
-            currency: 'gbp',
-            description: `Resume proration: ${remainingDays} days (${now.toLocaleDateString('en-GB')} - ${periodEnd.toLocaleDateString('en-GB')})`,
-            metadata: { reason: 'resume_proration', remainingDays: String(remainingDays), operationId }
-          })
-
-          // Create invoice — fails here = resume aborted
-          const invoice = await stripeClient.invoices.create({
-            customer: customerId,
-            collection_method: 'charge_automatically',
-            auto_advance: true,
-            pending_invoice_items_behavior: 'include',
-            metadata: { reason: 'resume_proration', operationId, subscriptionPeriod: String((currentSub as any).current_period_start) }
-          })
-
-          // Finalize and pay — fails here = resume aborted
-          const finalizedInvoice = await stripeClient.invoices.finalizeInvoice(invoice.id!)
-          if (finalizedInvoice.amount_due > 0) {
-            await stripeClient.invoices.pay(finalizedInvoice.id!)
-          }
-          prorationCharged = prorationAmount / 100
-          console.log(`✅ [${operationId}] Proration paid: £${prorationCharged.toFixed(2)}`)
+      if (amountPence > 0) {
+        // Idempotency key makes this safe to retry — never double-charges.
+        const result = await chargeProration({
+          account,
+          customerId,
+          amountPence,
+          description: `Resume proration: ${remainingDays} days`,
+          metadata: { reason: 'resume_proration', operationId, dbSubscriptionId: pausedSubscription.id },
+          idempotencyKey: `resume-proration:${pausedSubscription.id}:${amountPence}`,
+        })
+        if (!result.paid) {
+          // Do NOT unpause for free. Stay paused and surface the failure.
+          return NextResponse.json({
+            success: false,
+            error: `Could not collect the £${(amountPence / 100).toFixed(2)} resume charge (${result.error || 'card declined'}). Member stays paused — ask them to update their card and retry.`,
+            code: 'RESUME_PRORATION_FAILED',
+            operationId,
+          }, { status: 402 })
         }
-      } else {
-        console.log(`⚠️ [${operationId}] Proration skipped: remainingDays=${remainingDays}, totalDays=${totalDaysInPeriod}, price=${monthlyPrice}`)
+        prorationCharged = result.amountPaidPence / 100
+        console.log(`✅ [${operationId}] Resume proration paid: £${prorationCharged.toFixed(2)} (invoice ${result.invoiceId})`)
       }
 
-      // STEP 3: Proration collected — NOW unpause the subscription
+      // STEP 3: proration collected (or £0 genuinely owed) — NOW unpause.
+      // We do NOT auto-pay any other open invoice here: the resume charge above is
+      // the only money owed for resuming; normal Stripe billing handles the rest.
+      // (The old "pay any open invoice" sweep could overcharge on top of this.)
       await stripeClient.subscriptions.update(
         pausedSubscription.stripeSubscriptionId,
         { pause_collection: null }
       )
-
-      // Attempt to pay any open invoice created while paused
-      try {
-        const invoices = await stripeClient.invoices.list({ customer: customerId, limit: 5 })
-        const openInv = invoices.data.find((i: any) => i.status === 'open')
-        if (openInv && openInv.id) {
-          await stripeClient.invoices.pay(openInv.id as string)
-        }
-      } catch {}
 
       stripeOperationSuccess = true
       console.log(`✅ [${operationId}] Subscription resumed${prorationCharged > 0 ? ` with £${prorationCharged.toFixed(2)} proration` : ''}`)
