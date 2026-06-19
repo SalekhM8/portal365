@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, getSubscriptionPeriod } from '@/lib/stripe'
 import { getPlan, MEMBERSHIP_PLANS } from '@/config/memberships'
 
 // Helper to get plan from DB first, then fallback to config
@@ -73,7 +73,9 @@ export async function POST(
       newPrice = await stripe.prices.create({ unit_amount: newMonthly * 100, currency: 'gbp', recurring: { interval: 'month' }, product: product.id })
     }
 
-    const nextBillingDate = new Date(((stripeSub as any).current_period_end || (stripeSub as any).trial_end) * 1000)
+    // stripe@18: read period from the item, not the subscription (else undefined → falls back to a PAST trial_end)
+    const { end: cpEndSec } = getSubscriptionPeriod(stripeSub)
+    const nextBillingDate = new Date(((cpEndSec || (stripeSub as any).trial_end) as number) * 1000)
 
     // Helper: compute delta for trial using calendar month proration
     const computeTrialDelta = () => {

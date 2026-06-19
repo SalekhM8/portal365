@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { sendDunningAttemptSms, sendSuspendedSms, sendSuccessSms, sendActionRequiredSms } from '@/lib/notify'
 import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActionRequiredEmail } from '@/lib/email'
 import { isAutoSuspendEnabled, isPauseCollectionEnabled } from '@/lib/flags'
-import { getStripeClient, type StripeAccountKey, clampTrialEndToFutureFirst } from '@/lib/stripe'
+import { getStripeClient, type StripeAccountKey, clampTrialEndToFutureFirst, getSubscriptionPeriod } from '@/lib/stripe'
 import { recoverCanceledPiInvoice } from '@/lib/canceled-pi-recovery'
 
 function resolveNotificationEmail(user?: { email?: string | null; communicationPrefs?: string | null }): string | null {
@@ -683,10 +683,11 @@ export async function handleSubscriptionUpdated(stripeSubscription: any, account
     }
 
     const previousStatus = subscription.status
-    const cpStartSec = Number(stripeSubscription.current_period_start)
-    const cpEndSec = Number(stripeSubscription.current_period_end)
-    const safeStart = !isNaN(cpStartSec) && cpStartSec > 0 ? new Date(cpStartSec * 1000) : subscription.currentPeriodStart
-    const safeEnd = !isNaN(cpEndSec) && cpEndSec > 0 ? new Date(cpEndSec * 1000) : subscription.currentPeriodEnd
+    // stripe@18 moved current_period_* to the item; read via helper or these are
+    // undefined → NaN → nextBillingDate gets frozen at the stale stored value.
+    const { start: cpStartSec, end: cpEndSec } = getSubscriptionPeriod(stripeSubscription)
+    const safeStart = cpStartSec ? new Date(cpStartSec * 1000) : subscription.currentPeriodStart
+    const safeEnd = cpEndSec ? new Date(cpEndSec * 1000) : subscription.currentPeriodEnd
     const safeNext = safeEnd || subscription.nextBillingDate
 
     const updatedSubscription = await prisma.subscription.update({ 
