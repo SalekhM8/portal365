@@ -190,7 +190,7 @@ function CheckIn() {
                 <button key={m.id} onClick={() => { setMember(m); setResults([]) }}
                   className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 hover:bg-white/10 transition text-left">
                   <span className="text-white">{m.name}</span>
-                  <span className="text-white/40 text-sm">{planLabel(m.plan)} · <span className={meta(m.status).cls.split(' ')[1]}>{meta(m.status).label}</span></span>
+                  <span className="text-white/40 text-sm">PIN {m.pin} · {planLabel(m.plan)} · <span className={meta(m.status).cls.split(' ')[1]}>{meta(m.status).label}</span></span>
                 </button>
               ))}
             </div>
@@ -208,7 +208,7 @@ function CheckIn() {
               </div>
               <div className="min-w-0">
                 <h2 className="text-white text-2xl font-semibold tracking-tight truncate">{member.name}</h2>
-                <p className="text-white/45 text-sm mt-0.5">{planLabel(member.plan)}{member.price ? ` · £${member.price}/mo` : ''}</p>
+                <p className="text-white/45 text-sm mt-0.5">{planLabel(member.plan)}{member.price ? ` · £${member.price}/mo` : ''} · <span className="text-white/60">PIN {member.pin}</span></p>
               </div>
             </div>
             <div className={`mt-5 flex items-center gap-3 px-4 py-3 rounded-2xl border ${meta(member.status).cls}`}>

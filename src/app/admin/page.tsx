@@ -2261,6 +2261,7 @@ function AdminDashboardContent() {
                 {openPill==='personal' && (
                   <div className="px-3 pb-3 space-y-2">
                     <p className="text-white"><strong className="text-white/90">Date of Birth:</strong> {(selectedCustomer as any).dateOfBirth ? new Date((selectedCustomer as any).dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</p>
+                    <p className="text-white"><strong className="text-white/90">Door PIN:</strong> {(selectedCustomer as any).pin || '—'}</p>
                   {(() => {
                       try {
                         const raw = (selectedCustomer as any)?.emergencyContact
