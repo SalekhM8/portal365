@@ -20,16 +20,21 @@ export async function POST(request: NextRequest) {
     if (u) users = [u]
   } else if (name && String(name).trim().length >= 2) {
     const q = String(name).trim()
-    users = await prisma.user.findMany({
-      where: {
-        role: 'CUSTOMER',
-        OR: [
-          { firstName: { contains: q, mode: 'insensitive' } },
-          { lastName: { contains: q, mode: 'insensitive' } },
-        ],
-      },
-      take: 8,
-    })
+    const words = q.split(/\s+/)
+    // single word -> match either field; multi-word ("suffian elahi") ->
+    // also match first+last across words in either order
+    const or: any[] = [
+      { firstName: { contains: q, mode: 'insensitive' } },
+      { lastName: { contains: q, mode: 'insensitive' } },
+    ]
+    if (words.length >= 2) {
+      const a = words[0], b = words.slice(1).join(' ')
+      or.push(
+        { AND: [{ firstName: { contains: a, mode: 'insensitive' } }, { lastName: { contains: b, mode: 'insensitive' } }] },
+        { AND: [{ firstName: { contains: b, mode: 'insensitive' } }, { lastName: { contains: a, mode: 'insensitive' } }] },
+      )
+    }
+    users = await prisma.user.findMany({ where: { role: 'CUSTOMER', OR: or }, take: 8 })
   } else {
     return NextResponse.json({ error: 'Provide a 4-digit pin or a name' }, { status: 400 })
   }
