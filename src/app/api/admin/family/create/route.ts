@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { assignUniquePin } from '@/lib/pin'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 import { MEMBERSHIP_PLANS, type MembershipKey } from '@/config/memberships'
 
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest) {
         communicationPrefs: JSON.stringify({ guardianEmail: parentEmail })
       }
     })
+    await assignUniquePin(child.id) // door check-in PIN
 
     // Create membership row
     const next1st = firstOfNextMonthUTC()

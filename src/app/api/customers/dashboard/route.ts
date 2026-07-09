@@ -86,8 +86,8 @@ export async function GET(request: NextRequest) {
     })
 
     const membersList = [
-      { id: userId, name: `${userData.firstName} ${userData.lastName}` },
-      ...childrenMemberships.map((cm: any) => ({ id: cm.userId, name: `${cm.user.firstName} ${cm.user.lastName}` }))
+      { id: userId, name: `${userData.firstName} ${userData.lastName}`, pin: (userData as any).pin || null },
+      ...childrenMemberships.map((cm: any) => ({ id: cm.userId, name: `${cm.user.firstName} ${cm.user.lastName}`, pin: cm.user.pin || null }))
     ]
 
     // Get real class schedule from database
@@ -137,6 +137,8 @@ export async function GET(request: NextRequest) {
         firstName: userData.firstName,
         lastName: userData.lastName,
         email: userData.email,
+        pin: (userData as any).pin || null,
+        pinAcknowledged: (userData as any).pinAcknowledged ?? true,
         memberSince: userData.memberships[0]?.startDate.toISOString().split('T')[0] || userData.createdAt.toISOString().split('T')[0]
       },
       membership: membershipData,

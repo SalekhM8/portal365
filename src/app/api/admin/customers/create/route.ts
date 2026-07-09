@@ -4,6 +4,7 @@ import { authOptions, hasPermission } from '@/lib/auth'
 import { z } from 'zod'
 import * as bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
+import { assignUniquePin } from '@/lib/pin'
 import { SubscriptionProcessor, getPublishableKey, type StripeAccountKey } from '@/lib/stripe'
 
 // Validation schema for admin customer creation
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
         status: 'ACTIVE'
       }
     })
+    await assignUniquePin(user.id) // door check-in PIN
     
     console.log('✅ Admin-created user:', user.id)
     
