@@ -496,16 +496,18 @@ function DashboardContent() {
             <CardContent>
               {membershipData?.accessPermissions && (
                 <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold mb-2">Martial Arts Access</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {membershipData.accessPermissions.martialArts?.map((art: string) => (
-                        <Badge key={art} variant="outline">
-                          {art.toUpperCase()}
-                        </Badge>
-                      ))}
+                  {Array.isArray(membershipData.accessPermissions.martialArts) && membershipData.accessPermissions.martialArts.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-2">Martial Arts Access</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {membershipData.accessPermissions.martialArts.map((art: string) => (
+                          <Badge key={art} variant="outline">
+                            {art.toUpperCase()}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="flex items-center justify-between">
