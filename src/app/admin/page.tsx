@@ -1394,7 +1394,7 @@ function AdminDashboardContent() {
             <TabsTrigger value="families" className="text-xs lg:text-sm px-6">Families</TabsTrigger>
             <TabsTrigger value="payments" className="text-xs lg:text-sm px-6">Payments</TabsTrigger>
             <TabsTrigger value="analytics" className="text-xs lg:text-sm px-6">Analytics</TabsTrigger>
-            <button type="button" onClick={() => { window.location.href = '/admin/attendance' }} className="text-xs lg:text-sm px-6 py-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition">Attendance</button>
+            <button type="button" onClick={() => { window.location.href = '/admin/attendance' }} className="text-xs lg:text-sm px-6 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background/70 transition">Attendance</button>
           </TabsList>
         </div>
 
