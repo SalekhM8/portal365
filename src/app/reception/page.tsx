@@ -250,30 +250,41 @@ function CheckIn() {
 function Today() {
   const [date, setDate] = useState(() => new Date().toLocaleDateString('sv-SE'))
   const [data, setData] = useState<{ count: number; entries: Entry[] } | null>(null)
+  const [windowH, setWindowH] = useState<number | null>(null) // null = all day
   const load = useCallback(() => {
     fetch(`/api/reception/attendance?date=${date}`).then(r => r.json()).then(setData).catch(() => {})
   }, [date])
   useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t) }, [load])
   const today = date === new Date().toLocaleDateString('sv-SE')
+  const cutoff = windowH ? Date.now() - windowH * 3600_000 : null
+  const shown = (data?.entries || []).filter(e => !cutoff || new Date(e.time).getTime() >= cutoff)
   return (
     <div className="w-full max-w-2xl">
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex items-end justify-between mb-4">
         <div>
-          <p className="text-white/40 text-sm">{today ? 'Checked in today' : `Attendance · ${date}`}</p>
-          <p className="text-white text-5xl font-bold tracking-tight mt-1">{data?.count ?? '—'}</p>
+          <p className="text-white/40 text-sm">{windowH ? `Checked in · last ${windowH}h` : today ? 'Checked in today' : `Attendance · ${date}`}</p>
+          <p className="text-white text-5xl font-bold tracking-tight mt-1">{data ? shown.length : '—'}</p>
         </div>
         <input type="date" value={date} onChange={e => setDate(e.target.value)}
           className="bg-white/[0.05] border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none [color-scheme:dark]" />
       </div>
+      <div className="flex gap-1.5 mb-5">
+        {([[1, 'Last hour'], [2, 'Last 2h'], [3, 'Last 3h'], [null, 'All day']] as const).map(([h, label]) => (
+          <button key={label} onClick={() => setWindowH(h as number | null)} disabled={!today && h !== null}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition border ${windowH === h ? 'bg-white text-slate-950 border-white' : 'text-white/50 border-white/10 hover:text-white disabled:opacity-30'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="space-y-1.5">
-        {data?.entries.map((e, i) => (
+        {shown.map((e, i) => (
           <div key={i} className="flex items-center gap-4 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
             <span className="text-white/35 text-sm tabular-nums w-12">{fmtTime(e.time)}</span>
             <span className="text-white flex-1 truncate">{e.name}</span>
             <span className={`text-xs px-2 py-1 rounded-md border ${meta(e.status).cls}`}>{meta(e.status).label}</span>
           </div>
         ))}
-        {data && data.entries.length === 0 && <p className="text-white/25 text-center py-16">No check-ins {today ? 'yet today' : 'on this day'}</p>}
+        {data && shown.length === 0 && <p className="text-white/25 text-center py-16">No check-ins {windowH ? `in the last ${windowH}h` : today ? 'yet today' : 'on this day'}</p>}
       </div>
     </div>
   )
