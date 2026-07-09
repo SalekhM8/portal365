@@ -931,6 +931,7 @@ export async function GET() {
         email: customer.email,
         phone: effectivePhone,
         dateOfBirth: customer.dateOfBirth ? customer.dateOfBirth.toISOString().split('T')[0] : null,
+        pin: (customer as any).pin || null,
         membershipType: membership?.membershipType || 'None',
         status: derivedStatus,
         subscriptionStatus: subscription?.status || 'NO_SUBSCRIPTION',
