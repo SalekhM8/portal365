@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { assignUniquePin } from '@/lib/pin'
 import { getStripeClient } from '@/lib/stripe'
 
 function parseEmergencyContact(raw: string | null | undefined): any {
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
         })
       }
     })
+    await assignUniquePin(child.id) // door check-in PIN
 
     // Create membership linked to parent via familyGroupId
     const now = new Date()

@@ -45,6 +45,7 @@ function DashboardContent() {
   const router = useRouter()
   const userEmail = searchParams.get('email') || undefined
   const [selectedMemberId, setSelectedMemberId] = useState<string>('ALL')
+  const [pinDismissed, setPinDismissed] = useState(false)
 
   // 🚀 SWR hook - cached data, no refetch on tab switch!
   const { 
@@ -199,6 +200,31 @@ function DashboardContent() {
           </div>
         </div>
       )}
+      {/* Door PIN intro modal */}
+      {userData?.pin && userData?.pinAcknowledged === false && !pinDismissed && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-background border rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+            <h2 className="text-xl font-bold">Your door check-in PIN</h2>
+            <p className="text-sm text-muted-foreground mt-1">Tell reception this PIN when you arrive at the gym.</p>
+            <div className="my-5 space-y-3">
+              {(members && members.length > 0 ? members : [{ id: 'me', name: 'You', pin: userData.pin }])
+                .filter((m: any) => m.pin)
+                .map((m: any) => (
+                  <div key={m.id}>
+                    {members && members.filter((x: any) => x.pin).length > 1 && (
+                      <p className="text-xs text-muted-foreground mb-1">{m.name}</p>
+                    )}
+                    <div className="text-4xl font-black tracking-[0.4em] pl-2">{m.pin}</div>
+                  </div>
+                ))}
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">Note it down — it's also always visible on this dashboard.</p>
+            <Button className="w-full" onClick={async () => { setPinDismissed(true); try { await fetch('/api/customers/pin-ack', { method: 'POST' }) } catch {} }}>
+              Got it
+            </Button>
+          </div>
+        </div>
+      )}
       {/* Header with Navigation */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
@@ -206,6 +232,16 @@ function DashboardContent() {
           <p className="text-muted-foreground">
             Welcome back{userEmail ? `, ${userEmail.split('@')[0]}` : ''}! Here's your Aura MMA overview.
           </p>
+          {userData?.pin && (
+            <p className="text-sm text-muted-foreground">
+              Door check-in PIN{members && members.filter((m: any) => m.pin).length > 1 ? 's' : ''}:{' '}
+              {(members && members.length > 0 ? members : [{ id: 'me', name: 'You', pin: userData.pin }])
+                .filter((m: any) => m.pin)
+                .map((m: any, i: number) => (
+                  <span key={m.id} className="font-semibold text-foreground">{i > 0 ? ' · ' : ''}{m.name.split(' ')[0]}: {m.pin}</span>
+                ))}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button

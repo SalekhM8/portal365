@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
       userCreateData.guardianConsentAt = guardianConsentAt
     }
     const user = await prisma.user.create({ data: userCreateData })
+    await assignUniquePin(user.id) // door check-in PIN
     
     console.log('✅ User created:', user.id)
     

@@ -97,6 +97,10 @@ model User {
   communicationPrefs String? // JSON as string
   profileImage       String?
 
+  // Door check-in PIN (4 digits, unique across members; shown in profile, typed at reception)
+  pin             String?  @unique
+  pinAcknowledged Boolean  @default(false) // has the member dismissed the "note your PIN" modal
+
   // Relationships
   memberships   Membership[]
   payments      Payment[]
