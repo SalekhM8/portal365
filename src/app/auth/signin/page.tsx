@@ -26,8 +26,10 @@ export default function SignInPage() {
     setError('')
 
     try {
+      // Allow bare staff usernames (e.g. "tracker365") — map to their account email
+      const loginEmail = formData.email.includes('@') ? formData.email : `${formData.email.trim()}@portal365.local`
       const result = await signIn('credentials', {
-        email: formData.email,
+        email: loginEmail,
         password: formData.password,
         redirect: false
       })
@@ -42,7 +44,9 @@ export default function SignInPage() {
           const userRole = sessionData?.user?.role
           
           // Redirect based on user role
-          if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') {
+          if (userRole === 'RECEPTIONIST') {
+            router.push('/reception')
+          } else if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') {
             router.push('/admin')
           } else {
             router.push('/dashboard')
@@ -111,7 +115,7 @@ export default function SignInPage() {
                     </Label>
                     <Input
                       id="email"
-                      type="email"
+                      type="text"
                       value={formData.email}
                       onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                       className="bg-white/5 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 h-12"
