@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import * as bcrypt from 'bcryptjs'
 import { prisma } from '../../../lib/prisma'
+import { assignUniquePin } from '@/lib/pin'
 import { SubscriptionProcessor, getPublishableKey, type StripeAccountKey } from '../../../lib/stripe'
 import { isValidUKPhone, isValidUKPostcode } from '@/lib/uk-validation'
 
