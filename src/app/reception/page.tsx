@@ -2,9 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { signIn, signOut } from 'next-auth/react'
-import { Oswald } from 'next/font/google'
-
-const oswald = Oswald({ subsets: ['latin'], weight: ['500', '600', '700'] })
 
 type Member = {
   id: string; name: string; photo: string | null; pin: string
@@ -13,22 +10,32 @@ type Member = {
 }
 type Entry = { time: string; name: string; photo: string | null; status: string }
 
-const STATUS_META: Record<string, { label: string; sub: string; bar: string; text: string }> = {
-  ACTIVE:    { label: 'ACTIVE',        sub: 'GOOD TO GO',                          bar: 'bg-[#16a34a]', text: 'text-white' },
-  TRIALING:  { label: 'ACTIVE',        sub: 'GOOD TO GO',                          bar: 'bg-[#16a34a]', text: 'text-white' },
-  PAST_DUE:  { label: 'PAYMENT DUE',   sub: 'LET IN — MENTION THE FAILED PAYMENT', bar: 'bg-[#f59e0b]', text: 'text-black' },
-  PAUSED:    { label: 'PAUSED',        sub: 'MEMBERSHIP PAUSED',                   bar: 'bg-neutral-400', text: 'text-black' },
-  CANCELLED: { label: 'CANCELLED',     sub: 'NO ACTIVE MEMBERSHIP',                bar: 'bg-[#dc2626]', text: 'text-white' },
-  NONE:      { label: 'NO MEMBERSHIP', sub: 'NOTHING ON FILE',                     bar: 'bg-[#dc2626]', text: 'text-white' },
+const PILL: Record<string, { label: string; sub: string; cls: string; dot: string }> = {
+  ACTIVE:    { label: 'Active',        sub: 'Good to go',                           cls: 'bg-green-100 text-green-800',   dot: 'bg-green-600' },
+  TRIALING:  { label: 'Active',        sub: 'Good to go',                           cls: 'bg-green-100 text-green-800',   dot: 'bg-green-600' },
+  PAST_DUE:  { label: 'Payment due',   sub: 'Let in — mention the failed payment',  cls: 'bg-amber-100 text-amber-800',   dot: 'bg-amber-500' },
+  PAUSED:    { label: 'Paused',        sub: 'Membership is paused',                 cls: 'bg-zinc-200 text-zinc-700',     dot: 'bg-zinc-500' },
+  CANCELLED: { label: 'Cancelled',     sub: 'No active membership',                 cls: 'bg-red-100 text-red-800',       dot: 'bg-red-600' },
+  NONE:      { label: 'No membership', sub: 'Nothing on file',                      cls: 'bg-red-100 text-red-800',       dot: 'bg-red-600' },
 }
-const meta = (s: string) => STATUS_META[s] || STATUS_META.NONE
+const pill = (s: string) => PILL[s] || PILL.NONE
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 const fmtDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
-const planLabel = (p: string | null) => (p || 'Unknown plan').replace(/^MIG_/, '').replace(/_/g, ' ')
+const planLabel = (p: string | null) => (p || 'Unknown plan').replace(/^MIG_/, '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+const initials = (name: string) => name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
-function AuraMark({ className = 'h-9' }: { className?: string }) {
+function StatusPill({ status }: { status: string }) {
+  const p = pill(status)
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${p.cls}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${p.dot}`} />{p.label}
+    </span>
+  )
+}
+
+function Logo() {
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src="/images/auralogo.png" alt="Aura" className={`${className} w-auto object-contain`} />
+  return <img src="/images/auralogo.png" alt="Aura" className="h-8 w-auto object-contain" />
 }
 
 export default function ReceptionPage() {
@@ -42,24 +49,27 @@ export default function ReceptionPage() {
     }).catch(() => setAuthed(false))
   }, [])
 
-  if (authed === null) return <main className="min-h-screen bg-white" />
+  if (authed === null) return <main className="min-h-screen bg-[#F7F7F8]" />
   if (!authed) return <Login onDone={() => setAuthed(true)} />
   return (
-    <main className="min-h-screen bg-white flex flex-col items-center px-6 py-6 selection:bg-black selection:text-white">
-      <header className="w-full max-w-3xl flex items-center justify-between border-b border-black/15 pb-5 mb-10">
-        <div className="flex items-center gap-4">
-          <AuraMark />
-          <span className={`${oswald.className} text-black text-xl font-bold uppercase tracking-[0.18em]`}>Tracker</span>
+    <main className="min-h-screen bg-[#F7F7F8] text-zinc-900 flex flex-col items-center px-6 py-5">
+      <header className="w-full max-w-2xl flex items-center justify-between mb-10">
+        <div className="flex items-center gap-3">
+          <Logo />
+          <div className="leading-tight">
+            <p className="font-semibold tracking-tight">Tracker</p>
+            <p className="text-xs text-zinc-500">Reception</p>
+          </div>
         </div>
-        <nav className="flex items-center gap-8">
+        <div className="flex items-center rounded-xl bg-zinc-200/70 p-1">
           {(['checkin', 'today'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`${oswald.className} uppercase tracking-[0.14em] text-sm font-semibold pb-1 border-b-2 transition ${tab === t ? 'text-black border-black' : 'text-black/40 border-transparent hover:text-black'}`}>
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${tab === t ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800'}`}>
               {t === 'checkin' ? 'Check in' : 'Today'}
             </button>
           ))}
-          <button onClick={() => signOut({ callbackUrl: '/reception' })} className="text-black/30 hover:text-black text-xs uppercase tracking-widest transition">Sign out</button>
-        </nav>
+        </div>
+        <button onClick={() => signOut({ callbackUrl: '/reception' })} className="text-sm text-zinc-400 hover:text-zinc-700 transition">Sign out</button>
       </header>
       {tab === 'checkin' ? <CheckIn /> : <Today />}
     </main>
@@ -74,20 +84,22 @@ function Login({ onDone }: { onDone: () => void }) {
     const email = u.includes('@') ? u.trim() : `${u.trim()}@portal365.local`
     const res = await signIn('credentials', { email, password: p, redirect: false })
     setBusy(false)
-    if (res?.ok) onDone(); else setErr('WRONG LOGIN — TRY AGAIN')
+    if (res?.ok) onDone(); else setErr('That login didn’t work — check the username and password.')
   }
   return (
-    <main className="min-h-screen bg-white flex items-center justify-center px-6">
-      <form onSubmit={submit} className="w-full max-w-sm">
-        <AuraMark className="h-12" />
-        <h1 className={`${oswald.className} text-black text-4xl font-bold uppercase tracking-tight mt-8`}>Tracker</h1>
-        <p className="text-black/40 text-xs uppercase tracking-[0.2em] mt-1 mb-10">Reception check-in</p>
-        <input value={u} onChange={e => setU(e.target.value)} placeholder="USERNAME" autoFocus
-          className="w-full mb-6 pb-3 bg-transparent border-b border-black/25 text-black text-lg placeholder:text-black/25 placeholder:text-sm placeholder:tracking-[0.2em] outline-none focus:border-black transition" />
-        <input value={p} onChange={e => setP(e.target.value)} placeholder="PASSWORD" type="password"
-          className="w-full mb-8 pb-3 bg-transparent border-b border-black/25 text-black text-lg placeholder:text-black/25 placeholder:text-sm placeholder:tracking-[0.2em] outline-none focus:border-black transition" />
-        {err && <p className="text-[#dc2626] text-xs tracking-widest mb-4">{err}</p>}
-        <button disabled={busy} className={`${oswald.className} w-full py-4 bg-black text-white font-bold uppercase tracking-[0.2em] hover:bg-neutral-800 transition disabled:opacity-50`}>
+    <main className="min-h-screen bg-[#F7F7F8] flex items-center justify-center px-6">
+      <form onSubmit={submit} className="w-full max-w-sm bg-white border border-zinc-200 rounded-2xl shadow-sm p-8">
+        <Logo />
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 mt-6">Tracker</h1>
+        <p className="text-sm text-zinc-500 mt-1 mb-7">Sign in to the reception desk</p>
+        <label className="block text-sm font-medium text-zinc-700 mb-1.5">Username</label>
+        <input value={u} onChange={e => setU(e.target.value)} autoFocus
+          className="w-full mb-4 h-12 px-3.5 rounded-xl border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 transition" />
+        <label className="block text-sm font-medium text-zinc-700 mb-1.5">Password</label>
+        <input value={p} onChange={e => setP(e.target.value)} type="password"
+          className="w-full mb-5 h-12 px-3.5 rounded-xl border border-zinc-300 text-zinc-900 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 transition" />
+        {err && <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-4">{err}</p>}
+        <button disabled={busy} className="w-full h-12 rounded-xl bg-zinc-900 text-white font-medium hover:bg-zinc-800 active:scale-[0.99] transition disabled:opacity-50">
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
@@ -148,41 +160,52 @@ function CheckIn() {
   }
 
   return (
-    <div className="w-full max-w-3xl flex flex-col items-center">
+    <div className="w-full max-w-2xl flex flex-col items-center">
       {!member && !confirmed && (
         <>
-          {/* PIN digits — flat underline slots */}
-          <div className="flex gap-6 mt-6 mb-10">
+          <p className="text-sm text-zinc-500 mb-5">Ask the member for their 4-digit PIN</p>
+          {/* PIN boxes */}
+          <div className="flex gap-3 mb-3">
             {[0, 1, 2, 3].map(i => (
-              <div key={i} className={`${oswald.className} h-20 w-16 flex items-end justify-center pb-2 border-b-4 text-6xl font-bold transition-colors ${pin[i] ? 'border-black text-black' : 'border-black/15 text-transparent'}`}>
-                {pin[i] || '0'}
+              <div key={i} className={`h-16 w-14 rounded-xl border-2 bg-white grid place-items-center text-3xl font-semibold tabular-nums transition-colors ${pin[i] ? 'border-zinc-900 text-zinc-900' : 'border-zinc-200 text-zinc-300'}`}>
+                {pin[i] || ''}
               </div>
             ))}
           </div>
-          {notFound && <p className={`${oswald.className} text-[#dc2626] uppercase tracking-[0.15em] text-sm -mt-6 mb-6`}>No member with that PIN — search by name below</p>}
-          {/* keypad — flat mono */}
-          <div className="grid grid-cols-3 gap-px bg-black/15 border border-black/15 w-full max-w-xs">
+          <div className="h-6 mb-2">
+            {notFound && <p className="text-sm text-red-700">No member with that PIN — try again, or search by name below.</p>}
+          </div>
+          {/* keypad */}
+          <div className="grid grid-cols-3 gap-2.5 w-full max-w-xs">
             {['1','2','3','4','5','6','7','8','9','clear','0','del'].map(k => (
               <button key={k}
                 onClick={() => { if (k === 'clear') reset(); else if (k === 'del') setPin(p => p.slice(0, -1)); else if (pin.length < 4) setPin(p => p + k) }}
-                className={`${oswald.className} h-18 sm:h-20 bg-white text-black flex items-center justify-center transition active:bg-black active:text-white ${/^\d$/.test(k) ? 'text-3xl font-semibold hover:bg-neutral-100' : 'text-[11px] uppercase tracking-[0.2em] text-black/50 hover:text-black hover:bg-neutral-100'}`}>
+                className={`h-16 rounded-2xl transition active:scale-[0.96] ${/^\d$/.test(k)
+                  ? 'bg-white border border-zinc-200 shadow-sm text-2xl font-medium text-zinc-900 hover:border-zinc-300'
+                  : 'text-sm font-medium text-zinc-400 hover:text-zinc-700'}`}>
                 {k === 'del' ? '⌫' : k === 'clear' ? 'Clear' : k}
               </button>
             ))}
           </div>
           {/* name fallback */}
-          <input ref={searchRef} value={search}
-            onChange={e => setSearch(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && search.trim().length >= 2) lookup({ name: search }) }}
-            placeholder="FORGOT PIN? TYPE NAME + ENTER"
-            className="w-full max-w-xs mt-10 pb-3 bg-transparent border-b border-black/25 text-black text-base placeholder:text-black/25 placeholder:text-xs placeholder:tracking-[0.18em] outline-none focus:border-black transition" />
+          <div className="w-full max-w-xs mt-8">
+            <input ref={searchRef} value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && search.trim().length >= 2) lookup({ name: search }) }}
+              placeholder="Forgot PIN? Search name, then press Enter"
+              className="w-full h-11 px-3.5 rounded-xl border border-zinc-200 bg-white text-sm text-zinc-900 placeholder:text-zinc-400 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10 transition" />
+          </div>
           {results.length > 1 && (
-            <div className="w-full max-w-md mt-6 border-t border-black/15">
+            <div className="w-full max-w-md mt-4 bg-white border border-zinc-200 rounded-2xl shadow-sm divide-y divide-zinc-100 overflow-hidden">
               {results.map(m => (
                 <button key={m.id} onClick={() => { setMember(m); setResults([]) }}
-                  className="w-full flex items-center justify-between py-4 border-b border-black/15 hover:bg-black hover:text-white text-black transition px-3 text-left group">
-                  <span className={`${oswald.className} uppercase font-semibold tracking-wide`}>{m.name}</span>
-                  <span className="text-xs uppercase tracking-widest opacity-50 group-hover:opacity-80">PIN {m.pin} · {planLabel(m.plan)} · {meta(m.status).label}</span>
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 transition text-left">
+                  <span className="h-9 w-9 rounded-full bg-zinc-100 grid place-items-center text-xs font-semibold text-zinc-600 shrink-0">{initials(m.name)}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-medium text-zinc-900 truncate">{m.name}</span>
+                    <span className="block text-xs text-zinc-500">PIN {m.pin} · {planLabel(m.plan)}</span>
+                  </span>
+                  <StatusPill status={m.status} />
                 </button>
               ))}
             </div>
@@ -190,47 +213,49 @@ function CheckIn() {
         </>
       )}
 
-      {/* member card — white poster block */}
+      {/* member card */}
       {member && !confirmed && (
-        <div className="w-full max-w-md mt-8 bg-black text-white animate-in">
-          <div className="p-8 pb-6">
-            <div className="flex items-start gap-5">
-              <div className={`${oswald.className} h-20 w-20 bg-white text-black grid place-items-center text-2xl font-bold overflow-hidden shrink-0`}>
-                {member.photo ? <img src={member.photo} alt="" className="h-full w-full object-cover" /> : member.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
+        <div className="w-full max-w-md mt-4 bg-white border border-zinc-200 rounded-2xl shadow-sm overflow-hidden animate-in">
+          <div className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-full bg-zinc-100 grid place-items-center text-lg font-semibold text-zinc-600 overflow-hidden shrink-0">
+                {member.photo ? <img src={member.photo} alt="" className="h-full w-full object-cover" /> : initials(member.name)}
               </div>
-              <div className="min-w-0">
-                <h2 className={`${oswald.className} text-4xl font-bold uppercase leading-none tracking-tight`}>{member.name}</h2>
-                <p className="text-xs uppercase tracking-[0.2em] text-white/60 mt-2">{planLabel(member.plan)}{member.price ? ` — £${member.price}/MO` : ''} · PIN {member.pin}</p>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xl font-semibold tracking-tight text-zinc-900 truncate">{member.name}</h2>
+                <p className="text-sm text-zinc-500 mt-0.5">{planLabel(member.plan)}{member.price ? ` · £${member.price}/mo` : ''} · PIN {member.pin}</p>
               </div>
+              <StatusPill status={member.status} />
+            </div>
+            <div className="mt-4 rounded-xl bg-zinc-50 border border-zinc-100 px-4 py-3 flex items-center justify-between">
+              <p className="text-sm text-zinc-600">{pill(member.status).sub}</p>
+              <p className="text-xs text-zinc-400">
+                {member.checkedInToday ? `Already in today · ${fmtTime(member.checkedInToday)}`
+                  : member.lastVisit ? `Last visit ${fmtDay(member.lastVisit)}` : 'First visit'}
+              </p>
             </div>
           </div>
-          <div className={`${meta(member.status).bar} ${meta(member.status).text} px-8 py-4`}>
-            <p className={`${oswald.className} font-bold uppercase tracking-[0.15em]`}>{meta(member.status).label}</p>
-            <p className="text-[11px] uppercase tracking-[0.15em] opacity-80 mt-0.5">{meta(member.status).sub}</p>
-          </div>
-          <div className="px-8 py-3 text-[11px] uppercase tracking-[0.15em] text-white/50 border-b border-white/10">
-            {member.checkedInToday ? `Already checked in today at ${fmtTime(member.checkedInToday)}`
-              : member.lastVisit ? `Last visit ${fmtDay(member.lastVisit)}, ${fmtTime(member.lastVisit)}` : 'First visit'}
-          </div>
-          <div className="grid grid-cols-3">
-            <button onClick={reset} className={`${oswald.className} py-5 uppercase tracking-[0.15em] text-white/40 hover:text-white text-sm transition`}>Cancel</button>
+          <div className="px-6 pb-6 flex gap-3">
+            <button onClick={reset} className="h-12 px-5 rounded-xl border border-zinc-200 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition">Cancel</button>
             <button onClick={doCheckin} disabled={busy}
-              className={`${oswald.className} col-span-2 py-5 bg-white text-black font-bold uppercase tracking-[0.2em] text-lg hover:bg-neutral-200 transition disabled:opacity-60`}>
-              {busy ? '…' : 'Check in →'}
+              className="h-12 flex-1 rounded-xl bg-zinc-900 text-white font-medium hover:bg-zinc-800 active:scale-[0.99] transition disabled:opacity-60">
+              {busy ? 'Checking in…' : 'Check in'}
             </button>
           </div>
         </div>
       )}
 
-      {/* confirmation — full-bleed statement */}
+      {/* confirmation */}
       {confirmed && member && (
-        <div className="mt-24 text-center animate-in">
-          <p className={`${oswald.className} text-black text-6xl sm:text-7xl font-bold uppercase tracking-tight leading-none`}>{member.name.split(' ')[0]}</p>
-          <p className={`${oswald.className} text-[#16a34a] text-2xl font-bold uppercase tracking-[0.25em] mt-4`}>Checked in ✓</p>
-          <p className="text-black/40 text-xs uppercase tracking-[0.2em] mt-2">{fmtTime(confirmed)}</p>
+        <div className="mt-20 flex flex-col items-center animate-in">
+          <div className="h-20 w-20 rounded-full bg-green-100 grid place-items-center">
+            <svg className="h-10 w-10 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          </div>
+          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 mt-5">You're in, {member.name.split(' ')[0]}</h2>
+          <p className="text-sm text-zinc-500 mt-1">Checked in at {fmtTime(confirmed)}</p>
         </div>
       )}
-      <style jsx>{`.animate-in{animation:pop .22s ease-out}@keyframes pop{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}} .h-18{height:4.5rem}`}</style>
+      <style jsx>{`.animate-in{animation:rise .22s ease-out}@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}@media (prefers-reduced-motion: reduce){.animate-in{animation:none}}`}</style>
     </div>
   )
 }
@@ -248,31 +273,32 @@ function Today() {
   const shown = (data?.entries || []).filter(e => !cutoff || new Date(e.time).getTime() >= cutoff)
   return (
     <div className="w-full max-w-2xl">
-      <div className="flex items-end justify-between mb-2">
+      <div className="flex items-end justify-between">
         <div>
-          <p className="text-black/40 text-[11px] uppercase tracking-[0.25em]">{windowH ? `Last ${windowH}h` : today ? 'Checked in today' : date}</p>
-          <p className={`${oswald.className} text-black text-7xl font-bold leading-none mt-2`}>{data ? shown.length : '—'}</p>
+          <p className="text-sm text-zinc-500">{windowH ? `Checked in — last ${windowH}h` : today ? 'Checked in today' : `Attendance · ${date}`}</p>
+          <p className="text-6xl font-semibold tracking-tight tabular-nums mt-1">{data ? shown.length : '—'}</p>
         </div>
         <input type="date" value={date} onChange={e => setDate(e.target.value)}
-          className="bg-transparent border border-black/25 px-3 py-2 text-black text-sm outline-none focus:border-black [color-scheme:light]" />
+          className="h-10 px-3 rounded-xl border border-zinc-200 bg-white text-sm text-zinc-700 outline-none focus:border-zinc-900" />
       </div>
-      <div className="flex gap-6 mt-6 mb-6 border-b border-black/15">
-        {([[1, '1H'], [2, '2H'], [3, '3H'], [null, 'All day']] as const).map(([h, label]) => (
+      <div className="inline-flex items-center rounded-xl bg-zinc-200/70 p-1 mt-5 mb-5">
+        {([[1, 'Last hour'], [2, '2h'], [3, '3h'], [null, 'All day']] as const).map(([h, label]) => (
           <button key={label} onClick={() => setWindowH(h as number | null)} disabled={!today && h !== null}
-            className={`${oswald.className} uppercase tracking-[0.15em] text-xs font-semibold pb-2 border-b-2 -mb-px transition ${windowH === h ? 'text-black border-black' : 'text-black/35 border-transparent hover:text-black disabled:opacity-20'}`}>
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition ${windowH === h ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-800 disabled:opacity-30'}`}>
             {label}
           </button>
         ))}
       </div>
-      <div>
+      <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm divide-y divide-zinc-100 overflow-hidden">
         {shown.map((e, i) => (
-          <div key={i} className="flex items-center gap-5 py-3.5 border-b border-black/10">
-            <span className={`${oswald.className} text-black/40 text-sm tabular-nums w-12`}>{fmtTime(e.time)}</span>
-            <span className={`${oswald.className} text-black uppercase tracking-wide flex-1 truncate`}>{e.name}</span>
-            <span className={`text-[10px] uppercase tracking-[0.15em] px-2 py-1 ${meta(e.status).bar} ${meta(e.status).text}`}>{meta(e.status).label}</span>
+          <div key={i} className="flex items-center gap-3 px-4 py-3">
+            <span className="h-9 w-9 rounded-full bg-zinc-100 grid place-items-center text-xs font-semibold text-zinc-600 shrink-0">{initials(e.name)}</span>
+            <span className="flex-1 font-medium text-zinc-900 truncate">{e.name}</span>
+            <StatusPill status={e.status} />
+            <span className="text-sm text-zinc-400 tabular-nums w-12 text-right">{fmtTime(e.time)}</span>
           </div>
         ))}
-        {data && shown.length === 0 && <p className="text-black/25 text-center py-16 uppercase tracking-[0.2em] text-xs">No check-ins {windowH ? `in the last ${windowH}h` : today ? 'yet today' : 'on this day'}</p>}
+        {data && shown.length === 0 && <p className="text-sm text-zinc-400 text-center py-14">No check-ins {windowH ? `in the last ${windowH}h` : today ? 'yet today' : 'on this day'}.</p>}
       </div>
     </div>
   )
