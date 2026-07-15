@@ -9,7 +9,7 @@ const ok = (s: string) => s === 'ACTIVE' || s === 'TRIALING'
 
 function Logo() {
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src="/images/auralogo.png" alt="Aura" className="h-10 w-auto object-contain brightness-0 invert" />
+  return <img src="/images/auralogo.png" alt="Aura" className="h-10 w-auto object-contain" />
 }
 
 export default function ScreenPage() {
@@ -20,10 +20,10 @@ export default function ScreenPage() {
       setAuthed(!!role && ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN'].includes(role))
     }).catch(() => setAuthed(false))
   }, [])
-  if (authed === null) return <main className="min-h-screen bg-[#0B0B0C]" />
+  if (authed === null) return <main className="min-h-screen bg-[#F7F7F8]" />
   if (!authed) return (
-    <main className="min-h-screen bg-[#0B0B0C] grid place-items-center">
-      <p className="text-white/50 text-xl">Sign in at <span className="text-white font-medium">/reception</span> first, then reopen this page.</p>
+    <main className="min-h-screen bg-[#F7F7F8] grid place-items-center">
+      <p className="text-zinc-500 text-xl">Sign in at <span className="text-zinc-900 font-medium">/reception</span> first, then reopen this page.</p>
     </main>
   )
   return <LiveScreen />
@@ -67,16 +67,16 @@ function LiveScreen() {
   const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <main className="min-h-screen bg-[#0B0B0C] text-white overflow-hidden flex flex-col px-14 py-10">
+    <main className="min-h-screen bg-[#F7F7F8] text-zinc-900 overflow-hidden flex flex-col px-14 py-10">
       {/* header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-5">
           <Logo />
-          <div className="h-8 w-px bg-white/15" />
-          <p className="text-white/50 text-xl tracking-tight">{today}</p>
+          <div className="h-8 w-px bg-zinc-300" />
+          <p className="text-zinc-500 text-xl tracking-tight">{today}</p>
         </div>
         <div className="flex items-center gap-6">
-          <span className="flex items-center gap-2 text-white/40 text-sm uppercase tracking-[0.2em]">
+          <span className="flex items-center gap-2 text-zinc-400 text-sm uppercase tracking-[0.2em]">
             <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />Live
           </span>
           <p className="text-3xl font-semibold tabular-nums tracking-tight">{clock}</p>
@@ -86,36 +86,36 @@ function LiveScreen() {
       {/* body */}
       <div className="flex-1 flex items-center gap-16 mt-4">
         <div className="shrink-0">
-          <p className="text-white/40 text-2xl">Checked in today</p>
-          <p className="text-[11rem] leading-none font-semibold tabular-nums tracking-tighter mt-2">{count ?? '—'}</p>
+          <p className="text-zinc-500 text-2xl">Checked in today</p>
+          <p className="text-[11rem] leading-none font-semibold tabular-nums tracking-tighter mt-2 text-zinc-900">{count ?? '—'}</p>
         </div>
         <div className="flex-1 max-w-2xl">
-          <p className="text-white/30 text-sm uppercase tracking-[0.25em] mb-4">Recent</p>
-          <div className="space-y-1">
+          <p className="text-zinc-400 text-sm uppercase tracking-[0.25em] mb-4">Recent</p>
+          <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm px-6 py-2">
             {entries.slice(0, 6).map(e => (
-              <div key={e.id} className="flex items-center gap-4 py-3 border-b border-white/[0.07]">
-                <span className="h-11 w-11 rounded-full bg-white/10 grid place-items-center text-sm font-semibold text-white/70 shrink-0 overflow-hidden">
+              <div key={e.id} className="flex items-center gap-4 py-4 border-b border-zinc-100 last:border-0">
+                <span className="h-11 w-11 rounded-full bg-zinc-100 grid place-items-center text-sm font-semibold text-zinc-600 shrink-0 overflow-hidden">
                   {e.photo ? <img src={e.photo} alt="" className="h-full w-full object-cover" /> : initials(e.name)}
                 </span>
-                <span className="flex-1 text-2xl font-medium tracking-tight truncate">{e.name}</span>
-                {!ok(e.status) && <span className="text-xs uppercase tracking-widest text-amber-400/90">{e.status.replace('_', ' ')}</span>}
-                <span className="text-white/35 text-xl tabular-nums">{fmtTime(e.time)}</span>
+                <span className="flex-1 text-2xl font-medium tracking-tight truncate text-zinc-900">{e.name}</span>
+                {!ok(e.status) && <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">{e.status.replace('_', ' ')}</span>}
+                <span className="text-zinc-400 text-xl tabular-nums">{fmtTime(e.time)}</span>
               </div>
             ))}
-            {entries.length === 0 && <p className="text-white/25 text-2xl py-10">No check-ins yet today</p>}
+            {entries.length === 0 && <p className="text-zinc-400 text-2xl py-10">No check-ins yet today</p>}
           </div>
         </div>
       </div>
 
       {/* confirmation takeover */}
       {pop && (
-        <div className="fixed inset-0 bg-[#0B0B0C]/97 backdrop-blur grid place-items-center pop-in">
+        <div className="fixed inset-0 bg-[#F7F7F8]/97 backdrop-blur grid place-items-center pop-in">
           <div className="text-center px-10">
-            <div className="mx-auto h-32 w-32 rounded-full bg-green-500/15 grid place-items-center draw">
-              <svg className="h-16 w-16 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            <div className="mx-auto h-32 w-32 rounded-full bg-green-100 grid place-items-center draw">
+              <svg className="h-16 w-16 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
             </div>
-            <h2 className="text-7xl font-semibold tracking-tight mt-10">{pop.name}</h2>
-            <p className="text-green-500 text-3xl font-medium mt-4">Checked in · {fmtTime(pop.time)}</p>
+            <h2 className="text-7xl font-semibold tracking-tight mt-10 text-zinc-900">{pop.name}</h2>
+            <p className="text-green-600 text-3xl font-medium mt-4">Checked in · {fmtTime(pop.time)}</p>
           </div>
         </div>
       )}
