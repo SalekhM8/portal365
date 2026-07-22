@@ -279,6 +279,10 @@ function AdminDashboardContent() {
 
   // 🚀 NEW: Membership management states
   const [membershipAction, setMembershipAction] = useState<'pause' | 'resume' | 'cancel' | 'reactivate' | null>(null)
+  const [showExtendPause, setShowExtendPause] = useState(false)
+  const [extendPauseDate, setExtendPauseDate] = useState('')
+  const [extendPauseReason, setExtendPauseReason] = useState('')
+  const [extendPauseBusy, setExtendPauseBusy] = useState(false)
   const [membershipActionLoading, setMembershipActionLoading] = useState(false)
   const [membershipActionReason, setMembershipActionReason] = useState('')
   const [reactivateProrateAmount, setReactivateProrateAmount] = useState<string>('')
@@ -2380,7 +2384,13 @@ function AdminDashboardContent() {
                       </div>
                 )}
                 {(selectedCustomer.subscriptionStatus === 'PAUSED' || selectedCustomer.status === 'PAUSED') && (
-          <Button variant="outline" onClick={() => openMembershipActionModal('resume')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Resume</Button>
+          <div className="flex flex-col gap-2 w-full">
+            <Button variant="outline" onClick={() => openMembershipActionModal('resume')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Resume</Button>
+            <Button variant="outline" onClick={() => {
+              const d = new Date(); const endNextMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 2, 0))
+              setExtendPauseDate(endNextMonth.toISOString().slice(0, 10)); setExtendPauseReason(''); setShowExtendPause(true)
+            }} className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10 w-full">Extend pause</Button>
+          </div>
                     )}
                 {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && (
           <Button variant="outline" onClick={() => openMembershipActionModal('reactivate')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Reactivate</Button>
@@ -2937,6 +2947,39 @@ function AdminDashboardContent() {
         </div>
       )}
 
+      {/* Extend Pause Modal */}
+      {showExtendPause && selectedCustomer && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-white/15 rounded-2xl max-w-sm w-full p-6">
+            <h3 className="text-white text-lg font-semibold">Extend pause</h3>
+            <p className="text-white/50 text-sm mt-1 mb-4">{selectedCustomer.name} stays paused (no billing) until this date. First charge is the day after. Max 3 months total.</p>
+            <Label className="text-white mb-1.5 block">Paused until (inclusive)</Label>
+            <input type="date" value={extendPauseDate} onChange={e => setExtendPauseDate(e.target.value)}
+              className="w-full mb-4 p-3 bg-white/5 border border-white/20 rounded text-white [color-scheme:dark]" />
+            <Label className="text-white mb-1.5 block">Reason</Label>
+            <input value={extendPauseReason} onChange={e => setExtendPauseReason(e.target.value)} placeholder="e.g. Family away until September"
+              className="w-full mb-5 p-3 bg-white/5 border border-white/20 rounded text-white placeholder:text-white/40" />
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 border-white/20 text-white" onClick={() => setShowExtendPause(false)}>Cancel</Button>
+              <Button className="flex-1 bg-yellow-600 hover:bg-yellow-500" disabled={extendPauseBusy || !extendPauseDate || extendPauseReason.trim().length < 3}
+                onClick={async () => {
+                  setExtendPauseBusy(true)
+                  try {
+                    const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/extend-pause`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ newEndDate: extendPauseDate, reason: extendPauseReason.trim() })
+                    })
+                    const json = await resp.json()
+                    if (resp.ok && json.success) { alert(json.message); setShowExtendPause(false); fetchAdminData() }
+                    else alert('Extend failed: ' + (json.error || 'Unknown error'))
+                  } finally { setExtendPauseBusy(false) }
+                }}>
+                {extendPauseBusy ? 'Extending…' : 'Extend'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* 🚀 NEW: Change Plan (Admin) Modal */}
       {showChangePlanModal && selectedCustomer && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
