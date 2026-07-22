@@ -6,6 +6,7 @@ import { signIn, signOut } from 'next-auth/react'
 type Member = {
   id: string; name: string; photo: string | null; pin: string
   plan: string | null; price: number; status: string
+  packageEnd?: string | null
   lastVisit: string | null; checkedInToday: string | null
 }
 type Entry = { time: string; name: string; photo: string | null; status: string }
@@ -16,6 +17,7 @@ const PILL: Record<string, { label: string; sub: string; cls: string; dot: strin
   PAST_DUE:  { label: 'Payment due',   sub: 'Let in — mention the failed payment',  cls: 'bg-amber-100 text-amber-800',   dot: 'bg-amber-500' },
   PAUSED:    { label: 'Paused',        sub: 'Membership is paused',                 cls: 'bg-zinc-200 text-zinc-700',     dot: 'bg-zinc-500' },
   CANCELLED: { label: 'Cancelled',     sub: 'No active membership',                 cls: 'bg-red-100 text-red-800',       dot: 'bg-red-600' },
+  EXPIRED:   { label: 'Package ended', sub: 'Package term is over — renew at the desk', cls: 'bg-red-100 text-red-800',   dot: 'bg-red-600' },
   NONE:      { label: 'No membership', sub: 'Nothing on file',                      cls: 'bg-red-100 text-red-800',       dot: 'bg-red-600' },
 }
 const pill = (s: string) => PILL[s] || PILL.NONE
@@ -223,7 +225,7 @@ function CheckIn() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-xl font-semibold tracking-tight text-zinc-900 truncate">{member.name}</h2>
-                <p className="text-sm text-zinc-500 mt-0.5">{planLabel(member.plan)}{member.price ? ` · £${member.price}/mo` : ''} · PIN {member.pin}</p>
+                <p className="text-sm text-zinc-500 mt-0.5">{planLabel(member.plan)}{member.packageEnd ? ` · ends ${fmtDay(member.packageEnd)}` : (member.price ? ` · £${member.price}/mo` : '')} · PIN {member.pin}</p>
               </div>
               <StatusPill status={member.status} />
             </div>

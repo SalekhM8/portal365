@@ -600,3 +600,21 @@ model SubscriptionPauseWindow {
   @@index([status])
   @@map("subscription_pause_windows")
 }
+
+// ============================================================================
+// OFFLINE (CASH) PACKAGES — fixed-term memberships paid off-platform.
+// Deliberately separate from MembershipPlan so they can never appear in
+// Stripe plan pickers. Members get a Membership row with endDate set and
+// no Subscription; check-in derives ACTIVE/EXPIRED from endDate.
+// ============================================================================
+model OfflinePackage {
+  id        String   @id @default(cuid())
+  name      String   @unique // e.g. "6-Month Cash"
+  months    Int      // package length in months
+  price     Decimal  @db.Decimal(10, 2) // cash price, display only
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("offline_packages")
+}

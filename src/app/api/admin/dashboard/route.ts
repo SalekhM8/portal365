@@ -1312,6 +1312,29 @@ export async function GET() {
       }
     } catch {}
 
+    // Offline/cash package members finishing soon (<=30d) or already ended
+    const pkgSoon = new Date(Date.now() + 30 * 86400000)
+    const pkgMemberships = await prisma.membership.findMany({
+      where: { endDate: { not: null, lte: pkgSoon }, status: 'ACTIVE' },
+      include: { user: { select: { id: true, firstName: true, lastName: true, pin: true } } },
+      orderBy: { endDate: 'asc' }
+    })
+    const packagesTodo: any[] = []
+    for (const pm of pkgMemberships) {
+      const hasLiveSub = await prisma.subscription.findFirst({ where: { userId: pm.userId, status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE'] } }, select: { id: true } })
+      if (hasLiveSub) continue // not an offline-package member
+      const daysLeft = Math.ceil(((pm as any).endDate.getTime() - Date.now()) / 86400000)
+      packagesTodo.push({
+        customerId: pm.userId,
+        customerName: `${(pm as any).user.firstName} ${(pm as any).user.lastName}`.replace(/\s+/g, ' ').trim(),
+        packageName: pm.membershipType,
+        endDate: (pm as any).endDate.toISOString().slice(0, 10),
+        daysLeft,
+        expired: daysLeft < 0,
+        pin: (pm as any).user.pin || null
+      })
+    }
+
     return NextResponse.json({
       parityMode: useStripeLedger ? 'stripe_ledger' : 'db',
       build: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0,7) || null,
@@ -1333,6 +1356,7 @@ export async function GET() {
         hasMore: totalPaymentsCount > 50
       },
       payments_todo,
+      packages_todo: packagesTodo,
       metrics: {
         // Strict Stripe-ledger parity when enabled
         totalRevenue: useStripeLedger ? (ledgerTotalNetAllTime || 0) : ((ledgerTotalNetAllTime ?? Number(totalRevenue._sum.amount)) || 0),

@@ -72,6 +72,9 @@ function PackagesContent() {
           </Button>
         </div>
         <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Package Management</h1>
+      </div>
+      <OfflinePackagesSection />
+      <div className="space-y-1">
         {!isPlansAdminEnabled() ? (
           <p className="text-sm lg:text-base text-muted-foreground">Read-only preview</p>
         ) : null}
@@ -395,3 +398,46 @@ export default function PackagesPage() {
 }
 
 
+// ── Offline / cash packages (fixed-term, no Stripe) ──
+function OfflinePackagesSection() {
+  const [pkgs, setPkgs] = useState<any[]>([])
+  const [name, setName] = useState('')
+  const [months, setMonths] = useState('6')
+  const [price, setPrice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const load = () => fetch('/api/admin/offline-packages').then(r => r.json()).then(j => setPkgs(j.packages || [])).catch(() => {})
+  useEffect(() => { load() }, [])
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold text-white">Cash packages (offline)</h2>
+        <p className="text-xs text-white/50">Fixed-term memberships paid at the desk — no Stripe, no billing. Members get a PIN and expire at term end.</p>
+      </div>
+      <div className="grid gap-2 md:grid-cols-4">
+        <Input placeholder="Name e.g. 6-Month Cash" value={name} onChange={e => setName(e.target.value)} className="bg-white/5 border-white/10 text-white placeholder:text-white/40" />
+        <Input placeholder="Months" type="number" min="1" max="24" value={months} onChange={e => setMonths(e.target.value)} className="bg-white/5 border-white/10 text-white placeholder:text-white/40" />
+        <Input placeholder="Cash price £" type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className="bg-white/5 border-white/10 text-white placeholder:text-white/40" />
+        <Button disabled={busy || !name.trim() || !months || !price} onClick={async () => {
+          setBusy(true)
+          try {
+            const r = await fetch('/api/admin/offline-packages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), months: Number(months), price: Number(price) }) })
+            const j = await r.json()
+            if (r.ok && j.success) { setName(''); setPrice(''); load() } else alert(j.error || 'Failed')
+          } finally { setBusy(false) }
+        }}>Create</Button>
+      </div>
+      <div className="space-y-1.5">
+        {pkgs.map(pk => (
+          <div key={pk.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/10">
+            <span className="text-white text-sm">{pk.name} <span className="text-white/40">· {pk.months}mo · £{pk.price}</span></span>
+            <Button size="sm" variant="outline" className={pk.active ? 'border-white/20 text-white/70' : 'border-green-500/20 text-green-400'}
+              onClick={async () => { await fetch('/api/admin/offline-packages', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pk.id, active: !pk.active }) }); load() }}>
+              {pk.active ? 'Deactivate' : 'Activate'}
+            </Button>
+          </div>
+        ))}
+        {pkgs.length === 0 && <p className="text-white/40 text-sm">No packages yet — create your first above.</p>}
+      </div>
+    </div>
+  )
+}

@@ -279,6 +279,11 @@ function AdminDashboardContent() {
 
   // 🚀 NEW: Membership management states
   const [membershipAction, setMembershipAction] = useState<'pause' | 'resume' | 'cancel' | 'reactivate' | null>(null)
+  const [addBillingMode, setAddBillingMode] = useState<'stripe' | 'package'>('stripe')
+  const [offlinePkgs, setOfflinePkgs] = useState<any[]>([])
+  const [addPackageId, setAddPackageId] = useState('')
+  const [addPackageStart, setAddPackageStart] = useState(() => new Date().toISOString().slice(0, 10))
+  const [packagesTodo, setPackagesTodo] = useState<any[]>([])
   const [showExtendPause, setShowExtendPause] = useState(false)
   const [extendPauseDate, setExtendPauseDate] = useState('')
   const [extendPauseReason, setExtendPauseReason] = useState('')
@@ -382,6 +387,7 @@ function AdminDashboardContent() {
         setRecentActivity(data.recentActivity || [])
         setAnalytics(data.analytics || null)
         setPaymentsTodo(data.payments_todo || [])
+        setPackagesTodo(data.packages_todo || [])
         setInitialLoadDone(true)
       } catch (e) {
         // Cache corrupted - fetch fresh
@@ -524,6 +530,7 @@ function AdminDashboardContent() {
         setPaymentsServerFiltered(false) // Reset server-filtered flag
       }
       setPaymentsTodo(Array.isArray(data.payments_todo) ? data.payments_todo : [])
+      setPackagesTodo(Array.isArray(data.packages_todo) ? data.packages_todo : [])
       setBusinessMetrics(data.metrics)
       setRecentActivity(data.recentActivity)
       setAnalytics(data.analytics)
@@ -571,6 +578,26 @@ function AdminDashboardContent() {
     setAddCustomerError('')
 
     try {
+      if (addBillingMode === 'package') {
+        const pkg = offlinePkgs.find((x: any) => x.id === addPackageId)
+        if (!pkg) { setAddCustomerError('Pick a package'); setAddCustomerLoading(false); return }
+        const resp = await fetch('/api/admin/customers/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            firstName: addCustomerData.firstName, lastName: addCustomerData.lastName,
+            email: addCustomerData.email, phone: addCustomerData.phone,
+            dateOfBirth: addCustomerData.dateOfBirth,
+            offlinePackageId: addPackageId, customPrice: Number(pkg.price) || 1,
+            startDate: addPackageStart,
+            emergencyContact: addCustomerData.emergencyContact.name ? addCustomerData.emergencyContact : undefined
+          })
+        })
+        const rj = await resp.json()
+        if (resp.ok && rj.success) { alert(rj.message); setShowAddCustomer(false); fetchAdminData() }
+        else setAddCustomerError(rj.error || 'Failed to add package member')
+        setAddCustomerLoading(false)
+        return
+      }
       const response = await fetch('/api/admin/customers/create', {
         method: 'POST',
         headers: {
@@ -1411,8 +1438,9 @@ function AdminDashboardContent() {
                 <CardTitle>Overview</CardTitle>
                 <CardDescription>Quick access</CardDescription>
                 <Tabs defaultValue="todo" className="mt-3">
-                  <TabsList className="grid w-full grid-cols-2 h-auto">
+                  <TabsList className="grid w-full grid-cols-3 h-auto">
                     <TabsTrigger value="todo" className="text-xs">To‑Do</TabsTrigger>
+                    <TabsTrigger value="packages" className="text-xs">Packages{packagesTodo.length > 0 ? ` (${packagesTodo.length})` : ''}</TabsTrigger>
                     <TabsTrigger value="activity" className="text-xs">Recent</TabsTrigger>
                   </TabsList>
                   <TabsContent value="todo" className="mt-4">
@@ -1476,6 +1504,33 @@ function AdminDashboardContent() {
                           </>
                         )
                       })()}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="packages" className="mt-4">
+                    <div className="space-y-3">
+                      {packagesTodo.length === 0 && <p className="text-white/50 text-sm py-6 text-center">No packages ending in the next 30 days.</p>}
+                      {packagesTodo.map((pk: any) => (
+                        <div key={pk.customerId} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-white/10 bg-white/5">
+                          <div className="min-w-0">
+                            <p className="text-white font-medium truncate">{pk.customerName}</p>
+                            <p className="text-xs text-white/50">{pk.packageName} · PIN {pk.pin || '—'}</p>
+                            <p className={`text-xs mt-0.5 ${pk.expired ? 'text-red-400' : 'text-amber-400'}`}>
+                              {pk.expired ? `Expired ${pk.endDate}` : `Ends ${pk.endDate} (${pk.daysLeft}d left)`}
+                            </p>
+                          </div>
+                          <Button size="sm" variant="outline" className="border-green-500/20 text-green-400 hover:bg-green-500/10 shrink-0"
+                            onClick={async () => {
+                              const m = window.prompt(`Renew ${pk.customerName} for how many months? (cash taken at desk)`, '6')
+                              const months = Number(m)
+                              if (!m || !Number.isInteger(months) || months < 1 || months > 24) return
+                              const resp = await fetch(`/api/admin/customers/${pk.customerId}/renew-package`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months }) })
+                              const j = await resp.json()
+                              if (resp.ok && j.success) { alert(j.message); fetchAdminData() } else alert('Renew failed: ' + (j.error || 'Unknown'))
+                            }}>
+                            Renew
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   </TabsContent>
                   <TabsContent value="activity" className="mt-4">
@@ -1691,7 +1746,7 @@ function AdminDashboardContent() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button onClick={() => setShowAddCustomer(true)}>
+              <Button onClick={() => { setAddBillingMode('stripe'); setAddPackageId(''); setShowAddCustomer(true); fetch('/api/admin/offline-packages').then(r => r.json()).then(j => setOfflinePkgs((j.packages || []).filter((x: any) => x.active))).catch(() => {}) }}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 Add Customer
               </Button>
@@ -2598,7 +2653,35 @@ function AdminDashboardContent() {
                   />
                 </div>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label className="text-white">Billing *</Label>
+                <div className="flex gap-2 mt-1">
+                  <Button type="button" variant={addBillingMode === 'stripe' ? 'default' : 'outline'} className={addBillingMode === 'stripe' ? '' : 'border-white/20 text-white'} onClick={() => setAddBillingMode('stripe')}>Monthly (card)</Button>
+                  <Button type="button" variant={addBillingMode === 'package' ? 'default' : 'outline'} className={addBillingMode === 'package' ? '' : 'border-white/20 text-white'} onClick={() => setAddBillingMode('package')}>Cash package</Button>
+                </div>
+              </div>
+              {addBillingMode === 'package' && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label className="text-white">Package *</Label>
+                    <Select value={addPackageId} onValueChange={setAddPackageId}>
+                      <SelectTrigger className="bg-white/5 border-white/20 text-white"><SelectValue placeholder="Pick a package" /></SelectTrigger>
+                      <SelectContent className="bg-black border-white/20">
+                        {offlinePkgs.map((pk: any) => (
+                          <SelectItem key={pk.id} value={pk.id} className="text-white hover:bg-white/10">{pk.name} — {pk.months}mo · £{pk.price} cash</SelectItem>
+                        ))}
+                        {offlinePkgs.length === 0 && <SelectItem value="_none" disabled className="text-white/50">No packages — create one in Package Management</SelectItem>}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-white">Package start date *</Label>
+                    <Input type="date" value={addPackageStart} onChange={(e) => setAddPackageStart(e.target.value)} className="bg-white/5 border-white/20 text-white [color-scheme:dark]" />
+                    <p className="text-xs text-white/60 mt-1">Paid in cash at the desk — no Stripe, no billing.</p>
+                  </div>
+                </div>
+              )}
+              {addBillingMode === 'stripe' && (<div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor="add-membership" className="text-white">Membership Type *</Label>
                   <Select value={addCustomerData.membershipType} onValueChange={(value) => setAddCustomerData({ ...addCustomerData, membershipType: value })}>
@@ -2624,13 +2707,13 @@ function AdminDashboardContent() {
                     placeholder="e.g. 45.00" 
                     value={addCustomerData.customPrice} 
                     onChange={(e) => setAddCustomerData({ ...addCustomerData, customPrice: e.target.value })}
-                    required
+                    required={addBillingMode === 'stripe'}
                     className="bg-white/5 border-white/20 text-white placeholder:text-white/50"
                   />
                 </div>
-              </div>
+              </div>)}
               <div className="grid gap-4 md:grid-cols-2">
-                <div>
+                {addBillingMode === 'stripe' ? (<div>
                   <Label htmlFor="add-startDate" className="text-white">Start Month *</Label>
                   <Select 
                     value={addCustomerData.startDate ? addCustomerData.startDate.substring(0, 7) : ''} 
@@ -2663,7 +2746,7 @@ function AdminDashboardContent() {
                   <p className="text-xs text-white/60 mt-1">
                     Customer will be charged starting from the 1st of the selected month
                   </p>
-                </div>
+                </div>) : (<div />)}
                 <div>
                   <Label htmlFor="add-dateOfBirth" className="text-white">Date of Birth</Label>
                   <Input 
