@@ -19,7 +19,8 @@ const adminCreateCustomerSchema = z.object({
     phone: z.string(),
     relationship: z.string()
   }).optional(),
-  membershipType: z.enum(['WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14', 'FULL_ADULT', 'KIDS_UNLIMITED_UNDER14', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']),
+  membershipType: z.enum(['WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14', 'FULL_ADULT', 'KIDS_UNLIMITED_UNDER14', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']).optional(),
+  offlinePackageId: z.string().optional(), // cash/offline package — no Stripe, fixed term
   customPrice: z.number().min(1, 'Price must be greater than 0'),
   startDate: z.string().regex(/^\d{4}-\d{2}-01$/, 'Start date must be first of month (YYYY-MM-01)'),
   routedEntity: z.string().optional()
@@ -72,6 +73,44 @@ export async function POST(request: NextRequest) {
     await assignUniquePin(user.id) // door check-in PIN
     
     console.log('✅ Admin-created user:', user.id)
+
+    // ── OFFLINE (CASH) PACKAGE: fixed-term membership, no Stripe at all ──
+    if (validatedData.offlinePackageId) {
+      const pkg = await prisma.offlinePackage.findUnique({ where: { id: validatedData.offlinePackageId } })
+      if (!pkg || !pkg.active) {
+        await prisma.user.delete({ where: { id: user.id } }).catch(() => {})
+        return NextResponse.json({ error: 'Unknown or inactive package' }, { status: 400 })
+      }
+      const start = new Date(validatedData.startDate)
+      const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + pkg.months, start.getUTCDate()))
+      await prisma.membership.create({
+        data: {
+          userId: user.id,
+          membershipType: pkg.name,
+          status: 'ACTIVE',
+          startDate: start,
+          endDate: end,
+          monthlyPrice: Number(pkg.price),
+          setupFee: 0,
+          accessPermissions: JSON.stringify({ martialArts: ['bjj', 'boxing', 'muay_thai', 'mma'], personalTraining: false, womensClasses: false, wellness: false }),
+          scheduleAccess: JSON.stringify({ weekdays: true, weekends: true, timeSlots: ['morning', 'afternoon', 'evening'] }),
+          ageCategory: 'ADULT',
+          billingDay: 1,
+          nextBillingDate: end
+        }
+      })
+      const freshUser = await prisma.user.findUnique({ where: { id: user.id }, select: { pin: true } })
+      return NextResponse.json({
+        success: true,
+        offlinePackage: true,
+        message: `${validatedData.firstName} added on ${pkg.name} — runs ${start.toISOString().slice(0, 10)} to ${end.toISOString().slice(0, 10)}. PIN: ${freshUser?.pin}`,
+        customer: { id: user.id, pin: freshUser?.pin, packageEnd: end.toISOString().slice(0, 10) }
+      })
+    }
+    if (!validatedData.membershipType) {
+      await prisma.user.delete({ where: { id: user.id } }).catch(() => {})
+      return NextResponse.json({ error: 'membershipType or offlinePackageId required' }, { status: 400 })
+    }
     
     // Get membership details (will be overridden by custom price)
     const getMembershipDetails = (membershipType: string) => {

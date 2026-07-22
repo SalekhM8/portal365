@@ -152,7 +152,7 @@ function Kiosk() {
             <svg className={`h-7 w-7 ${member.status === 'PAST_DUE' ? 'text-amber-600' : 'text-red-600'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 mt-4">{member.name.split(' ')[0]}, please speak to the desk</h2>
-          <p className="text-zinc-600 mt-2">{member.status === 'PAST_DUE' ? 'There’s a payment issue on your membership.' : 'Your membership isn’t active.'}</p>
+          <p className="text-zinc-600 mt-2">{member.status === 'PAST_DUE' ? 'There’s a payment issue on your membership.' : member.status === 'EXPIRED' ? 'Your package has ended — the desk can renew it.' : 'Your membership isn’t active.'}</p>
           <button onClick={reset} className="mt-6 text-sm text-zinc-500 underline">Back</button>
         </div>
       )}

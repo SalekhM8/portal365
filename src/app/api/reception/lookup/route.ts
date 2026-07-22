@@ -50,6 +50,11 @@ export async function POST(request: NextRequest) {
       orderBy: { accessTime: 'desc' },
     })
     const todayCheckin = lastCheckin && lastCheckin.accessTime >= startOfDay ? lastCheckin : null
+    // Offline/cash package members: no subscription, membership has endDate.
+    // Status derives from the package term — ACTIVE until endDate, EXPIRED after.
+    const isOfflinePackage = !sub && !!membership?.endDate
+    let status = sub?.status || membership?.status || 'NONE'
+    if (isOfflinePackage) status = (membership!.endDate! >= new Date()) ? 'ACTIVE' : 'EXPIRED'
     members.push({
       id: u.id,
       name: `${u.firstName} ${u.lastName}`.replace(/\s+/g, ' ').trim(),
@@ -57,7 +62,8 @@ export async function POST(request: NextRequest) {
       pin: u.pin,
       plan: membership?.membershipType || sub?.membershipType || null,
       price: Number(sub?.monthlyPrice ?? membership?.monthlyPrice ?? 0),
-      status: sub?.status || membership?.status || 'NONE',
+      status,
+      packageEnd: isOfflinePackage ? membership!.endDate!.toISOString() : null,
       lastVisit: lastCheckin ? lastCheckin.accessTime.toISOString() : null,
       checkedInToday: todayCheckin ? todayCheckin.accessTime.toISOString() : null,
     })
