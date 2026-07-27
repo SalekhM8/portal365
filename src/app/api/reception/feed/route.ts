@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       where: { accessMethod: 'PIN_RECEPTION', accessTime: { gte: dayStart } },
       orderBy: { accessTime: 'desc' },
       take: 8,
-      include: { user: { select: { firstName: true, lastName: true, profileImage: true } } },
+      include: { user: { select: { firstName: true, lastName: true, profileImage: true, memberships: { select: { membershipType: true }, orderBy: { updatedAt: 'desc' }, take: 1 } } } },
     }),
   ])
   const entries = latest.map(l => ({
@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
     time: l.accessTime.toISOString(),
     name: `${l.user.firstName} ${l.user.lastName}`.replace(/\s+/g, ' ').trim(),
     photo: l.user.profileImage || null,
+    plan: (l.user as any).memberships?.[0]?.membershipType || null,
     status: l.membershipStatus || '-',
   }))
   const newest = entries[0]?.id || ''

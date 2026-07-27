@@ -11,6 +11,9 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions) as any
     if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Self-serve pausing disabled (July 2026) — pauses are handled by the gym so
+    // they're always scheduled/tracked properly. Members should contact the desk.
+    return NextResponse.json({ error: 'Pausing is handled by the gym — please message us or speak to the desk and we\'ll sort it.' }, { status: 403 })
     const parent = await prisma.user.findUnique({ where: { email: session.user.email } })
     if (!parent) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 

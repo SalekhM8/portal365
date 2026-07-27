@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { signIn, signOut } from 'next-auth/react'
+import PhotoCapture from '@/components/PhotoCapture'
 
 type Member = {
   id: string; name: string; photo: string | null; pin: string
@@ -117,6 +118,7 @@ function CheckIn() {
   const [confirmed, setConfirmed] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState('')
+  const [showCamera, setShowCamera] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -231,6 +233,9 @@ function CheckIn() {
             </div>
             <div className="mt-4 rounded-xl bg-zinc-50 border border-zinc-100 px-4 py-3 flex items-center justify-between">
               <p className="text-sm text-zinc-600">{pill(member.status).sub}</p>
+              <button onClick={() => setShowCamera(true)} className="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline shrink-0 ml-3">
+                {member.photo ? 'Retake photo' : 'Add photo'}
+              </button>
               <p className="text-xs text-zinc-400">
                 {member.checkedInToday ? `Already in today · ${fmtTime(member.checkedInToday)}`
                   : member.lastVisit ? `Last visit ${fmtDay(member.lastVisit)}` : 'First visit'}
@@ -256,6 +261,10 @@ function CheckIn() {
           <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 mt-5">You're in, {member.name.split(' ')[0]}</h2>
           <p className="text-sm text-zinc-500 mt-1">Checked in at {fmtTime(confirmed)}</p>
         </div>
+      )}
+      {showCamera && member && (
+        <PhotoCapture userId={member.id} name={member.name} onClose={() => setShowCamera(false)}
+          onSaved={(dataUrl) => setMember(m => m ? { ...m, photo: dataUrl } : m)} />
       )}
       <style jsx>{`.animate-in{animation:rise .22s ease-out}@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}@media (prefers-reduced-motion: reduce){.animate-in{animation:none}}`}</style>
     </div>

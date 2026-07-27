@@ -302,7 +302,7 @@ export default function FamilyPage() {
                   {/* Pause/Resume/Cancel */}
                   <div className="flex flex-wrap gap-2">
                     {c.status === 'ACTIVE' && (
-                      <Button variant="outline" onClick={() => pauseChild(c.childId)}>Pause</Button>
+                      {/* Self-pause disabled — pausing is desk/admin only */}
                     )}
                     {c.status === 'PAUSED' && (
                       <Button variant="outline" onClick={() => resumeChild(c.childId)}>Resume</Button>
