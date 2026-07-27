@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { signIn, signOut } from 'next-auth/react'
 import PhotoCapture from '@/components/PhotoCapture'
+import MemberPeek from '@/components/MemberPeek'
 
 type Member = {
   id: string; name: string; photo: string | null; pin: string
@@ -10,7 +11,7 @@ type Member = {
   packageEnd?: string | null
   lastVisit: string | null; checkedInToday: string | null
 }
-type Entry = { time: string; name: string; photo: string | null; status: string }
+type Entry = { userId?: string; time: string; name: string; photo: string | null; status: string }
 
 const PILL: Record<string, { label: string; sub: string; cls: string; dot: string }> = {
   ACTIVE:    { label: 'Active',        sub: 'Good to go',                           cls: 'bg-green-100 text-green-800',   dot: 'bg-green-600' },
@@ -275,6 +276,7 @@ function Today() {
   const [date, setDate] = useState(() => new Date().toLocaleDateString('sv-SE'))
   const [data, setData] = useState<{ count: number; entries: Entry[] } | null>(null)
   const [windowH, setWindowH] = useState<number | null>(null)
+  const [peek, setPeek] = useState<string | null>(null)
   const load = useCallback(() => {
     fetch(`/api/reception/attendance?date=${date}`).then(r => r.json()).then(setData).catch(() => {})
   }, [date])
@@ -302,7 +304,7 @@ function Today() {
       </div>
       <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm divide-y divide-zinc-100 overflow-hidden">
         {shown.map((e, i) => (
-          <div key={i} className="flex items-center gap-3 px-4 py-3">
+          <div key={i} onClick={() => e.userId && setPeek(e.userId)} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 transition">
             <span className="h-9 w-9 rounded-full bg-zinc-100 grid place-items-center text-xs font-semibold text-zinc-600 shrink-0">{initials(e.name)}</span>
             <span className="flex-1 font-medium text-zinc-900 truncate">{e.name}</span>
             <StatusPill status={e.status} />
@@ -311,6 +313,7 @@ function Today() {
         ))}
         {data && shown.length === 0 && <p className="text-sm text-zinc-400 text-center py-14">No check-ins {windowH ? `in the last ${windowH}h` : today ? 'yet today' : 'on this day'}.</p>}
       </div>
+      {peek && <MemberPeek userId={peek} onClose={() => setPeek(null)} />}
     </div>
   )
 }

@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
   ])
   const entries = latest.map(l => ({
     id: l.id,
+    userId: l.userId,
     time: l.accessTime.toISOString(),
     name: `${l.user.firstName} ${l.user.lastName}`.replace(/\s+/g, ' ').trim(),
     photo: l.user.profileImage || null,
