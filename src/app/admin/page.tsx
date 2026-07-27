@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import PhotoCapture from '@/components/PhotoCapture'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
@@ -280,6 +281,7 @@ function AdminDashboardContent() {
   // 🚀 NEW: Membership management states
   const [membershipAction, setMembershipAction] = useState<'pause' | 'resume' | 'cancel' | 'reactivate' | null>(null)
   const [addBillingMode, setAddBillingMode] = useState<'stripe' | 'package'>('stripe')
+  const [photoTarget, setPhotoTarget] = useState<{ id: string; name: string } | null>(null)
   const [offlinePkgs, setOfflinePkgs] = useState<any[]>([])
   const [addPackageId, setAddPackageId] = useState('')
   const [addPackageStart, setAddPackageStart] = useState(() => new Date().toISOString().slice(0, 10))
@@ -2321,6 +2323,9 @@ function AdminDashboardContent() {
                   <div className="px-3 pb-3 space-y-2">
                     <p className="text-white"><strong className="text-white/90">Date of Birth:</strong> {(selectedCustomer as any).dateOfBirth ? new Date((selectedCustomer as any).dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</p>
                     <p className="text-white"><strong className="text-white/90">Door PIN:</strong> {(selectedCustomer as any).pin || '—'}</p>
+                    <p className="text-white flex items-center gap-2"><strong className="text-white/90">Photo:</strong>
+                      <button onClick={() => setPhotoTarget({ id: selectedCustomer.id, name: selectedCustomer.name })} className="text-xs underline text-white/70 hover:text-white">Take / update photo</button>
+                    </p>
                   {(() => {
                       try {
                         const raw = (selectedCustomer as any)?.emergencyContact
@@ -3030,6 +3035,9 @@ function AdminDashboardContent() {
         </div>
       )}
 
+      {photoTarget && (
+        <PhotoCapture userId={photoTarget.id} name={photoTarget.name} onClose={() => setPhotoTarget(null)} onSaved={() => {}} />
+      )}
       {/* Extend Pause Modal */}
       {showExtendPause && selectedCustomer && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">

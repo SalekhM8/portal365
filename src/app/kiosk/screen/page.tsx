@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-type Entry = { id: string; time: string; name: string; photo: string | null; status: string }
+type Entry = { id: string; time: string; name: string; photo: string | null; plan?: string | null; status: string }
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 const initials = (name: string) => name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 const ok = (s: string) => s === 'ACTIVE' || s === 'TRIALING'
@@ -97,7 +97,10 @@ function LiveScreen() {
                 <span className="h-11 w-11 rounded-full bg-zinc-100 grid place-items-center text-sm font-semibold text-zinc-600 shrink-0 overflow-hidden">
                   {e.photo ? <img src={e.photo} alt="" className="h-full w-full object-cover" /> : initials(e.name)}
                 </span>
-                <span className="flex-1 text-2xl font-medium tracking-tight truncate text-zinc-900">{e.name}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-2xl font-medium tracking-tight truncate text-zinc-900">{e.name}</span>
+                  {e.plan && <span className="block text-sm text-zinc-400 truncate">{e.plan.replace(/^MIG_/, '').replace(/_/g, ' ')}</span>}
+                </span>
                 {!ok(e.status) && <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-amber-100 text-amber-800">{e.status.replace('_', ' ')}</span>}
                 <span className="text-zinc-400 text-xl tabular-nums">{fmtTime(e.time)}</span>
               </div>
@@ -111,10 +114,17 @@ function LiveScreen() {
       {pop && (
         <div className="fixed inset-0 bg-[#F7F7F8]/97 backdrop-blur grid place-items-center pop-in">
           <div className="text-center px-10">
-            <div className="mx-auto h-32 w-32 rounded-full bg-green-100 grid place-items-center draw">
-              <svg className="h-16 w-16 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-            </div>
+            {pop.photo ? (
+              <div className="mx-auto h-44 w-44 rounded-full overflow-hidden ring-8 ring-green-100 draw">
+                <img src={pop.photo} alt="" className="h-full w-full object-cover" />
+              </div>
+            ) : (
+              <div className="mx-auto h-32 w-32 rounded-full bg-green-100 grid place-items-center draw">
+                <svg className="h-16 w-16 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </div>
+            )}
             <h2 className="text-7xl font-semibold tracking-tight mt-10 text-zinc-900">{pop.name}</h2>
+            {pop.plan && <p className="text-zinc-400 text-2xl mt-2">{pop.plan.replace(/^MIG_/, '').replace(/_/g, ' ')}</p>}
             <p className="text-green-600 text-3xl font-medium mt-4">Checked in · {fmtTime(pop.time)}</p>
           </div>
         </div>
