@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     date: day.toISOString().slice(0, 10),
     count: logs.length,
     entries: logs.map(l => ({
+      userId: l.userId,
       time: l.accessTime.toISOString(),
       name: `${l.user.firstName} ${l.user.lastName}`.replace(/\s+/g, ' ').trim(),
       photo: l.user.profileImage || null,

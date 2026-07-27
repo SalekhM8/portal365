@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import MemberPeek from '@/components/MemberPeek'
 
-type Entry = { id: string; time: string; name: string; photo: string | null; plan?: string | null; status: string }
+type Entry = { id: string; userId?: string; time: string; name: string; photo: string | null; plan?: string | null; status: string }
 const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 const initials = (name: string) => name.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
 const ok = (s: string) => s === 'ACTIVE' || s === 'TRIALING'
@@ -34,6 +35,7 @@ function LiveScreen() {
   const [entries, setEntries] = useState<Entry[]>([])
   const [pop, setPop] = useState<Entry | null>(null)
   const [clock, setClock] = useState('')
+  const [peek, setPeek] = useState<string | null>(null)
   const cursor = useRef('')
   const popTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -93,7 +95,7 @@ function LiveScreen() {
           <p className="text-zinc-400 text-sm uppercase tracking-[0.25em] mb-4">Recent</p>
           <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm px-6 py-2">
             {entries.slice(0, 6).map(e => (
-              <div key={e.id} className="flex items-center gap-4 py-4 border-b border-zinc-100 last:border-0">
+              <div key={e.id} onClick={() => e.userId && setPeek(e.userId)} className="flex items-center gap-4 py-4 border-b border-zinc-100 last:border-0 cursor-pointer hover:bg-zinc-50 transition rounded-lg">
                 <span className="h-11 w-11 rounded-full bg-zinc-100 grid place-items-center text-sm font-semibold text-zinc-600 shrink-0 overflow-hidden">
                   {e.photo ? <img src={e.photo} alt="" className="h-full w-full object-cover" /> : initials(e.name)}
                 </span>
@@ -110,6 +112,7 @@ function LiveScreen() {
         </div>
       </div>
 
+      {peek && <MemberPeek userId={peek} onClose={() => setPeek(null)} />}
       {/* confirmation takeover */}
       {pop && (
         <div className="fixed inset-0 bg-[#F7F7F8]/97 backdrop-blur grid place-items-center pop-in">
