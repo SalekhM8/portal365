@@ -282,6 +282,13 @@ function AdminDashboardContent() {
   const [membershipAction, setMembershipAction] = useState<'pause' | 'resume' | 'cancel' | 'reactivate' | null>(null)
   const [addBillingMode, setAddBillingMode] = useState<'stripe' | 'package'>('stripe')
   const [photoTarget, setPhotoTarget] = useState<{ id: string; name: string } | null>(null)
+  const [summaryPhoto, setSummaryPhoto] = useState<string | null>(null)
+  useEffect(() => {
+    setSummaryPhoto(null)
+    const id = (selectedCustomer as any)?.id
+    if (!id) return
+    fetch(`/api/reception/photo?userId=${id}`).then(r => r.json()).then(j => setSummaryPhoto(j.photo || null)).catch(() => {})
+  }, [(selectedCustomer as any)?.id])
   const [offlinePkgs, setOfflinePkgs] = useState<any[]>([])
   const [addPackageId, setAddPackageId] = useState('')
   const [addPackageStart, setAddPackageStart] = useState(() => new Date().toISOString().slice(0, 10))
@@ -2323,8 +2330,9 @@ function AdminDashboardContent() {
                   <div className="px-3 pb-3 space-y-2">
                     <p className="text-white"><strong className="text-white/90">Date of Birth:</strong> {(selectedCustomer as any).dateOfBirth ? new Date((selectedCustomer as any).dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</p>
                     <p className="text-white"><strong className="text-white/90">Door PIN:</strong> {(selectedCustomer as any).pin || '—'}</p>
-                    <p className="text-white flex items-center gap-2"><strong className="text-white/90">Photo:</strong>
-                      <button onClick={() => setPhotoTarget({ id: selectedCustomer.id, name: selectedCustomer.name })} className="text-xs underline text-white/70 hover:text-white">Take / update photo</button>
+                    <p className="text-white flex items-center gap-3"><strong className="text-white/90">Photo:</strong>
+                      {summaryPhoto ? <img src={summaryPhoto} alt="" className="h-12 w-12 rounded-full object-cover border border-white/20" /> : <span className="text-white/40 text-xs">none yet</span>}
+                      <button onClick={() => setPhotoTarget({ id: selectedCustomer.id, name: selectedCustomer.name })} className="text-xs underline text-white/70 hover:text-white">{summaryPhoto ? 'Retake' : 'Take photo'}</button>
                     </p>
                   {(() => {
                       try {
@@ -3036,7 +3044,8 @@ function AdminDashboardContent() {
       )}
 
       {photoTarget && (
-        <PhotoCapture userId={photoTarget.id} name={photoTarget.name} onClose={() => setPhotoTarget(null)} onSaved={() => {}} />
+        <PhotoCapture userId={photoTarget.id} name={photoTarget.name} onClose={() => setPhotoTarget(null)}
+          onSaved={(dataUrl) => { setSummaryPhoto(dataUrl); alert('Photo saved ✓') }} />
       )}
       {/* Extend Pause Modal */}
       {showExtendPause && selectedCustomer && (
