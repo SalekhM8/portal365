@@ -3045,7 +3045,7 @@ function AdminDashboardContent() {
 
       {photoTarget && (
         <PhotoCapture userId={photoTarget.id} name={photoTarget.name} onClose={() => setPhotoTarget(null)}
-          onSaved={(dataUrl) => { setSummaryPhoto(dataUrl); alert('Photo saved ✓') }} />
+          onSaved={(dataUrl) => setSummaryPhoto(dataUrl)} />
       )}
       {/* Extend Pause Modal */}
       {showExtendPause && selectedCustomer && (

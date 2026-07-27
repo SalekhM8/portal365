@@ -15,6 +15,7 @@ export default function PhotoCapture({ userId, name, onClose, onSaved }: {
   const [snap, setSnap] = useState<string | null>(null)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -46,7 +47,11 @@ export default function PhotoCapture({ userId, name, onClose, onSaved }: {
     try {
       const r = await fetch('/api/reception/photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, image: snap }) })
       const j = await r.json()
-      if (r.ok && j.success) { onSaved(snap); onClose() }
+      if (r.ok && j.success) {
+        setSaved(true)
+        onSaved(snap)
+        setTimeout(onClose, 650) // tick flash, then gone — next person
+      }
       else setErr(j.error || 'Save failed')
     } finally { setBusy(false) }
   }
@@ -59,6 +64,13 @@ export default function PhotoCapture({ userId, name, onClose, onSaved }: {
         <div className="relative aspect-square rounded-xl overflow-hidden bg-zinc-100 mb-4">
           {!snap && <video ref={videoRef} muted playsInline className="absolute inset-0 h-full w-full object-cover" />}
           {snap && <img src={snap} alt="preview" className="absolute inset-0 h-full w-full object-cover" />}
+          {saved && (
+            <div className="absolute inset-0 bg-white/80 grid place-items-center">
+              <div className="h-16 w-16 rounded-full bg-green-100 grid place-items-center">
+                <svg className="h-8 w-8 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              </div>
+            </div>
+          )}
         </div>
         {err && <p className="text-sm text-red-700 mb-3">{err}</p>}
         <div className="flex gap-2">
