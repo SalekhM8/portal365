@@ -283,6 +283,7 @@ function AdminDashboardContent() {
   const [addBillingMode, setAddBillingMode] = useState<'stripe' | 'package'>('stripe')
   const [photoTarget, setPhotoTarget] = useState<{ id: string; name: string } | null>(null)
   const [summaryPhoto, setSummaryPhoto] = useState<string | null>(null)
+  const [photoLightbox, setPhotoLightbox] = useState(false)
   useEffect(() => {
     setSummaryPhoto(null)
     const id = (selectedCustomer as any)?.id
@@ -2331,7 +2332,7 @@ function AdminDashboardContent() {
                     <p className="text-white"><strong className="text-white/90">Date of Birth:</strong> {(selectedCustomer as any).dateOfBirth ? new Date((selectedCustomer as any).dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</p>
                     <p className="text-white"><strong className="text-white/90">Door PIN:</strong> {(selectedCustomer as any).pin || '—'}</p>
                     <p className="text-white flex items-center gap-3"><strong className="text-white/90">Photo:</strong>
-                      {summaryPhoto ? <img src={summaryPhoto} alt="" className="h-12 w-12 rounded-full object-cover border border-white/20" /> : <span className="text-white/40 text-xs">none yet</span>}
+                      {summaryPhoto ? <img src={summaryPhoto} alt="" onClick={() => setPhotoLightbox(true)} title="Click to enlarge" className="h-12 w-12 rounded-full object-cover border border-white/20 cursor-pointer hover:ring-2 hover:ring-white/40 transition" /> : <span className="text-white/40 text-xs">none yet</span>}
                       <button onClick={() => setPhotoTarget({ id: selectedCustomer.id, name: selectedCustomer.name })} className="text-xs underline text-white/70 hover:text-white">{summaryPhoto ? 'Retake' : 'Take photo'}</button>
                     </p>
                   {(() => {
@@ -3043,6 +3044,11 @@ function AdminDashboardContent() {
         </div>
       )}
 
+      {photoLightbox && summaryPhoto && (
+        <div className="fixed inset-0 z-[60] bg-black/85 grid place-items-center p-6 cursor-zoom-out" onClick={() => setPhotoLightbox(false)}>
+          <img src={summaryPhoto} alt="" className="max-h-[80vh] max-w-[80vw] rounded-2xl shadow-2xl" />
+        </div>
+      )}
       {photoTarget && (
         <PhotoCapture userId={photoTarget.id} name={photoTarget.name} onClose={() => setPhotoTarget(null)}
           onSaved={(dataUrl) => setSummaryPhoto(dataUrl)} />
