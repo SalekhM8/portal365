@@ -284,6 +284,27 @@ function AdminDashboardContent() {
   const [photoTarget, setPhotoTarget] = useState<{ id: string; name: string } | null>(null)
   const [summaryPhoto, setSummaryPhoto] = useState<string | null>(null)
   const [photoLightbox, setPhotoLightbox] = useState(false)
+  const [editField, setEditField] = useState<{ key: string; label: string; v1: string; v2?: string; type?: string } | null>(null)
+  const [editBusy, setEditBusy] = useState(false)
+  const saveEditField = async () => {
+    if (!editField || !selectedCustomer || editBusy) return
+    setEditBusy(true)
+    try {
+      const bodyMap: any =
+        editField.key === 'name' ? { firstName: editField.v1, lastName: editField.v2 || '' } :
+        { [editField.key]: editField.v1 }
+      const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/details`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyMap) })
+      const j = await resp.json()
+      if (resp.ok && j.success) {
+        setSelectedCustomer((prev: any) => prev ? { ...prev, name: j.user.name, email: j.user.email, phone: j.user.phone, dateOfBirth: j.user.dateOfBirth, emergencyContact: j.user.emergencyContact } : prev)
+        setEditField(null)
+        fetchAdminData()
+      } else alert('Save failed: ' + (j.error || 'Unknown'))
+    } finally { setEditBusy(false) }
+  }
+  const Pencil = ({ onClick }: { onClick: () => void }) => (
+    <button onClick={onClick} title="Edit" className="text-white/35 hover:text-white transition text-xs align-middle ml-1.5">✎</button>
+  )
   useEffect(() => {
     setSummaryPhoto(null)
     const id = (selectedCustomer as any)?.id
@@ -2286,7 +2307,9 @@ function AdminDashboardContent() {
             <div className="grid gap-3">
               {/* Summary first */}
               <div className="space-y-1">
-                <p className="text-white text-base font-semibold">{selectedCustomer.name}</p>
+                <p className="text-white text-base font-semibold">{selectedCustomer.name}
+                  <Pencil onClick={() => { const parts = (selectedCustomer.name || '').split(' '); setEditField({ key: 'name', label: 'Name', v1: parts[0] || '', v2: parts.slice(1).join(' ') }) }} />
+                </p>
                 <p className="text-white/80 text-sm">
                   {selectedCustomer.membershipType} • {selectedCustomer.status}
                   {selectedCustomer.account && <> • {selectedCustomer.account}</>}
@@ -2329,11 +2352,20 @@ function AdminDashboardContent() {
                 </button>
                 {openPill==='personal' && (
                   <div className="px-3 pb-3 space-y-2">
-                    <p className="text-white"><strong className="text-white/90">Date of Birth:</strong> {(selectedCustomer as any).dateOfBirth ? new Date((selectedCustomer as any).dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</p>
+                    <p className="text-white"><strong className="text-white/90">Date of Birth:</strong> {(selectedCustomer as any).dateOfBirth ? new Date((selectedCustomer as any).dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}
+                      <Pencil onClick={() => setEditField({ key: 'dateOfBirth', label: 'Date of Birth', v1: (selectedCustomer as any).dateOfBirth ? String((selectedCustomer as any).dateOfBirth).slice(0, 10) : '', type: 'date' })} />
+                    </p>
                     <p className="text-white"><strong className="text-white/90">Door PIN:</strong> {(selectedCustomer as any).pin || '—'}</p>
                     <p className="text-white flex items-center gap-3"><strong className="text-white/90">Photo:</strong>
                       {summaryPhoto ? <img src={summaryPhoto} alt="" onClick={() => setPhotoLightbox(true)} title="Click to enlarge" className="h-12 w-12 rounded-full object-cover border border-white/20 cursor-pointer hover:ring-2 hover:ring-white/40 transition" /> : <span className="text-white/40 text-xs">none yet</span>}
                       <button onClick={() => setPhotoTarget({ id: selectedCustomer.id, name: selectedCustomer.name })} className="text-xs underline text-white/70 hover:text-white">{summaryPhoto ? 'Retake' : 'Take photo'}</button>
+                      {summaryPhoto && (
+                        <button title="Delete photo" onClick={async () => {
+                          if (!confirm('Delete this photo?')) return
+                          const r = await fetch('/api/reception/photo', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: selectedCustomer.id }) })
+                          if (r.ok) setSummaryPhoto(null)
+                        }} className="text-xs text-red-400/80 hover:text-red-400">🗑</button>
+                      )}
                     </p>
                   {(() => {
                       try {
@@ -2343,14 +2375,22 @@ function AdminDashboardContent() {
                         const postcode = (addrObj as any)?.addressInfo?.postcode || (addrObj as any)?.postcode || null
                     return (
                       <>
-                            <p className="text-white"><strong className="text-white/90">Address:</strong> {(addr && ((addr as any).address || (addr as any).line1 || addr)) || '—'}</p>
-                            <p className="text-white"><strong className="text-white/90">Post Code:</strong> {postcode || '—'}</p>
+                            <p className="text-white"><strong className="text-white/90">Address:</strong> {(addr && ((addr as any).address || (addr as any).line1 || addr)) || '—'}
+                              <Pencil onClick={() => setEditField({ key: 'address', label: 'Address', v1: String((addr && ((addr as any).address || (addr as any).line1 || addr)) || '') })} />
+                            </p>
+                            <p className="text-white"><strong className="text-white/90">Post Code:</strong> {postcode || '—'}
+                              <Pencil onClick={() => setEditField({ key: 'postcode', label: 'Post Code', v1: String(postcode || '') })} />
+                            </p>
                       </>
                     )
                       } catch { return null }
                   })()}
-                    <p className="text-white"><strong className="text-white/90">Email:</strong> {selectedCustomer.email}</p>
-                    <p className="text-white"><strong className="text-white/90">Phone:</strong> {selectedCustomer.phone || '—'}</p>
+                    <p className="text-white"><strong className="text-white/90">Email:</strong> {selectedCustomer.email}
+                      <Pencil onClick={() => setEditField({ key: 'email', label: 'Email', v1: selectedCustomer.email || '' })} />
+                    </p>
+                    <p className="text-white"><strong className="text-white/90">Phone:</strong> {selectedCustomer.phone || '—'}
+                      <Pencil onClick={() => setEditField({ key: 'phone', label: 'Phone', v1: selectedCustomer.phone || '' })} />
+                    </p>
                   <p className="text-white"><strong className="text-white/90">Join Date:</strong> {new Date(selectedCustomer.joinDate).toLocaleDateString()}</p>
                     {(() => {
                       const last = payments.find(p => p.customerId === selectedCustomer.id && p.status === 'CONFIRMED')
@@ -3052,6 +3092,28 @@ function AdminDashboardContent() {
       {photoTarget && (
         <PhotoCapture userId={photoTarget.id} name={photoTarget.name} onClose={() => setPhotoTarget(null)}
           onSaved={(dataUrl) => setSummaryPhoto(dataUrl)} />
+      )}
+      {/* Inline field edit */}
+      {editField && selectedCustomer && (
+        <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-white/15 rounded-2xl max-w-xs w-full p-5">
+            <h3 className="text-white font-semibold mb-3">Edit {editField.label}</h3>
+            {editField.key === 'name' ? (
+              <div className="space-y-2 mb-4">
+                <input value={editField.v1} onChange={e => setEditField({ ...editField, v1: e.target.value })} placeholder="First name" className="w-full p-2.5 bg-white/5 border border-white/20 rounded text-white" autoFocus />
+                <input value={editField.v2 || ''} onChange={e => setEditField({ ...editField, v2: e.target.value })} placeholder="Last name" className="w-full p-2.5 bg-white/5 border border-white/20 rounded text-white" />
+              </div>
+            ) : (
+              <input type={editField.type || 'text'} value={editField.v1} onChange={e => setEditField({ ...editField, v1: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') saveEditField() }}
+                className="w-full mb-4 p-2.5 bg-white/5 border border-white/20 rounded text-white [color-scheme:dark]" autoFocus />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 border-white/20 text-white" onClick={() => setEditField(null)}>Cancel</Button>
+              <Button className="flex-1" disabled={editBusy} onClick={saveEditField}>{editBusy ? 'Saving…' : 'Save'}</Button>
+            </div>
+          </div>
+        </div>
       )}
       {/* Extend Pause Modal */}
       {showExtendPause && selectedCustomer && (

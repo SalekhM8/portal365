@@ -30,3 +30,13 @@ export async function POST(request: NextRequest) {
   await prisma.user.update({ where: { id: userId }, data: { profileImage: image } })
   return NextResponse.json({ success: true })
 }
+
+
+// DELETE { userId } -> remove member photo
+export async function DELETE(request: NextRequest) {
+  if (!(await gate())) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { userId } = await request.json().catch(() => ({}))
+  if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  await prisma.user.update({ where: { id: userId }, data: { profileImage: null } })
+  return NextResponse.json({ success: true })
+}
