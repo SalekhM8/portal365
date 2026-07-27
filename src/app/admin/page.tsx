@@ -46,6 +46,7 @@ import {
   X,
   Key,
   Loader2
+  , Pencil as PencilIcon, Trash2
 } from 'lucide-react'
 import { loadStripe } from '@stripe/stripe-js'
 import { MEMBERSHIP_PLANS } from '@/config/memberships'
@@ -303,7 +304,9 @@ function AdminDashboardContent() {
     } finally { setEditBusy(false) }
   }
   const Pencil = ({ onClick }: { onClick: () => void }) => (
-    <button onClick={onClick} title="Edit" className="text-white/35 hover:text-white transition text-xs align-middle ml-1.5">✎</button>
+    <button onClick={onClick} title="Edit" className="inline-flex items-center align-middle ml-2 p-1 rounded-md text-white/55 hover:text-white hover:bg-white/10 transition">
+      <PencilIcon className="h-3.5 w-3.5" />
+    </button>
   )
   useEffect(() => {
     setSummaryPhoto(null)
@@ -2364,7 +2367,7 @@ function AdminDashboardContent() {
                           if (!confirm('Delete this photo?')) return
                           const r = await fetch('/api/reception/photo', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: selectedCustomer.id }) })
                           if (r.ok) setSummaryPhoto(null)
-                        }} className="text-xs text-red-400/80 hover:text-red-400">🗑</button>
+                        }} className="inline-flex items-center align-middle p-1 rounded-md text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition" ><Trash2 className="h-4 w-4" /></button>
                       )}
                     </p>
                   {(() => {
