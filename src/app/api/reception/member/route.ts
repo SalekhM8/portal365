@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
   const membership = await prisma.membership.findFirst({ where: { userId }, orderBy: { updatedAt: 'desc' } })
   let ec: any = {}
   try { ec = u.emergencyContact ? JSON.parse(u.emergencyContact) : {} } catch {}
-  const isOffline = !sub && !!membership?.endDate
+  const LIVE_SUB = new Set(['ACTIVE', 'TRIALING', 'PAUSED', 'PAST_DUE'])
+  const isOffline = !(sub && LIVE_SUB.has(sub.status)) && !!membership?.endDate
   let status = sub?.status || membership?.status || 'NONE'
   if (isOffline) status = membership!.endDate! >= new Date() ? 'ACTIVE' : 'EXPIRED'
   return NextResponse.json({
