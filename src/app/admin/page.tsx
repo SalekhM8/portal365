@@ -1222,8 +1222,11 @@ function AdminDashboardContent() {
 
   // Filter functions
   const filteredCustomers = customers.filter(customer => {
-    const term = searchTerm.toLowerCase()
-    const matchesSearch = customer.name.toLowerCase().includes(term) ||
+    // normalize whitespace on both sides — names in the DB carry stray double/
+    // trailing spaces ("Syed  Shah"), which broke exact-phrase searches
+    const norm = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim()
+    const term = norm(searchTerm)
+    const matchesSearch = norm(customer.name).includes(term) ||
                          customer.email.toLowerCase().includes(term) ||
                          (customer.phone || '').toLowerCase().includes(term) ||
                          (customer.emergencyContact?.addressInfo?.postcode || '').toLowerCase().includes(term)
