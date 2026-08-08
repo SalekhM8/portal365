@@ -22,8 +22,13 @@ const adminCreateCustomerSchema = z.object({
   membershipType: z.enum(['WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14', 'FULL_ADULT', 'KIDS_UNLIMITED_UNDER14', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']).optional(),
   offlinePackageId: z.string().optional(), // cash/offline package — no Stripe, fixed term
   customPrice: z.number().min(1, 'Price must be greater than 0'),
-  startDate: z.string().regex(/^\d{4}-\d{2}-01$/, 'Start date must be first of month (YYYY-MM-01)'),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be YYYY-MM-DD'),
   routedEntity: z.string().optional()
+}).superRefine((data, ctx) => {
+  // Monthly Stripe members bill on the 1st; cash packages can start any day
+  if (!data.offlinePackageId && !data.startDate.endsWith('-01')) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: 'Start date must be first of month (YYYY-MM-01)' })
+  }
 })
 
 export async function POST(request: NextRequest) {
