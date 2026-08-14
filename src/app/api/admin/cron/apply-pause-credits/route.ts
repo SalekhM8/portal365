@@ -6,6 +6,7 @@ import {
   decimalToNumber,
   formatShortDate
 } from '@/lib/pause-credits'
+import { chargeProration } from '@/lib/proration'
 
 /**
  * DAILY CRON JOB: Pause Management
@@ -250,6 +251,78 @@ export async function GET(request: NextRequest) {
 
         let creditInvoiceItemId: string | null = null
         let chargeInvoiceItemId: string | null = null
+        let chargeInvoiceId: string | null = null
+        let chargeCollected = false
+        let chargeDeferredReason: string | null = null
+
+        // Non-creditable partial months: the member used days after resume that were
+        // never billed. Business rule: collect this ON THE DAY the pause ends, not on
+        // the next renewal. Runs BEFORE the credit item is created so the credit
+        // still rides the next renewal instead of being swept into this invoice.
+        if (settlement.totalChargeAmount > 0) {
+          const chargeDesc = settlement.partialMonths
+            .filter(p => !p.creditable && p.usedDays > 0)
+            .map(p => `${p.month}: ${p.usedDays} days used after resume`)
+            .join(', ')
+          const chargeMetadata = {
+            pauseWindowId: window.id,
+            subscriptionId: sub.id,
+            totalPausedDays: String(settlement.totalDays),
+            fullMonthsSkipped: settlement.fullMonthsSkipped.join(', '),
+            startDate: formatShortDate(new Date(window.startDate)),
+            endDate: formatShortDate(new Date(window.endDate)),
+            reason: 'pause_post_resume_charge'
+          }
+
+          // Idempotency key is stable per window+amount: a cron re-run can never double-charge.
+          const chargeResult = await chargeProration({
+            account: (sub.stripeAccountKey as StripeAccountKey) || 'SU',
+            customerId: sub.stripeCustomerId,
+            amountPence: settlement.totalChargePence,
+            description: `Pause settlement (post-resume): ${chargeDesc}`,
+            metadata: chargeMetadata,
+            idempotencyKey: `pause-settle:${window.id}:${settlement.totalChargePence}`,
+          })
+
+          if (chargeResult.paid) {
+            chargeCollected = true
+            chargeInvoiceId = chargeResult.invoiceId
+            console.log(`✅ Collected post-resume charge £${settlement.totalChargeAmount} on the day (invoice ${chargeResult.invoiceId})`)
+          } else {
+            // Card declined / needs action. Membership still resumes (the pause has
+            // ended), so fall back to the old behaviour: defer the amount to the next
+            // renewal invoice. Void the failed invoice first so the money can't be
+            // collected twice if that invoice were ever paid later.
+            chargeDeferredReason = chargeResult.error || 'card declined'
+            console.warn(`⚠️ Post-resume charge failed (${chargeDeferredReason}) — deferring £${settlement.totalChargeAmount} to next renewal`)
+            if (chargeResult.invoiceId) {
+              try {
+                await stripe.invoices.voidInvoice(chargeResult.invoiceId)
+              } catch (voidErr: any) {
+                // If void fails because the invoice actually got paid, treat as collected.
+                try {
+                  const inv = await stripe.invoices.retrieve(chargeResult.invoiceId)
+                  if (inv.status === 'paid') {
+                    chargeCollected = true
+                    chargeInvoiceId = chargeResult.invoiceId
+                  }
+                } catch {}
+                if (!chargeCollected) console.warn(`⚠️ Could not void failed settlement invoice ${chargeResult.invoiceId}: ${voidErr.message}`)
+              }
+            }
+            if (!chargeCollected) {
+              const chargeItem = await stripe.invoiceItems.create({
+                customer: sub.stripeCustomerId,
+                amount: settlement.totalChargePence,
+                currency: 'gbp',
+                description: `Pause settlement (post-resume): ${chargeDesc}`,
+                metadata: { ...chargeMetadata, reason: 'pause_post_resume_charge_deferred', appliedAt: new Date().toISOString() }
+              }, { idempotencyKey: `pause-settle:${window.id}:${settlement.totalChargePence}:deferred` })
+              chargeInvoiceItemId = chargeItem.id
+              console.log(`ℹ️ Created deferred post-resume charge ${chargeItem.id}: +£${settlement.totalChargeAmount} (rides next renewal)`)
+            }
+          }
+        }
 
         // Creditable partial months (customer paid full month, refund paused days)
         if (settlement.totalSettlementAmount > 0) {
@@ -279,33 +352,6 @@ export async function GET(request: NextRequest) {
           results.creditsApplied++
         }
 
-        // Non-creditable partial months (customer wasn't billed, charge for days used after resume)
-        if (settlement.totalChargeAmount > 0) {
-          const chargeDesc = settlement.partialMonths
-            .filter(p => !p.creditable && p.usedDays > 0)
-            .map(p => `${p.month}: ${p.usedDays} days used after resume`)
-            .join(', ')
-
-          const chargeItem = await stripe.invoiceItems.create({
-            customer: sub.stripeCustomerId,
-            amount: settlement.totalChargePence, // POSITIVE for charge
-            currency: 'gbp',
-            description: `Pause settlement (post-resume): ${chargeDesc}`,
-            metadata: {
-              pauseWindowId: window.id,
-              subscriptionId: sub.id,
-              totalPausedDays: String(settlement.totalDays),
-              fullMonthsSkipped: settlement.fullMonthsSkipped.join(', '),
-              startDate: formatShortDate(new Date(window.startDate)),
-              endDate: formatShortDate(new Date(window.endDate)),
-              reason: 'pause_post_resume_charge',
-              appliedAt: new Date().toISOString()
-            }
-          })
-          chargeInvoiceItemId = chargeItem.id
-          console.log(`✅ Created post-resume charge ${chargeItem.id}: +£${settlement.totalChargeAmount}`)
-        }
-
         // Update the pause window
         await (prisma as any).subscriptionPauseWindow.update({
           where: { id: window.id },
@@ -320,10 +366,14 @@ export async function GET(request: NextRequest) {
 
         // Audit log
         try {
-          const action = creditInvoiceItemId || chargeInvoiceItemId ? 'PAUSE_ENDED' : 'PAUSE_COMPLETED'
+          const action = creditInvoiceItemId || chargeInvoiceItemId || chargeCollected ? 'PAUSE_ENDED' : 'PAUSE_COMPLETED'
           const reasonParts: string[] = []
           if (settlement.totalSettlementAmount > 0) reasonParts.push(`credit £${settlement.totalSettlementAmount}`)
-          if (settlement.totalChargeAmount > 0) reasonParts.push(`post-resume charge £${settlement.totalChargeAmount}`)
+          if (settlement.totalChargeAmount > 0) {
+            reasonParts.push(chargeCollected
+              ? `post-resume charge £${settlement.totalChargeAmount} collected`
+              : `post-resume charge £${settlement.totalChargeAmount} deferred to next renewal (${chargeDeferredReason})`)
+          }
           if (settlement.fullMonthsSkipped.length > 0) reasonParts.push(`${settlement.fullMonthsSkipped.length} full month(s) voided`)
           const reason = reasonParts.length > 0 ? `Pause ended: ${reasonParts.join(', ')}` : 'Pause completed - no settlement needed'
 
@@ -339,6 +389,9 @@ export async function GET(request: NextRequest) {
                 pauseWindowId: window.id,
                 creditInvoiceItemId,
                 chargeInvoiceItemId,
+                chargeInvoiceId,
+                chargeCollected,
+                chargeDeferredReason,
                 totalDays: settlement.totalDays,
                 settlementCredit: settlement.totalSettlementAmount,
                 postResumeCharge: settlement.totalChargeAmount,
@@ -351,7 +404,7 @@ export async function GET(request: NextRequest) {
           console.warn(`⚠️ Failed to create audit log for window ${windowId}:`, auditErr)
         }
 
-        if (!creditInvoiceItemId && !chargeInvoiceItemId) {
+        if (!creditInvoiceItemId && !chargeInvoiceItemId && !chargeCollected) {
           console.log(`ℹ️ Window ${windowId}: No invoice items created (${settlement.fullMonthsSkipped.length} full month(s) handled by void)`)
         }
 
