@@ -1,47 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth/next'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { getStripeClient } from '@/lib/stripe'
 
+// Pausing and resuming are handled by the gym (desk/admin only). The desk resume
+// path charges the prorated remainder of the month on the day; this parent-facing
+// path resumed with proration_behavior 'none' (free) and is disabled for the same
+// reason parent self-pause was.
 export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  _request: NextRequest,
+  _context: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const session = await getServerSession(authOptions) as any
-    if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const parent = await prisma.user.findUnique({ where: { email: session.user.email } })
-    if (!parent) return NextResponse.json({ error: 'User not found' }, { status: 404 })
-
-    const params = await context.params
-    const childId = params.id
-
-    const membership = await prisma.membership.findFirst({ where: { userId: childId }, orderBy: { createdAt: 'desc' } })
-    if (!membership || membership.familyGroupId !== parent.id) {
-      return NextResponse.json({ error: 'Not permitted' }, { status: 403 })
-    }
-
-    const subscription = await prisma.subscription.findFirst({ where: { userId: childId }, orderBy: { createdAt: 'desc' } })
-    if (!subscription) return NextResponse.json({ error: 'No subscription found' }, { status: 404 })
-
-    const s = getStripeClient((subscription as any)?.stripeAccountKey || 'SU')
-    const updated = await s.subscriptions.update(subscription.stripeSubscriptionId, { pause_collection: null, proration_behavior: 'none' })
-    try {
-      const invoices = await s.invoices.list({ customer: updated.customer as string, limit: 1 })
-      const open = invoices.data.find(i => i.status === 'open')
-      if (open && open.id) await s.invoices.pay(open.id as string)
-    } catch {}
-
-    await prisma.$transaction(async (tx) => {
-      await tx.subscription.update({ where: { id: subscription.id }, data: { status: 'ACTIVE' } })
-      await tx.membership.updateMany({ where: { userId: childId, status: { in: ['SUSPENDED', 'ACTIVE'] } }, data: { status: 'ACTIVE' } })
-    })
-
-    return NextResponse.json({ success: true })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'Resume failed' }, { status: 500 })
-  }
+  return NextResponse.json({
+    error: 'Resuming is handled by the gym — please message us or speak to the desk and we\'ll sort it.'
+  }, { status: 403 })
 }
-
-

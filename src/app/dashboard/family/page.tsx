@@ -152,22 +152,6 @@ export default function FamilyPage() {
     finally { setChangingId(null) }
   }
 
-  const pauseChild = async (childId: string) => {
-    if (!confirm('Pause this child membership now?')) return
-    const res = await fetch(`/api/customers/family/${childId}/pause`, { method: 'POST' })
-    const data = await res.json()
-    if (res.ok && data.success) await fetchChildren()
-    else alert('Pause failed: ' + (data.error || 'Unknown error'))
-  }
-
-  const resumeChild = async (childId: string) => {
-    if (!confirm('Resume this child membership now?')) return
-    const res = await fetch(`/api/customers/family/${childId}/resume`, { method: 'POST' })
-    const data = await res.json()
-    if (res.ok && data.success) await fetchChildren()
-    else alert('Resume failed: ' + (data.error || 'Unknown error'))
-  }
-
   const cancelChild = async (childId: string, type: 'immediate' | 'end_of_period') => {
     const msg = type === 'immediate' ? 'Cancel immediately? This cannot be undone.' : 'Schedule cancellation at period end?'
     if (!confirm(msg)) return
@@ -299,10 +283,10 @@ export default function FamilyPage() {
                     </Button>
                   </div>
 
-                  {/* Pause/Resume/Cancel */}
+                  {/* Cancel (pause/resume are handled by the gym desk) */}
                   <div className="flex flex-wrap gap-2">
                     {c.status === 'PAUSED' && (
-                      <Button variant="outline" onClick={() => resumeChild(c.childId)}>Resume</Button>
+                      <p className="text-sm text-muted-foreground w-full">Membership paused — speak to the desk to resume.</p>
                     )}
                     {c.status !== 'CANCELLED' && (
                       <>
