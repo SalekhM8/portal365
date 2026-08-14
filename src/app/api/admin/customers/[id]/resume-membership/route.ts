@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient } from '@/lib/stripe'
 import { chargeProration, prorateRemainderOfMonth } from '@/lib/proration'
+import { calculateSettlementBreakdown } from '@/lib/pause-credits'
 
 /**
  * RESUME MEMBERSHIP - Enterprise-grade implementation
@@ -121,6 +122,27 @@ export async function POST(
 
     console.log(`🔄 [${operationId}] Starting membership resume for customer ${customer.email}`)
 
+    // 📅 SCHEDULED PAUSE WINDOWS (early return): if this pause came from a date-based
+    // window, resuming early must settle and CANCEL the window here — otherwise the
+    // pause cron re-settles it when the original end date arrives and double-charges.
+    const openWindows = await prisma.subscriptionPauseWindow.findMany({
+      where: {
+        subscriptionId: pausedSubscription.id,
+        startDate: { not: null },
+        status: { in: ['SCHEDULED', 'ACTIVE'] },
+        creditAppliedAt: null
+      }
+    })
+    const now = new Date()
+    const firstOfThisMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    // If the pause began mid-month IN the current month, this month's invoice was
+    // billed in full before pause_collection took effect — the member has already
+    // paid for today onwards, so the remainder-of-month charge must be skipped
+    // (they're owed a credit for the paused days instead, applied below).
+    const paidCurrentMonth = openWindows.some(w =>
+      w.startDate! <= now && w.startDate! > firstOfThisMonth
+    )
+
     // 🚀 RESUME STRIPE SUBSCRIPTION
     // Flow: charge proration FIRST, then unpause. If proration fails, subscription stays paused.
     let stripeOperationSuccess = false
@@ -140,7 +162,10 @@ export async function POST(
       const { amountPence, remainingDays, daysInMonth } = prorateRemainderOfMonth(monthlyPrice)
       console.log(`📊 [${operationId}] Resume proration: ${remainingDays}/${daysInMonth} days @ £${monthlyPrice} => £${(amountPence / 100).toFixed(2)}`)
 
-      if (amountPence > 0) {
+      if (paidCurrentMonth) {
+        console.log(`ℹ️ [${operationId}] Pause started mid-month this month — member already paid this month in full, skipping remainder-of-month charge`)
+      }
+      if (amountPence > 0 && !paidCurrentMonth) {
         // Idempotency key makes this safe to retry — never double-charges.
         const result = await chargeProration({
           account,
@@ -251,6 +276,46 @@ export async function POST(
           data: { closedAt: new Date() }
         })
       } catch {}
+
+      // 📅 SETTLE + CANCEL scheduled windows (early return). The remainder-of-month
+      // charge above covers the used days of the current month; the only settlement
+      // still owed is a CREDIT for months the member paid in full before the pause
+      // took effect (pause started after the 1st). Applied as a negative invoice
+      // item riding the next renewal. Windows are then CANCELLED so the pause cron
+      // can never settle them again when the original end date passes.
+      for (const window of openWindows) {
+        try {
+          const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1))
+          if (window.startDate && window.startDate <= yesterday) {
+            const settlement = calculateSettlementBreakdown({
+              startDate: new Date(window.startDate),
+              endDate: yesterday, // actual paused period, not the original window
+              monthlyPrice: Number(pausedSubscription.monthlyPrice) || 0
+            })
+            if (settlement.totalSettlementAmount > 0) {
+              const creditDesc = settlement.partialMonths
+                .filter(p => p.creditable)
+                .map(p => `${p.month}: ${p.pausedDays} days`)
+                .join(', ')
+              await stripeClient.invoiceItems.create({
+                customer: (pausedSubscription as any).stripeCustomerId,
+                amount: -settlement.totalSettlementPence,
+                currency: 'gbp',
+                description: `Pause credit (early resume): ${creditDesc}`,
+                metadata: { pauseWindowId: window.id, subscriptionId: pausedSubscription.id, reason: 'pause_early_resume_credit', operationId }
+              }, { idempotencyKey: `early-resume-credit:${window.id}` })
+              console.log(`✅ [${operationId}] Early-resume credit -£${settlement.totalSettlementAmount} for window ${window.id}`)
+            }
+          }
+          await prisma.subscriptionPauseWindow.update({
+            where: { id: window.id },
+            data: { status: 'CANCELLED', closedAt: new Date(), appliedResumeAt: new Date(), reason: `${window.reason ? window.reason + ' — ' : ''}resumed early by admin (${operationId})` }
+          })
+          console.log(`✅ [${operationId}] Cancelled scheduled pause window ${window.id} (was ${window.startDate?.toISOString().slice(0,10)} → ${window.endDate?.toISOString().slice(0,10)})`)
+        } catch (windowErr: any) {
+          console.error(`❌ [${operationId}] Failed to settle/cancel pause window ${window.id}:`, windowErr.message)
+        }
+      }
 
     } catch (dbError: any) {
       console.error(`❌ [${operationId}] Database update failed:`, dbError)
