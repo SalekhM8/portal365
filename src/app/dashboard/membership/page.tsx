@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { planAccessDays } from '@/lib/plan-access'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -105,16 +106,10 @@ export default function MembershipPage() {
                     <p className="text-white/60 text-sm">No features available for this membership type.</p>
                   )}
                 </div>
-                {currentMembership.scheduleAccess?.allowedWindows?.length ? (
-                  <div>
-                    <div className="text-white/60 text-xs uppercase mb-2">Your Access Times</div>
-                    <ul className="text-sm text-white/80 space-y-1">
-                      {currentMembership.scheduleAccess.allowedWindows.map((w: any, idx: number) => (
-                        <li key={idx}>{formatDays(w.days)} {w.start}–{w.end}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
+                <div>
+                  <div className="text-white/60 text-xs uppercase mb-2">Your Access</div>
+                  <p className="text-sm text-white/80">{planAccessDays(currentMembership.type)}</p>
+                </div>
               </div>
             </div>
           )}
@@ -141,10 +136,4 @@ export default function MembershipPage() {
       </Card>
     </div>
   )
-} 
-
-function formatDays(days: string[] = []) {
-  if (!Array.isArray(days) || days.length === 0) return 'Any day'
-  const map: Record<string, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' }
-  return days.map(d => map[d] || d).join(', ')
 }
