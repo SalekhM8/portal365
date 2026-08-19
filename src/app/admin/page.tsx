@@ -2510,7 +2510,23 @@ function AdminDashboardContent() {
                 {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && (
           <Button variant="outline" onClick={() => openMembershipActionModal('reactivate')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Reactivate</Button>
                     )}
-                    {selectedCustomer.cancelAtPeriodEnd && (<div className="text-orange-400 text-xs">⚠️ Scheduled for cancellation at period end</div>)}
+                    {selectedCustomer.cancelAtPeriodEnd && (
+                      <div className="flex flex-col gap-2">
+                        <div className="text-orange-400 text-xs">⚠️ Scheduled for cancellation at period end</div>
+                        <Button variant="outline" onClick={async () => {
+                          if (!confirm('Remove the scheduled cancellation? The membership will continue billing as normal.')) return
+                          const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/remove-scheduled-cancel`, { method: 'POST' })
+                          const json = await resp.json()
+                          if (resp.ok && json.success) {
+                            alert(json.message)
+                            setSelectedCustomer({ ...selectedCustomer, cancelAtPeriodEnd: false })
+                            await fetchAdminData()
+                          } else {
+                            alert(json.error || 'Failed to remove scheduled cancellation')
+                          }
+                        }} className="border-orange-500/20 text-orange-400 hover:bg-orange-500/10 w-full">Remove scheduled cancellation</Button>
+                      </div>
+                    )}
                     {/* Admin tools moved here */}
         <div className="flex flex-col gap-2">
           <Button variant="outline" onClick={async () => { if (!confirm('Delete this account? Only allowed when no active/trial/paused/past_due subs, no paid invoices, no confirmed payments.')) return; const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/delete`, { method: 'POST' }); const json = await resp.json(); if (resp.ok) { alert('Account deleted'); setSelectedCustomer(null); await fetchAdminData() } else { alert('Delete blocked: ' + (json.error || 'Unknown reason')) } }} className="border-red-500/20 text-red-400 hover:bg-red-500/10 w-full">Delete Account</Button>
