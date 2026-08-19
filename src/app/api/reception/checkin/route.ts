@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CHECKIN_BLOCK_MS, CHECKIN_BLOCK_HOURS } from '@/lib/checkin'
+import { effectiveMemberStatus } from '@/lib/member-status'
 
 const ALLOWED = ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN']
 
@@ -34,15 +35,19 @@ export async function POST(request: NextRequest) {
   }
 
   const sub = await prisma.subscription.findFirst({ where: { userId }, orderBy: { updatedAt: 'desc' } })
+  const membership = await prisma.membership.findFirst({ where: { userId }, orderBy: { updatedAt: 'desc' } })
+  // snapshot the EFFECTIVE status (cash-package aware) — this is what the Today
+  // list and the wall screen render, so a raw old CANCELLED sub must not leak here
+  const { status } = effectiveMemberStatus(sub, membership)
 
   const log = await prisma.accessLog.create({
     data: {
       userId,
       accessMethod: 'PIN_RECEPTION',
       accessGranted: true,
-      accessReason: `Checked in at reception (${sub?.status || 'NO_SUB'})`,
+      accessReason: `Checked in at reception (${status})`,
       location: 'Reception',
-      membershipStatus: sub?.status || null,
+      membershipStatus: status,
     },
   })
   return NextResponse.json({ success: true, checkedInAt: log.accessTime.toISOString() })
