@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { CHECKIN_BLOCK_MS } from '@/lib/checkin'
 
 const ALLOWED = ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN']
 
@@ -69,6 +70,9 @@ export async function POST(request: NextRequest) {
       packageEnd: isOfflinePackage ? membership!.endDate!.toISOString() : null,
       lastVisit: lastCheckin ? lastCheckin.accessTime.toISOString() : null,
       checkedInToday: todayCheckin ? todayCheckin.accessTime.toISOString() : null,
+      // set when the last check-in is inside the block window — UIs hard-block
+      blockedUntil: lastCheckin && (Date.now() - lastCheckin.accessTime.getTime()) < CHECKIN_BLOCK_MS
+        ? new Date(lastCheckin.accessTime.getTime() + CHECKIN_BLOCK_MS).toISOString() : null,
     })
   }
   return NextResponse.json({ members })

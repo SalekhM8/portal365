@@ -10,6 +10,7 @@ type Member = {
   plan: string | null; price: number; status: string
   packageEnd?: string | null
   lastVisit: string | null; checkedInToday: string | null
+  blockedUntil?: string | null
 }
 type Entry = { userId?: string; time: string; name: string; photo: string | null; status: string }
 
@@ -153,7 +154,7 @@ function CheckIn() {
   })
 
   const doCheckin = async () => {
-    if (!member || busy) return
+    if (!member || busy || member.blockedUntil) return
     setBusy(true)
     const r = await fetch('/api/reception/checkin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: member.id }) })
     const j = await r.json(); setBusy(false)
@@ -161,6 +162,9 @@ function CheckIn() {
       setConfirmed(j.checkedInAt)
       resetTimer.current && clearTimeout(resetTimer.current)
       resetTimer.current = setTimeout(reset, 2600)
+    } else if (j.code === 'ALREADY_CHECKED_IN') {
+      // server gate caught a race (e.g. just checked in on the kiosk) — flip the card to blocked
+      setMember(m => m ? { ...m, checkedInToday: j.checkedInAt, blockedUntil: j.blockedUntil } : m)
     }
   }
 
@@ -232,23 +236,39 @@ function CheckIn() {
               </div>
               <StatusPill status={member.status} />
             </div>
-            <div className="mt-4 rounded-xl bg-zinc-50 border border-zinc-100 px-4 py-3 flex items-center justify-between">
-              <p className="text-sm text-zinc-600">{pill(member.status).sub}</p>
-              <button onClick={() => setShowCamera(true)} className="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline shrink-0 ml-3">
-                {member.photo ? 'Retake photo' : 'Add photo'}
-              </button>
-              <p className="text-xs text-zinc-400">
-                {member.checkedInToday ? `Already in today · ${fmtTime(member.checkedInToday)}`
-                  : member.lastVisit ? `Last visit ${fmtDay(member.lastVisit)}` : 'First visit'}
-              </p>
-            </div>
+            {member.blockedUntil ? (
+              <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3.5 flex items-start gap-3">
+                <svg className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Already checked in · {fmtTime(member.checkedInToday || member.lastVisit || member.blockedUntil)}</p>
+                  <p className="text-sm text-amber-800 mt-0.5">Can't check in again until {fmtTime(member.blockedUntil)}. They're either already in the gym, or they need their own membership.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl bg-zinc-50 border border-zinc-100 px-4 py-3 flex items-center justify-between">
+                <p className="text-sm text-zinc-600">{pill(member.status).sub}</p>
+                <button onClick={() => setShowCamera(true)} className="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline shrink-0 ml-3">
+                  {member.photo ? 'Retake photo' : 'Add photo'}
+                </button>
+                <p className="text-xs text-zinc-400">
+                  {member.checkedInToday ? `Already in today · ${fmtTime(member.checkedInToday)}`
+                    : member.lastVisit ? `Last visit ${fmtDay(member.lastVisit)}` : 'First visit'}
+                </p>
+              </div>
+            )}
           </div>
           <div className="px-6 pb-6 flex gap-3">
-            <button onClick={reset} className="h-12 px-5 rounded-xl border border-zinc-200 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition">Cancel</button>
-            <button onClick={doCheckin} disabled={busy}
-              className="h-12 flex-1 rounded-xl bg-zinc-900 text-white font-medium hover:bg-zinc-800 active:scale-[0.99] transition disabled:opacity-60">
-              {busy ? 'Checking in…' : 'Check in'}
-            </button>
+            {member.blockedUntil ? (
+              <button onClick={reset} className="h-12 flex-1 rounded-xl border border-zinc-200 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition">Done</button>
+            ) : (
+              <>
+                <button onClick={reset} className="h-12 px-5 rounded-xl border border-zinc-200 text-sm font-medium text-zinc-600 hover:bg-zinc-50 transition">Cancel</button>
+                <button onClick={doCheckin} disabled={busy}
+                  className="h-12 flex-1 rounded-xl bg-zinc-900 text-white font-medium hover:bg-zinc-800 active:scale-[0.99] transition disabled:opacity-60">
+                  {busy ? 'Checking in…' : 'Check in'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

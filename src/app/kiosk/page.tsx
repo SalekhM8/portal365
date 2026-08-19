@@ -6,8 +6,10 @@ import { signIn } from 'next-auth/react'
 type Member = {
   id: string; name: string; plan: string | null; price: number; status: string
   checkedInToday: string | null
+  blockedUntil?: string | null
 }
 const OK = new Set(['ACTIVE', 'TRIALING'])
+const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 const planLabel = (p: string | null) => (p || '').replace(/^MIG_/, '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 
 function Logo({ className = 'h-10' }: { className?: string }) {
@@ -54,7 +56,7 @@ function KioskLogin({ onDone }: { onDone: () => void }) {
 function Kiosk() {
   const [pin, setPin] = useState('')
   const [member, setMember] = useState<Member | null>(null)
-  const [phase, setPhase] = useState<'idle' | 'card' | 'blocked' | 'done'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'card' | 'blocked' | 'already' | 'done'>('idle')
   const [notFound, setNotFound] = useState(false)
   const [fails, setFails] = useState(0)
   const [cooldown, setCooldown] = useState(0)
@@ -86,8 +88,10 @@ function Kiosk() {
       return
     }
     setFails(0); setMember(m)
-    setPhase(OK.has(m.status) ? 'card' : 'blocked')
-    if (!OK.has(m.status)) { timer.current && clearTimeout(timer.current); timer.current = setTimeout(reset, 7000) }
+    // hard gate: recently checked in -> no confirm screen at all
+    const next = m.blockedUntil ? 'already' : OK.has(m.status) ? 'card' : 'blocked'
+    setPhase(next)
+    if (next !== 'card') { timer.current && clearTimeout(timer.current); timer.current = setTimeout(reset, 7000) }
   }, [reset])
 
   useEffect(() => { if (pin.length === 4 && phase === 'idle' && cooldown === 0) lookup(pin) }, [pin, phase, cooldown, lookup])
@@ -101,6 +105,12 @@ function Kiosk() {
       setPhase('done')
       timer.current && clearTimeout(timer.current)
       timer.current = setTimeout(reset, 3000)
+    } else if (j.code === 'ALREADY_CHECKED_IN') {
+      // server gate caught a race — flip to the blocked screen
+      setMember(m => m ? { ...m, checkedInToday: j.checkedInAt, blockedUntil: j.blockedUntil } : m)
+      setPhase('already')
+      timer.current && clearTimeout(timer.current)
+      timer.current = setTimeout(reset, 7000)
     }
   }
 
@@ -137,12 +147,25 @@ function Kiosk() {
           <p className="text-sm text-zinc-500">Welcome</p>
           <h2 className="text-3xl font-semibold tracking-tight text-zinc-900 mt-1">{member.name}</h2>
           <p className="text-zinc-500 mt-1 mb-2">{planLabel(member.plan)}</p>
-          {member.checkedInToday && <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5 inline-block mb-2">Already checked in today</p>}
           <button onClick={confirm} disabled={busy}
             className="w-full h-16 mt-4 rounded-2xl bg-zinc-900 text-white text-xl font-semibold active:scale-[0.98] transition disabled:opacity-60">
             {busy ? '…' : 'Confirm ✓'}
           </button>
           <button onClick={reset} className="mt-4 text-sm text-zinc-400">Not you? Cancel</button>
+        </div>
+      )}
+
+      {phase === 'already' && member && (
+        <div className="w-full max-w-sm rounded-3xl p-8 text-center animate-in bg-amber-50 border border-amber-200">
+          <div className="mx-auto h-14 w-14 rounded-full grid place-items-center bg-amber-100">
+            <svg className="h-7 w-7 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 mt-4">Already checked in</h2>
+          <p className="text-zinc-600 mt-2">
+            {member.name.split(' ')[0]} checked in at {member.checkedInToday ? fmtTime(member.checkedInToday) : 'earlier'}{member.blockedUntil ? ` — next check-in from ${fmtTime(member.blockedUntil)}` : ''}.
+          </p>
+          <p className="text-sm text-zinc-500 mt-3">If that wasn't you, please speak to the desk — every member checks in with their own PIN.</p>
+          <button onClick={reset} className="mt-6 text-sm text-zinc-500 underline">Back</button>
         </div>
       )}
 
