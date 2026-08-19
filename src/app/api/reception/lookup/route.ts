@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CHECKIN_BLOCK_MS } from '@/lib/checkin'
+import { effectiveMemberStatus } from '@/lib/member-status'
 
 const ALLOWED = ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN']
 
@@ -51,14 +52,7 @@ export async function POST(request: NextRequest) {
       orderBy: { accessTime: 'desc' },
     })
     const todayCheckin = lastCheckin && lastCheckin.accessTime >= startOfDay ? lastCheckin : null
-    // Offline/cash package members: no LIVE subscription (old cancelled Stripe
-    // subs don't count) and a membership with endDate. Status derives from the
-    // package term — ACTIVE until endDate, EXPIRED after.
-    const LIVE_SUB = new Set(['ACTIVE', 'TRIALING', 'PAUSED', 'PAST_DUE'])
-    const hasLiveSub = !!sub && LIVE_SUB.has(sub.status)
-    const isOfflinePackage = !hasLiveSub && !!membership?.endDate
-    let status = sub?.status || membership?.status || 'NONE'
-    if (isOfflinePackage) status = (membership!.endDate! >= new Date()) ? 'ACTIVE' : 'EXPIRED'
+    const { status, isOfflinePackage } = effectiveMemberStatus(sub, membership)
     members.push({
       id: u.id,
       name: `${u.firstName} ${u.lastName}`.replace(/\s+/g, ' ').trim(),

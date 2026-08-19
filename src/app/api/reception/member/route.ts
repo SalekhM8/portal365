@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { effectiveMemberStatus } from '@/lib/member-status'
 
 const ALLOWED = ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN']
 
@@ -19,10 +20,7 @@ export async function GET(request: NextRequest) {
   const membership = await prisma.membership.findFirst({ where: { userId }, orderBy: { updatedAt: 'desc' } })
   let ec: any = {}
   try { ec = u.emergencyContact ? JSON.parse(u.emergencyContact) : {} } catch {}
-  const LIVE_SUB = new Set(['ACTIVE', 'TRIALING', 'PAUSED', 'PAST_DUE'])
-  const isOffline = !(sub && LIVE_SUB.has(sub.status)) && !!membership?.endDate
-  let status = sub?.status || membership?.status || 'NONE'
-  if (isOffline) status = membership!.endDate! >= new Date() ? 'ACTIVE' : 'EXPIRED'
+  const { status, isOfflinePackage: isOffline } = effectiveMemberStatus(sub, membership)
   return NextResponse.json({
     member: {
       id: u.id,
