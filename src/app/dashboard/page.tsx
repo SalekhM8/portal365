@@ -3,6 +3,7 @@
 import { Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
+import { planAccessDays } from '@/lib/plan-access'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -105,48 +106,6 @@ function DashboardContent() {
     }
   }
 
-  function formatWindowDays(days: string[] = []) {
-    const order = ['mon','tue','wed','thu','fri','sat','sun']
-    const label: Record<string, string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' }
-    const sorted = [...days].sort((a,b) => order.indexOf(a) - order.indexOf(b))
-    return sorted.map(d => label[d] || d).join(', ')
-  }
-
-  function WeekGrid({ windows }: { windows: Array<{ days: string[]; start: string; end: string }> }) {
-    const days = ['mon','tue','wed','thu','fri','sat','sun']
-    const label: Record<string, string> = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' }
-    const slots: Record<string, Array<{ start: string; end: string }>> = {}
-    for (const d of days) slots[d] = []
-    for (const w of windows || []) {
-      for (const d of w.days || []) {
-        if (!slots[d]) slots[d] = []
-        slots[d].push({ start: w.start, end: w.end })
-      }
-    }
-    return (
-      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-        {days.map(d => (
-          <div key={d} className="p-3 border rounded-lg bg-white/5 border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-white font-medium">{label[d]}</span>
-              <Badge variant={slots[d].length ? 'default' : 'secondary'}>{slots[d].length ? 'Included' : 'Not Included'}</Badge>
-            </div>
-            {slots[d].length ? (
-              <div className="flex flex-wrap gap-2">
-                {slots[d].map((s, idx) => (
-                  <span key={idx} className="text-xs px-2 py-1 rounded-full bg-green-500/15 text-green-300 border border-green-500/30">
-                    {s.start}–{s.end}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-white/60">No access</p>
-            )}
-          </div>
-        ))}
-      </div>
-    )
-  }
 
   return (
     <div className="container mx-auto p-4 lg:p-6 space-y-6 lg:space-y-8">
@@ -467,78 +426,22 @@ function DashboardContent() {
           </Card>
         </TabsContent>
 
-        {/* Access Permissions Tab */}
+        {/* Access Tab — one plain line derived from the plan type, nothing stored */}
         <TabsContent value="access" className="space-y-6">
-          {/* Included time windows (mirror of package schedule). Hide classes below per request. */}
           <Card>
             <CardHeader>
-              <CardTitle>Included in your plan</CardTitle>
+              <CardTitle>Your access</CardTitle>
               <CardDescription>
-                Time windows when your membership grants access
+                When your membership lets you train
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {membershipData?.scheduleAccess?.allowedWindows?.length ? (
-                <WeekGrid windows={membershipData.scheduleAccess.allowedWindows} />
-              ) : (
-                <p className="text-white/70 text-sm">No explicit time windows configured for this plan.</p>
-              )}
+              <p className="text-2xl font-semibold">{planAccessDays(membershipData?.type)}</p>
+              <p className="text-sm text-white/60 mt-2">{membershipData ? getMembershipDisplayName(membershipData.type) : ''}</p>
+              <p className="text-sm text-white/60 mt-4">Class times are on the gym timetable — ask at the desk if you're unsure.</p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Membership Benefits</CardTitle>
-              <CardDescription>
-                Additional services included with your plan
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {membershipData?.accessPermissions && (
-                <div className="space-y-4">
-                  {Array.isArray(membershipData.accessPermissions.martialArts) && membershipData.accessPermissions.martialArts.length > 0 && (
-                    <div>
-                      <h4 className="font-semibold mb-2">Martial Arts Access</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {membershipData.accessPermissions.martialArts.map((art: string) => (
-                          <Badge key={art} variant="outline">
-                            {art.toUpperCase()}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="flex items-center justify-between">
-                      <span>Equipment Access</span>
-                      <Badge variant="default">
-                        Included
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Changing Facilities</span>
-                      <Badge variant="default">
-                        Included
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Personal Training</span>
-                      <Badge variant={membershipData.accessPermissions.personalTraining ? 'default' : 'secondary'}>
-                        {membershipData.accessPermissions.personalTraining ? 'Included' : 'Not Included'}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>Women's Classes</span>
-                      <Badge variant={membershipData.accessPermissions.womensClasses ? 'default' : 'secondary'}>
-                        {membershipData.accessPermissions.womensClasses ? 'Included' : 'Not Included'}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
     </div>
