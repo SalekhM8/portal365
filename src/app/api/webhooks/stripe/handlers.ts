@@ -97,7 +97,10 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     console.log(`🔄 [${operationId}] Processing invoice payment: ${invoiceId}`)
     
     // Be tolerant to payload shapes: pull subscription id from multiple locations
+    // Basil (2025-06-30+) payloads carry the id at invoice.parent.subscription_details —
+    // new accounts (e.g. AFC) emit this shape; older accounts still use invoice.subscription
     const subscriptionId = invoice.subscription
+      || (invoice?.parent?.subscription_details?.subscription as string | undefined)
       || (invoice?.lines?.data?.[0]?.subscription as string | undefined)
       || (invoice?.lines?.data?.[0]?.parent?.subscription_details?.subscription as string | undefined)
     const amountPaid = Number(invoice.amount_paid || 0) / 100
@@ -611,7 +614,7 @@ export async function handlePaymentActionRequired(invoice: any, account?: Stripe
   const operationId = `webhook_action_required_${invoiceId}_${Date.now()}`
   try {
     const attempt: number = Number(invoice.attempt_count ?? 1)
-    const subscriptionId = invoice.subscription
+    const subscriptionId = invoice.subscription || invoice?.parent?.subscription_details?.subscription
     let subscription = null
     if (subscriptionId) {
       subscription = await prisma.subscription.findUnique({ where: { stripeSubscriptionId: subscriptionId }, include: { user: true } })
@@ -1051,6 +1054,7 @@ export async function handlePaymentIntentCanceled(pi: any, account?: StripeAccou
 
     const subscriptionId =
       invoice.subscription ||
+      invoice?.parent?.subscription_details?.subscription ||
       invoice?.lines?.data?.[0]?.subscription ||
       invoice?.lines?.data?.[0]?.parent?.subscription_details?.subscription
     if (!subscriptionId) {
