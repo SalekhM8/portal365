@@ -2505,6 +2505,7 @@ function AdminDashboardContent() {
               const d = new Date(); const endNextMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 2, 0))
               setExtendPauseDate(endNextMonth.toISOString().slice(0, 10)); setExtendPauseReason(''); setShowExtendPause(true)
             }} className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10 w-full">Extend pause</Button>
+            <Button variant="outline" onClick={() => openMembershipActionModal('cancel')} className="border-red-500/20 text-red-400 hover:bg-red-500/10 w-full">Cancel membership</Button>
           </div>
                     )}
                 {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && (

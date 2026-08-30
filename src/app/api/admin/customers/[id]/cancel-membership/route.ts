@@ -233,13 +233,20 @@ export async function POST(
             }
           })
 
-          // Update membership status immediately
+          // Update membership status immediately (SUSPENDED/PAUSED covers paused members)
           await tx.membership.updateMany({
             where: { 
               userId: customer.id,
-              status: { in: ['ACTIVE', 'SUSPENDED', 'PENDING_PAYMENT'] }
+              status: { in: ['ACTIVE', 'SUSPENDED', 'PAUSED', 'PENDING_PAYMENT'] }
             },
             data: { status: 'CANCELLED' }
+          })
+
+          // Close any open pause windows so the pause cron never settles/resumes
+          // a cancelled member (paused leavers must never be charged again)
+          await tx.subscriptionPauseWindow.updateMany({
+            where: { subscriptionId: activeSubscription.id, status: { in: ['SCHEDULED', 'ACTIVE'] } },
+            data: { status: 'CANCELLED', closedAt: new Date() }
           })
 
           // Mark any FAILED payments for this user as resolved so they clear from To-Do
@@ -260,11 +267,17 @@ export async function POST(
           // End of period cancellation - just set the flag
           await tx.subscription.update({
             where: { id: activeSubscription.id },
-            data: { 
+            data: {
               cancelAtPeriodEnd: true
             }
           })
-          // Membership stays active until period end
+          // Membership stays active until period end — but close any open pause
+          // windows: a leaver's window ending before period end would otherwise
+          // make the pause cron settle a post-resume charge and resume billing.
+          await tx.subscriptionPauseWindow.updateMany({
+            where: { subscriptionId: activeSubscription.id, status: { in: ['SCHEDULED', 'ACTIVE'] } },
+            data: { status: 'CANCELLED', closedAt: new Date() }
+          })
         }
       })
 
