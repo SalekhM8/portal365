@@ -57,8 +57,6 @@ function RegisterDetailsContent() {
   const searchParams = useSearchParams()
   const [selectedBusiness, setSelectedBusiness] = useState<string>('')
   const [selectedPlan, setSelectedPlan] = useState<string>('')
-  const [specialPrice, setSpecialPrice] = useState<number | null>(null)
-  const [startOnFirst, setStartOnFirst] = useState<boolean>(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [acceptedWaiver, setAcceptedWaiver] = useState(false)
@@ -89,20 +87,12 @@ function RegisterDetailsContent() {
   useEffect(() => {
     const businessParam = searchParams.get('business')
     const planParam = searchParams.get('plan')
-    const priceParam = searchParams.get('price')
-    const startParam = searchParams.get('start')
     
     if (businessParam && (businessParam in businessConfigs)) {
       setSelectedBusiness(businessParam)
     }
     if (planParam) {
       setSelectedPlan(planParam)
-    }
-    if (priceParam && !Number.isNaN(Number(priceParam))) {
-      setSpecialPrice(Number(priceParam))
-    }
-    if (startParam === 'firstOfNextMonth') {
-      setStartOnFirst(true)
     }
   }, [searchParams])
 
@@ -233,8 +223,6 @@ function RegisterDetailsContent() {
           membershipType: selectedPlan,
           businessId: selectedBusiness,
           // Special price + no-proration path
-          ...(specialPrice !== null ? { customPrice: specialPrice } : {}),
-          ...(startOnFirst ? { startOnFirst: true } : {})
         }),
       })
 
@@ -302,7 +290,7 @@ function RegisterDetailsContent() {
       <div className="relative container mx-auto px-4 sm:px-6 py-8 max-w-4xl">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-8">
-          <Link href={startOnFirst ? '/migrate' : `/register?business=${selectedBusiness}`} className="text-white/60 hover:text-white transition-colors">
+          <Link href={`/register?business=${selectedBusiness}`} className="text-white/60 hover:text-white transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -620,9 +608,7 @@ function RegisterDetailsContent() {
                         <AlertTriangle className="h-4 w-4 text-amber-300" />
                       </div>
                       <p className="text-sm leading-relaxed text-amber-100">
-                        {startOnFirst
-                          ? 'No payment today. Your first charge will be on the 1st of next month. For cancellations, you must give a 14-day notice.'
-                          : 'Your first payment will be a prorated payment that calculates how much you owe for the rest of the month. For cancellations, you must give a 14-day notice.'}
+                        Your first payment will be a prorated payment that calculates how much you owe for the rest of the month. For cancellations, you must give a 14-day notice.
                       </p>
                     </div>
                   </div>
@@ -662,7 +648,7 @@ function RegisterDetailsContent() {
                     {currentPlan.displayName}
                   </Badge>
                   <div className="text-3xl font-bold text-white">
-                    £{specialPrice !== null ? specialPrice : currentPlan.monthlyPrice}
+                    £{currentPlan.monthlyPrice}
                     <span className="text-sm text-white/60 font-normal">/month</span>
                   </div>
                   <p className="text-white/70 text-sm">{currentPlan.description}</p>
@@ -679,11 +665,7 @@ function RegisterDetailsContent() {
                 </div>
 
                 <div className="pt-4 border-t border-white/10 text-xs text-white/60">
-                  {specialPrice !== null || startOnFirst ? (
-                    <p>No payment today. Your first payment will be taken on the 1st of next month, then monthly.</p>
-                  ) : (
-                    <p>Your membership will be prorated for the remainder of this month, then billed monthly on the 1st.</p>
-                  )}
+                  <p>Your membership will be prorated for the remainder of this month, then billed monthly on the 1st.</p>
                 </div>
               </CardContent>
             </Card>

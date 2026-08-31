@@ -29,9 +29,10 @@ const registerSchema = z.object({
   // Accept dynamic plan keys (DB-backed) as well as legacy keys
   membershipType: z.string().min(1),
   businessId: z.string(),
-  // Optional overrides for special flows (self-serve, no proration)
-  customPrice: z.number().positive().optional(),
-  startOnFirst: z.boolean().optional()
+  // NOTE: this is the PUBLIC signup endpoint. It deliberately accepts no price
+  // or billing-start overrides — a `?price=1` URL param used to buy any plan at
+  // £1/month. Custom pricing and no-proration starts are admin-only flows
+  // (/api/admin/customers/create), which carry their own auth.
 })
 
 export async function POST(request: NextRequest) {
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
         membershipType: validatedData.membershipType,
         status: 'PENDING_PAYMENT',
         startDate: new Date(),
-        monthlyPrice: validatedData.customPrice ?? membershipDetails.monthlyPrice,
+        monthlyPrice: membershipDetails.monthlyPrice,
         setupFee: membershipDetails.setupFee || 0,
         accessPermissions: JSON.stringify(membershipDetails.accessPermissions),
         scheduleAccess: JSON.stringify(membershipDetails.scheduleAccess),
@@ -168,24 +169,12 @@ export async function POST(request: NextRequest) {
         stripeKeyExists: !!process.env.STRIPE_SECRET_KEY
       })
       
-      // Determine path: admin-style (no proration) vs normal (prorated today)
-      const isNoProration = !!validatedData.startOnFirst || typeof validatedData.customPrice === 'number'
-
-      const customStartDate = (() => {
-        if (!isNoProration) return undefined
-        const now = new Date()
-        return new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 1)).toISOString().split('T')[0]
-      })()
-
       const subscriptionResult = await SubscriptionProcessor.createSubscription({
         userId: user.id,
         membershipType: validatedData.membershipType,
         businessId: validatedData.businessId,
         customerEmail: validatedData.email,
         customerName: `${validatedData.firstName} ${validatedData.lastName}`,
-        ...(validatedData.customPrice ? { customPrice: validatedData.customPrice } : {}),
-        ...(isNoProration ? { isAdminCreated: true } : {}),
-        ...(customStartDate ? { customStartDate } : {})
       })
 
       console.log('✅ Subscription created successfully')
