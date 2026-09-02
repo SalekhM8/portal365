@@ -1604,9 +1604,15 @@ function AdminDashboardContent() {
             <Card>
               <CardHeader>
                 <CardTitle>To‑Do</CardTitle>
-                <CardDescription>Payments that need attention (recent failures)</CardDescription>
+                <CardDescription>Payments that need attention, and cash packages ending soon</CardDescription>
               </CardHeader>
               <CardContent>
+                <Tabs defaultValue="subscribers">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="subscribers" className="text-xs">Subscribers</TabsTrigger>
+                  <TabsTrigger value="packages" className="text-xs">Packages{packagesTodo.length > 0 ? ` (${packagesTodo.length})` : ''}</TabsTrigger>
+                </TabsList>
+                <TabsContent value="subscribers">
                 <div className="space-y-4">
                   {(() => {
                     const failed = [...paymentsTodo]
@@ -1668,16 +1674,9 @@ function AdminDashboardContent() {
                   )
                   })()}
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Packages{packagesTodo.length > 0 ? ` (${packagesTodo.length})` : ''}</CardTitle>
-                <CardDescription>Cash packages ending within 30 days or already expired</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
+                </TabsContent>
+                <TabsContent value="packages">
+                <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
                   {packagesTodo.length === 0 && <p className="text-white/50 text-sm py-6 text-center">No packages ending in the next 30 days.</p>}
                   {packagesTodo.map((pk: any) => (
                     <div key={pk.customerId} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-white/10 bg-white/5">
@@ -1702,6 +1701,8 @@ function AdminDashboardContent() {
                     </div>
                   ))}
                 </div>
+                </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
 
