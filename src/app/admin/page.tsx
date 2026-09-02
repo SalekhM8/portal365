@@ -265,6 +265,10 @@ function AdminDashboardContent() {
   const [showResetSuccess, setShowResetSuccess] = useState(false)
   const [todoLimitMobile, setTodoLimitMobile] = useState(10)
   const [todoLimitDesktop, setTodoLimitDesktop] = useState(10)
+  const [selectedTodoIds, setSelectedTodoIds] = useState<string[]>([])
+  const [retryProgress, setRetryProgress] = useState<Record<string, { state: 'running' | 'ok' | 'warn' | 'fail'; msg?: string }>>({})
+  const [retryRunning, setRetryRunning] = useState(false)
+  const [retrySummary, setRetrySummary] = useState<string | null>(null)
   const [resetPasswordResult, setResetPasswordResult] = useState<{
     tempPassword: string;
     customerEmail: string;
@@ -708,6 +712,44 @@ function AdminDashboardContent() {
     const json = await resp.json()
     if (resp.ok) alert('Invoice retry requested. Status: ' + json.invoice?.status)
     else alert('Retry failed: ' + (json.error || 'Unknown error'))
+  }
+
+  // Batch retry: one retry per member (rows deduped by customer), sequential so
+  // the desk can watch progress; reuses the hardened per-customer retry endpoint.
+  const runBatchRetry = async (rows: any[]) => {
+    const retryable = rows.filter(p => p.status !== 'INCOMPLETE_SIGNUP')
+    const byCustomer = new Map<string, any[]>()
+    for (const p of retryable) {
+      if (!byCustomer.has(p.customerId)) byCustomer.set(p.customerId, [])
+      byCustomer.get(p.customerId)!.push(p)
+    }
+    if (byCustomer.size === 0) { alert('Nothing selected that can be retried (no card on file).'); return }
+    if (!confirm(`Retry failed payments for ${byCustomer.size} member${byCustomer.size === 1 ? '' : 's'} now?`)) return
+    setRetryRunning(true); setRetrySummary(null)
+    let ok = 0, warn = 0, fail = 0, collected = 0
+    for (const [customerId, ps] of byCustomer) {
+      const ids = ps.map(p => p.id)
+      setRetryProgress(prev => ({ ...prev, ...Object.fromEntries(ids.map(id => [id, { state: 'running' as const }])) }))
+      let res: { state: 'ok' | 'warn' | 'fail'; msg: string }
+      try {
+        const resp = await fetch(`/api/admin/customers/${customerId}/retry-invoice`, { method: 'POST' })
+        const j = await resp.json()
+        if (resp.ok && (j.recovered || j.invoice?.status === 'paid')) {
+          res = { state: 'ok', msg: 'Paid' }; ok++; collected += Number(ps[0].amount) || 0
+        } else if (resp.ok && j.success) {
+          res = { state: 'warn', msg: `Status: ${j.invoice?.status || 'unknown'}` }; warn++
+        } else if (j.recoveryKind === 'requires_action') {
+          res = { state: 'warn', msg: 'Needs authentication (3DS) — member must complete' }; warn++
+        } else {
+          res = { state: 'fail', msg: j.error || 'Failed' }; fail++
+        }
+      } catch { res = { state: 'fail', msg: 'Network error' }; fail++ }
+      setRetryProgress(prev => ({ ...prev, ...Object.fromEntries(ids.map(id => [id, res])) }))
+    }
+    setRetryRunning(false)
+    setRetrySummary(`Done: ${ok} collected${collected > 0 ? ` (£${collected.toFixed(2)})` : ''} · ${fail} declined/failed · ${warn} other`)
+    setSelectedTodoIds([])
+    await fetchAdminData()
   }
 
   const openCustomerModal = (customerId: string) => {
@@ -1615,29 +1657,59 @@ function AdminDashboardContent() {
                 <TabsContent value="subscribers">
                 <div className="space-y-4">
                   {(() => {
-                    const failed = [...paymentsTodo]
+                    const allFailed = [...paymentsTodo]
                     .filter(p => !dismissedTodoIds.includes(p.id))
                       .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                    .slice(0, todoLimitDesktop)
+                    const failed = allFailed.slice(0, todoLimitDesktop)
                     if (failed.length === 0) {
                       return (
                         <div className="text-sm text-muted-foreground">No failed payments. You're all set.</div>
                       )
                     }
+                    const retryableVisible = failed.filter(p => p.status !== 'INCOMPLETE_SIGNUP')
                   return (
                     <>
+                    <div className="flex items-center justify-between gap-3 pb-1">
+                      <label className="flex items-center gap-2 text-xs text-white/70 cursor-pointer select-none">
+                        <input type="checkbox" className="accent-white h-4 w-4" disabled={retryRunning || retryableVisible.length === 0}
+                          checked={retryableVisible.length > 0 && retryableVisible.every(p => selectedTodoIds.includes(p.id))}
+                          onChange={e => setSelectedTodoIds(e.target.checked ? retryableVisible.map(p => p.id) : [])} />
+                        Select all
+                      </label>
+                      <div className="flex gap-2">
+                        {selectedTodoIds.length > 0 && (
+                          <Button size="sm" onClick={() => runBatchRetry(failed.filter(p => selectedTodoIds.includes(p.id)))} disabled={retryRunning} className="bg-white text-black hover:bg-white/90">
+                            {retryRunning ? 'Retrying…' : `Retry selected (${selectedTodoIds.length})`}
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => runBatchRetry(allFailed)} disabled={retryRunning} className="border-white/20 text-white hover:bg-white/10">
+                          {retryRunning ? 'Retrying…' : 'Retry all failed'}
+                        </Button>
+                      </div>
+                    </div>
+                    {retrySummary && <p className="text-xs text-white/70 pb-1">{retrySummary}</p>}
                     {failed.map((p, idx) => (
                       <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-start gap-3">
+                            <input type="checkbox" className="accent-white h-4 w-4 mt-0.5"
+                              disabled={p.status === 'INCOMPLETE_SIGNUP' || retryRunning}
+                              title={p.status === 'INCOMPLETE_SIGNUP' ? 'No card on file — nothing to retry' : undefined}
+                              checked={selectedTodoIds.includes(p.id)}
+                              onChange={e => setSelectedTodoIds(prev => e.target.checked ? [...prev, p.id] : prev.filter(id => id !== p.id))} />
                             <span className="text-sm font-bold text-white/50 min-w-[24px]">{idx + 1}.</span>
                             <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
                               <p className="text-sm font-medium text-white">{p.customerName}</p>
                             <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
-                            <div className="mt-1">
+                            <div className="mt-1 flex items-center gap-2">
                               <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
                                 {p.status === 'INCOMPLETE_SIGNUP' ? 'NO PAYMENT METHOD ATTACHED' : 'FAILED'}
                               </Badge>
+                              {retryProgress[p.id] && (
+                                <span className={`text-xs ${retryProgress[p.id].state === 'ok' ? 'text-green-400' : retryProgress[p.id].state === 'warn' ? 'text-amber-400' : retryProgress[p.id].state === 'running' ? 'text-white/60 animate-pulse' : 'text-red-400'}`}>
+                                  {retryProgress[p.id].state === 'running' ? 'Retrying…' : retryProgress[p.id].state === 'ok' ? '✓ Paid' : retryProgress[p.id].msg}
+                                </span>
+                              )}
                               </div>
                             </div>
                           </div>
