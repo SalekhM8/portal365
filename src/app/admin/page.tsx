@@ -1275,6 +1275,7 @@ function AdminDashboardContent() {
       case 'ACTIVE': return 'default'
       case 'PAUSED': return 'outline'
       case 'CANCELLED': return 'destructive'
+      case 'EXPIRED': return 'destructive'
       case 'PENDING_PAYMENT': return 'destructive'
       case 'SUSPENDED': return 'secondary'
       case 'CONFIRMED': return 'default'
@@ -1666,6 +1667,40 @@ function AdminDashboardContent() {
                   </>
                   )
                   })()}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Packages{packagesTodo.length > 0 ? ` (${packagesTodo.length})` : ''}</CardTitle>
+                <CardDescription>Cash packages ending within 30 days or already expired</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {packagesTodo.length === 0 && <p className="text-white/50 text-sm py-6 text-center">No packages ending in the next 30 days.</p>}
+                  {packagesTodo.map((pk: any) => (
+                    <div key={pk.customerId} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-white/10 bg-white/5">
+                      <div className="min-w-0 cursor-pointer" onClick={() => openCustomerModal(pk.customerId)}>
+                        <p className="text-white font-medium truncate">{pk.customerName}</p>
+                        <p className="text-xs text-white/50">{pk.packageName} · PIN {pk.pin || '—'}</p>
+                        <p className={`text-xs mt-0.5 ${pk.expired ? 'text-red-400 font-semibold' : 'text-amber-400'}`}>
+                          {pk.expired ? `EXPIRED ${new Date(pk.endDate).toLocaleDateString()}` : `Ends ${new Date(pk.endDate).toLocaleDateString()} (${pk.daysLeft}d left)`}
+                        </p>
+                      </div>
+                      <Button size="sm" variant="outline" className="border-green-500/20 text-green-400 hover:bg-green-500/10 shrink-0"
+                        onClick={async () => {
+                          const m = window.prompt(`Renew ${pk.customerName} for how many months? (cash taken at desk)`, '6')
+                          const months = Number(m)
+                          if (!m || !Number.isInteger(months) || months < 1 || months > 24) return
+                          const resp = await fetch(`/api/admin/customers/${pk.customerId}/renew-package`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months }) })
+                          const j = await resp.json()
+                          if (resp.ok && j.success) { alert(j.message); fetchAdminData() } else alert('Renew failed: ' + (j.error || 'Unknown'))
+                        }}>
+                        Renew
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -2404,7 +2439,11 @@ function AdminDashboardContent() {
                         <p className="text-white"><strong className="text-white/90">Last Payment:</strong> £{last ? Number(last.amount).toLocaleString() : '—'}</p>
                       )
                     })()}
-                  <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
+                  {(selectedCustomer as any).packageEnd ? (
+                    <p className="text-white"><strong className="text-white/90">Package {new Date((selectedCustomer as any).packageEnd) >= new Date() ? 'ends' : 'ended'}:</strong> <span className={new Date((selectedCustomer as any).packageEnd) < new Date() ? 'text-red-400 font-semibold' : ''}>{new Date((selectedCustomer as any).packageEnd).toLocaleDateString()}</span></p>
+                  ) : (
+                    <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
+                  )}
                   </div>
                 )}
 
@@ -3180,7 +3219,7 @@ function AdminDashboardContent() {
               <div className="bg-white/5 border border-white/10 p-3 rounded">
                 <p className="text-sm text-white/80"><strong>Customer:</strong> {selectedCustomer.name}</p>
                 <p className="text-sm text-white/80"><strong>Current Plan:</strong> {selectedCustomer.membershipType}</p>
-                <p className="text-sm text-white/80"><strong>Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
+                <p className="text-sm text-white/80"><strong>Next Billing:</strong> {(selectedCustomer as any).packageEnd ? '— (cash package)' : new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
               </div>
               <div>
                 <Label className="text-white mb-2 block">New Plan</Label>

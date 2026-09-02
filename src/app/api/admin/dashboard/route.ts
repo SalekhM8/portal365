@@ -512,7 +512,8 @@ export async function GET() {
               select: {
                 membershipType: true,
                 status: true,
-                nextBillingDate: true
+                nextBillingDate: true,
+                endDate: true
               }
             },
             subscriptions: {
@@ -855,6 +856,16 @@ export async function GET() {
         derivedStatus = membership.status
       }
 
+      // Offline/cash package members (no live sub + membership.endDate): status
+      // derives from the package term — the raw row stays ACTIVE forever, which
+      // used to make long-expired packages look live in the admin.
+      const LIVE_SUB_STATUSES = ['ACTIVE', 'TRIALING', 'PAUSED', 'PAST_DUE']
+      const isOfflinePackage = !(subscription && LIVE_SUB_STATUSES.includes(subscription.status)) && !!(membership as any)?.endDate
+      const packageEnd = isOfflinePackage ? (membership as any).endDate.toISOString().split('T')[0] : null
+      if (isOfflinePackage) {
+        derivedStatus = (membership as any).endDate >= new Date() ? 'ACTIVE' : 'EXPIRED'
+      }
+
       // Detect DD migration trials (no upfront payment, starts next billing)
       const billingDate = subscription?.nextBillingDate || membership?.nextBillingDate
       const startsOn = subscription && confirmedPaymentsCount === 0 && billingDate && billingDate > new Date()
@@ -941,7 +952,8 @@ export async function GET() {
         lastPayment: lastPaidAmount,
         totalPaid: totalPaidByUser[customer.id] ?? 0,
         routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
-        nextBilling: nextBillingIso,
+        nextBilling: isOfflinePackage ? 'N/A' : nextBillingIso,
+        packageEnd,
         startsOn,
         pauseScheduleLabel,
         emergencyContact: effectiveEmergency,
