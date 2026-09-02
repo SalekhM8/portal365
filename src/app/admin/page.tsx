@@ -1526,29 +1526,58 @@ function AdminDashboardContent() {
                   <TabsContent value="todo" className="mt-4">
                     <div className="space-y-4">
                       {(() => {
-                        const failed = [...paymentsTodo]
+                        const allFailed = [...paymentsTodo]
                           .filter(p => !dismissedTodoIds.includes(p.id))
                           .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                          .slice(0, todoLimitMobile)
+                        const failed = allFailed.slice(0, todoLimitMobile)
                         if (failed.length === 0) {
                           return (
                             <div className="text-sm text-muted-foreground">No failed payments. You're all set.</div>
                           )
                         }
+                        const retryableVisible = failed.filter(p => p.status !== 'INCOMPLETE_SIGNUP')
                         return (
                           <>
+                          <div className="flex items-center justify-between gap-2 pb-1 flex-wrap">
+                            <label className="flex items-center gap-2 text-xs text-white/70 cursor-pointer select-none">
+                              <input type="checkbox" className="accent-white h-4 w-4" disabled={retryRunning || retryableVisible.length === 0}
+                                checked={retryableVisible.length > 0 && retryableVisible.every(p => selectedTodoIds.includes(p.id))}
+                                onChange={e => setSelectedTodoIds(e.target.checked ? retryableVisible.map(p => p.id) : [])} />
+                              Select all
+                            </label>
+                            <div className="flex gap-2">
+                              {selectedTodoIds.length > 0 && (
+                                <Button size="sm" onClick={() => runBatchRetry(failed.filter(p => selectedTodoIds.includes(p.id)))} disabled={retryRunning} className="bg-white text-black hover:bg-white/90 text-xs">
+                                  {retryRunning ? 'Retrying…' : `Retry selected (${selectedTodoIds.length})`}
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" onClick={() => runBatchRetry(allFailed)} disabled={retryRunning} className="border-white/20 text-white hover:bg-white/10 text-xs">
+                                {retryRunning ? 'Retrying…' : 'Retry all failed'}
+                              </Button>
+                            </div>
+                          </div>
+                          {retrySummary && <p className="text-xs text-white/70 pb-1">{retrySummary}</p>}
                           {failed.map((p, idx) => (
                           <div key={p.id} className="border border-white/10 rounded p-3 bg-white/5">
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex items-start gap-3">
+                                <input type="checkbox" className="accent-white h-4 w-4 mt-0.5"
+                                  disabled={p.status === 'INCOMPLETE_SIGNUP' || retryRunning}
+                                  checked={selectedTodoIds.includes(p.id)}
+                                  onChange={e => setSelectedTodoIds(prev => e.target.checked ? [...prev, p.id] : prev.filter(id => id !== p.id))} />
                                 <span className="text-sm font-bold text-white/50 min-w-[24px]">{idx + 1}.</span>
                                 <div onClick={() => openCustomerModal(p.customerId)} className="cursor-pointer">
                                   <p className="text-sm font-medium text-white">{p.customerName}</p>
                                   <p className="text-xs text-white/70">£{p.amount} • {p.membershipType} • {new Date(p.timestamp).toLocaleString()}</p>
-                                  <div className="mt-1">
+                                  <div className="mt-1 flex items-center gap-2 flex-wrap">
                                     <Badge variant={getStatusBadgeVariant(p.status === 'INCOMPLETE_SIGNUP' ? 'PENDING_PAYMENT' : 'FAILED')}>
                                       {p.status === 'INCOMPLETE_SIGNUP' ? 'NO PAYMENT METHOD ATTACHED' : 'FAILED'}
                                     </Badge>
+                                    {retryProgress[p.id] && (
+                                      <span className={`text-xs ${retryProgress[p.id].state === 'ok' ? 'text-green-400' : retryProgress[p.id].state === 'warn' ? 'text-amber-400' : retryProgress[p.id].state === 'running' ? 'text-white/60 animate-pulse' : 'text-red-400'}`}>
+                                        {retryProgress[p.id].state === 'running' ? 'Retrying…' : retryProgress[p.id].state === 'ok' ? '✓ Paid' : retryProgress[p.id].msg}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
