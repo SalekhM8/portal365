@@ -1638,6 +1638,15 @@ function AdminDashboardContent() {
                             }}>
                             Renew
                           </Button>
+                          <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10 shrink-0"
+                            onClick={async () => {
+                              if (!confirm(`End ${pk.customerName}'s package now? They'll show as expired immediately and the door will block them.`)) return
+                              const resp = await fetch(`/api/admin/customers/${pk.customerId}/end-package`, { method: 'POST' })
+                              const j = await resp.json()
+                              if (resp.ok && j.success) { alert(j.message); fetchAdminData() } else alert('Failed: ' + (j.error || 'Unknown'))
+                            }}>
+                            End
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -1798,6 +1807,15 @@ function AdminDashboardContent() {
                           if (resp.ok && j.success) { alert(j.message); fetchAdminData() } else alert('Renew failed: ' + (j.error || 'Unknown'))
                         }}>
                         Renew
+                      </Button>
+                      <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10 shrink-0"
+                        onClick={async () => {
+                          if (!confirm(`End ${pk.customerName}'s package now? They'll show as expired immediately and the door will block them.`)) return
+                          const resp = await fetch(`/api/admin/customers/${pk.customerId}/end-package`, { method: 'POST' })
+                          const j = await resp.json()
+                          if (resp.ok && j.success) { alert(j.message); fetchAdminData() } else alert('Failed: ' + (j.error || 'Unknown'))
+                        }}>
+                        End
                       </Button>
                     </div>
                   ))}
