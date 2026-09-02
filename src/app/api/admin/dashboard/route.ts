@@ -242,23 +242,28 @@ export async function GET() {
     }
 
     // Calculate Customer Lifetime Value by membership type
-    const membershipAnalytics = await prisma.user.findMany({
-      where: { role: 'CUSTOMER' },
-      include: {
-        memberships: {
-          where: { status: { in: ['ACTIVE', 'PENDING_PAYMENT'] } },
-          orderBy: { createdAt: 'desc' },
-          take: 1
-        },
-        payments: {
-          where: { status: 'CONFIRMED' }
+    // Aggregated in SQL instead of hauling every user's full payment history
+    // (parity-proven identical output via scripts/perf-parity-check.mjs)
+    const [paidTotalsByUser, membershipAnalytics] = await Promise.all([
+      prisma.payment.groupBy({ by: ['userId'], where: { status: 'CONFIRMED' }, _sum: { amount: true } }),
+      prisma.user.findMany({
+        where: { role: 'CUSTOMER' },
+        select: {
+          id: true,
+          memberships: {
+            where: { status: { in: ['ACTIVE', 'PENDING_PAYMENT'] } },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { membershipType: true, startDate: true }
+          }
         }
-      }
-    })
+      })
+    ])
+    const paidByUser = new Map(paidTotalsByUser.map(r => [r.userId, Number(r._sum.amount || 0)]))
 
     const membershipStats = membershipAnalytics.reduce((acc: any, customer) => {
       const membershipType = customer.memberships[0]?.membershipType || 'NO_MEMBERSHIP'
-      const totalPaid = customer.payments.reduce((sum, payment) => sum + Number(payment.amount), 0)
+      const totalPaid = paidByUser.get(customer.id) || 0
       const monthsActive = customer.memberships[0] 
         ? Math.max(1, Math.ceil((Date.now() - customer.memberships[0].startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)))
         : 0
@@ -281,23 +286,15 @@ export async function GET() {
     }, {})
 
     // Get customers with their subscriptions for routing efficiency
-    const customersWithSubs = await prisma.user.findMany({
-      where: { role: 'CUSTOMER' },
-      include: {
-        subscriptions: {
-          where: { status: 'ACTIVE' },
-          include: { routedEntity: true }
-        }
-      }
+    // Same distribution, computed from ACTIVE subs directly (parity-proven)
+    const activeSubsForRouting = await prisma.subscription.findMany({
+      where: { status: 'ACTIVE', user: { role: 'CUSTOMER' } },
+      select: { routedEntity: { select: { name: true } } }
     })
-
-    // Calculate routing efficiency (how well distributed across entities)
-    const entityDistribution = customersWithSubs.reduce((acc: Record<string, number>, customer: any) => {
-      customer.subscriptions.forEach((sub: any) => {
-        if (sub.routedEntity) {
-          acc[sub.routedEntity.name] = (acc[sub.routedEntity.name] || 0) + 1
-        }
-      })
+    const entityDistribution = activeSubsForRouting.reduce((acc: Record<string, number>, sub: any) => {
+      if (sub.routedEntity) {
+        acc[sub.routedEntity.name] = (acc[sub.routedEntity.name] || 0) + 1
+      }
       return acc
     }, {})
 
@@ -316,7 +313,8 @@ export async function GET() {
     const last7Days = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
     // Get recent payments (successes and failures)
-    const recentPayments = await prisma.payment.findMany({
+    const [recentPayments, recentSignups, recentMembershipChanges, recentSubscriptionChanges] = await Promise.all([
+    prisma.payment.findMany({
       take: 10,
       where: { createdAt: { gte: last7Days } },
       orderBy: { createdAt: 'desc' },
@@ -324,10 +322,10 @@ export async function GET() {
         user: { select: { firstName: true, lastName: true, email: true } },
         routedEntity: { select: { displayName: true } }
       }
-    })
+    }),
 
-    // Get recent signups
-    const recentSignups = await prisma.user.findMany({
+    // Recent signups
+    prisma.user.findMany({
       take: 10,
       where: { 
         role: 'CUSTOMER',
@@ -344,10 +342,10 @@ export async function GET() {
           select: { membershipType: true }
         }
       }
-    })
+    }),
 
-    // Get recent membership changes (upgrades/downgrades)
-    const recentMembershipChanges = await prisma.membership.findMany({
+    // Recent membership changes (upgrades/downgrades)
+    prisma.membership.findMany({
       take: 10,
       where: { 
         updatedAt: { gte: last7Days },
@@ -357,10 +355,10 @@ export async function GET() {
       include: {
         user: { select: { firstName: true, lastName: true, email: true } }
       }
-    })
+    }),
 
-    // Get recent subscription changes (cancellations, reactivations)
-    const recentSubscriptionChanges = await prisma.subscription.findMany({
+    // Recent subscription changes (cancellations, reactivations)
+    prisma.subscription.findMany({
       take: 10,
       where: { 
         updatedAt: { gte: last7Days },
@@ -371,6 +369,7 @@ export async function GET() {
         user: { select: { firstName: true, lastName: true, email: true } }
       }
     })
+    ])
 
     // 🚀 COMBINE ALL ACTIVITIES WITH PROPER TYPING AND ICONS
     const activities = [
@@ -796,6 +795,12 @@ export async function GET() {
       membershipType: string
     }>
 
+    const incompleteConfirmed = rawIncompleteSubs.length > 0
+      ? await prisma.payment.findMany({
+          where: { userId: { in: rawIncompleteSubs.map(x => x.userId) }, status: 'CONFIRMED' },
+          select: { userId: true, createdAt: true }
+        })
+      : []
     for (const sub of rawIncompleteSubs) {
       if (usersWithRealLiveSubs.has(sub.userId)) continue
       const invoice = sub.invoices[0]
@@ -803,14 +808,7 @@ export async function GET() {
       if (invoice && ['paid', 'void'].includes(invoice.status)) continue
 
       // Ensure no confirmed payment since subscription was created
-      const hasConfirmed = await prisma.payment.count({
-        where: {
-          userId: sub.userId,
-          status: 'CONFIRMED',
-          createdAt: { gte: sub.createdAt }
-        }
-      })
-      if (hasConfirmed > 0) continue
+      if (incompleteConfirmed.some(pp => pp.userId === sub.userId && pp.createdAt >= sub.createdAt)) continue
 
       const incId = invoice ? `INC_${invoice.id}` : `INC_SUB_${sub.id}`
       const amount = invoice ? Number(invoice.amount) : Number(sub.monthlyPrice || 0)
@@ -1159,6 +1157,14 @@ export async function GET() {
       membershipType: string
     }>
 
+    const pendingNoSubIds = customers
+      .filter(c => c.memberships[0]?.status === 'PENDING_PAYMENT' && !c.subscriptions[0] && !usersWithRealLiveSubs.has(c.id))
+      .map(c => c.id)
+    const pendingWithConfirmed = new Set(
+      pendingNoSubIds.length > 0
+        ? (await prisma.payment.groupBy({ by: ['userId'], where: { userId: { in: pendingNoSubIds }, status: 'CONFIRMED' } })).map(r => r.userId)
+        : []
+    )
     for (const c of customers) {
       const membership = c.memberships[0]
       const subscription = c.subscriptions[0]
@@ -1168,8 +1174,7 @@ export async function GET() {
       // Only include if there is no subscription record yet
       if (subscription) continue
       // Ensure no confirmed payments (any time)
-      const confirmedCount = await prisma.payment.count({ where: { userId: c.id, status: 'CONFIRMED' } })
-      if (confirmedCount > 0) continue
+      if (pendingWithConfirmed.has(c.id)) continue
 
       membershipIncompleteToDos.push({
         id: `INC_MEM_${membership.id}`,
@@ -1310,13 +1315,15 @@ export async function GET() {
     const perAccountLastMonth: Record<string, number> = {}
     const perAccountThisMonth: Record<string, number> = {}
     try {
+      const metricKeys = ALL_STRIPE_ACCOUNTS.flatMap(acct => [`metrics:ledger:lastMonthNet:${acct}`, `metrics:ledger:thisMonthNet:${acct}`])
+      const metricRows = await prisma.systemSetting.findMany({ where: { key: { in: metricKeys } } })
       for (const acct of ALL_STRIPE_ACCOUNTS) {
-        const settingLast = await prisma.systemSetting.findUnique({ where: { key: `metrics:ledger:lastMonthNet:${acct}` } })
+        const settingLast = metricRows.find(r => r.key === `metrics:ledger:lastMonthNet:${acct}`)
         if (settingLast) {
           const parsed = JSON.parse(settingLast.value || '{}') as { amount?: number }
           if (parsed?.amount != null) perAccountLastMonth[acct] = Number(parsed.amount)
         }
-        const settingThis = await prisma.systemSetting.findUnique({ where: { key: `metrics:ledger:thisMonthNet:${acct}` } })
+        const settingThis = metricRows.find(r => r.key === `metrics:ledger:thisMonthNet:${acct}`)
         if (settingThis) {
           const parsed = JSON.parse(settingThis.value || '{}') as { amount?: number }
           if (parsed?.amount != null) perAccountThisMonth[acct] = Number(parsed.amount)
@@ -1332,9 +1339,14 @@ export async function GET() {
       orderBy: { endDate: 'asc' }
     })
     const packagesTodo: any[] = []
+    const pkgUserIdsWithLiveSubs = new Set(
+      (await prisma.subscription.findMany({
+        where: { userId: { in: pkgMemberships.map(pm => pm.userId) }, status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE'] } },
+        select: { userId: true }
+      })).map(r => r.userId)
+    )
     for (const pm of pkgMemberships) {
-      const hasLiveSub = await prisma.subscription.findFirst({ where: { userId: pm.userId, status: { in: ['ACTIVE','TRIALING','PAUSED','PAST_DUE'] } }, select: { id: true } })
-      if (hasLiveSub) continue // not an offline-package member
+      if (pkgUserIdsWithLiveSubs.has(pm.userId)) continue // not an offline-package member
       const daysLeft = Math.ceil(((pm as any).endDate.getTime() - Date.now()) / 86400000)
       packagesTodo.push({
         customerId: pm.userId,
