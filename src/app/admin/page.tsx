@@ -415,7 +415,10 @@ function AdminDashboardContent() {
       setLoading(true)
       fetchAdminData()
     } else if (cachedData && !initialLoadDone) {
-      // Use cached data - no loading spinner!
+      // Paint from cache instantly, then ALWAYS refetch in the background so a
+      // reload is never a stale snapshot ("member says they paid" checks must
+      // see the truth). The cached paint keeps the spinner away while fresh
+      // data loads and replaces everything in place a moment later.
       try {
         const data = JSON.parse(cachedData)
         setVatStatus(data.vatStatus || [])
@@ -428,10 +431,13 @@ function AdminDashboardContent() {
         setPaymentsTodo(data.payments_todo || [])
         setPackagesTodo(data.packages_todo || [])
         setInitialLoadDone(true)
+        setOverviewReady(true)
       } catch (e) {
-        // Cache corrupted - fetch fresh
-        fetchAdminData()
+        // Cache corrupted - fall through to fresh fetch
       }
+      sessionStorage.setItem('portal365.admin.lastFetch', String(now))
+      lastFetchTimeRef.current = now
+      fetchAdminData()
     }
   }, [session, status])
 
