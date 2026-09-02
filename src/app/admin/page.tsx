@@ -1658,7 +1658,8 @@ function AdminDashboardContent() {
                               {pk.expired ? `Expired ${pk.endDate}` : `Ends ${pk.endDate} (${pk.daysLeft}d left)`}
                             </p>
                           </div>
-                          <Button size="sm" variant="outline" className="border-green-500/20 text-green-400 hover:bg-green-500/10 shrink-0"
+                          <div className="flex gap-2 shrink-0">
+                          <Button size="sm" variant="outline" className="border-green-500/20 text-green-400 hover:bg-green-500/10"
                             onClick={async () => {
                               const m = window.prompt(`Renew ${pk.customerName} for how many months? (cash taken at desk)`, '6')
                               const months = Number(m)
@@ -1669,7 +1670,7 @@ function AdminDashboardContent() {
                             }}>
                             Renew
                           </Button>
-                          <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10 shrink-0"
+                          <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10"
                             onClick={async () => {
                               if (!confirm(`End ${pk.customerName}'s package now? They'll show as expired immediately and the door will block them.`)) return
                               const resp = await fetch(`/api/admin/customers/${pk.customerId}/end-package`, { method: 'POST' })
@@ -1678,6 +1679,7 @@ function AdminDashboardContent() {
                             }}>
                             End
                           </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1828,7 +1830,8 @@ function AdminDashboardContent() {
                           {pk.expired ? `EXPIRED ${new Date(pk.endDate).toLocaleDateString()}` : `Ends ${new Date(pk.endDate).toLocaleDateString()} (${pk.daysLeft}d left)`}
                         </p>
                       </div>
-                      <Button size="sm" variant="outline" className="border-green-500/20 text-green-400 hover:bg-green-500/10 shrink-0"
+                      <div className="flex gap-2 shrink-0">
+                      <Button size="sm" variant="outline" className="border-green-500/20 text-green-400 hover:bg-green-500/10"
                         onClick={async () => {
                           const m = window.prompt(`Renew ${pk.customerName} for how many months? (cash taken at desk)`, '6')
                           const months = Number(m)
@@ -1839,7 +1842,7 @@ function AdminDashboardContent() {
                         }}>
                         Renew
                       </Button>
-                      <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10 shrink-0"
+                      <Button size="sm" variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10"
                         onClick={async () => {
                           if (!confirm(`End ${pk.customerName}'s package now? They'll show as expired immediately and the door will block them.`)) return
                           const resp = await fetch(`/api/admin/customers/${pk.customerId}/end-package`, { method: 'POST' })
@@ -1848,6 +1851,7 @@ function AdminDashboardContent() {
                         }}>
                         End
                       </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
