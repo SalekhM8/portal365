@@ -43,7 +43,7 @@ function normalizeEmergencyContact(contact: any): {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // ✅ REUSE your existing auth pattern
     const session = await getServerSession(authOptions) as any
@@ -53,6 +53,10 @@ export async function GET() {
     }
 
     // Get total customers
+    // lite=1: skip the heavy customer/family payload so the overview can paint
+    // fast on fresh loads; every stat/todo/package below is computed identically.
+    const lite = (() => { try { return new URL(request.url).searchParams.get('lite') === '1' } catch { return false } })()
+
     const totalCustomers = await prisma.user.count({
       where: { role: 'CUSTOMER' }
     })
@@ -459,7 +463,7 @@ export async function GET() {
     const vatPositions = await VATCalculationEngine.calculateVATPositions()
 
     // Get detailed customer data with payments and routing info
-    const customers = await prisma.user.findMany({
+    const customers: any[] = lite ? [] : await prisma.user.findMany({
       where: { role: 'CUSTOMER' },
       include: {
         memberships: {
@@ -971,7 +975,7 @@ export async function GET() {
       }
     })
 
-    const familyRows = await prisma.membership.findMany({
+    const familyRows: any[] = lite ? [] : await prisma.membership.findMany({
       where: {
         familyGroupId: { not: null }
       },

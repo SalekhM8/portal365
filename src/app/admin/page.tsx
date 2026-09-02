@@ -227,6 +227,7 @@ function AdminDashboardContent() {
   const revenueAbortRef = useRef<AbortController | null>(null)
   const [loading, setLoading] = useState(false)
   const [initialLoadDone, setInitialLoadDone] = useState(false)
+  const [overviewReady, setOverviewReady] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
@@ -540,6 +541,28 @@ function AdminDashboardContent() {
       
       // ✅ REPLACE hardcoded data with real API call
       console.log('🔍 Fetching real admin dashboard data...')
+
+      // Fast first paint on fresh loads: the lite payload (stats, to-dos,
+      // packages, activity — no customer list) returns in well under a second;
+      // the full payload replaces everything when it lands. fullApplied guards
+      // the race so lite can never overwrite fresher full data.
+      let fullApplied = false
+      if (!initialLoadDone) {
+        fetch('/api/admin/dashboard?lite=1', { headers: { 'Content-Type': 'application/json' } })
+          .then(r => (r.ok ? r.json() : null))
+          .then(d => {
+            if (!d || fullApplied) return
+            setVatStatus(d.vatStatus)
+            setPaymentsTodo(Array.isArray(d.payments_todo) ? d.payments_todo : [])
+            setPackagesTodo(Array.isArray(d.packages_todo) ? d.packages_todo : [])
+            setBusinessMetrics(d.metrics)
+            setRecentActivity(d.recentActivity)
+            setAnalytics(d.analytics)
+            setPayments(Array.isArray(d.payments) ? d.payments : [])
+            setOverviewReady(true)
+          })
+          .catch(() => {})
+      }
       
       const response = await fetch('/api/admin/dashboard', {
         headers: {
@@ -552,6 +575,7 @@ function AdminDashboardContent() {
       }
       
       const data = await response.json()
+      fullApplied = true
       
       // ✅ KEEP your existing state setters (no changes to UI logic)
       setVatStatus(data.vatStatus)
@@ -572,6 +596,7 @@ function AdminDashboardContent() {
       setBusinessMetrics(data.metrics)
       setRecentActivity(data.recentActivity)
       setAnalytics(data.analytics)
+      setOverviewReady(true)
       setInitialLoadDone(true)
       
       // 🚀 Cache data to prevent reload on tab switch
@@ -1294,7 +1319,7 @@ function AdminDashboardContent() {
   })
 
   // Only show loading if actually fetching AND no data yet
-  if (loading && customers.length === 0) {
+  if (loading && customers.length === 0 && !overviewReady) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
