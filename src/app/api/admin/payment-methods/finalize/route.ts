@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
+import { repinSubscriptionsToNewCard } from '@/lib/repin-subscriptions'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 // Finalize admin PM update: set customer's default_payment_method from a succeeded SetupIntent
@@ -21,6 +22,9 @@ export async function POST(request: NextRequest) {
     if (si.status !== 'succeeded') return NextResponse.json({ error: 'SetupIntent not succeeded' }, { status: 400 })
     const pm = si.payment_method as string
     await stripe.customers.update(stripeCustomerId, { invoice_settings: { default_payment_method: pm } })
+
+    // Re-point any subscription-level pinned card to the new one
+    await repinSubscriptionsToNewCard(stripe, stripeCustomerId, pm)
 
     // Try to pay newest open overdue invoice immediately (parity with customer flow)
     try {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { repinSubscriptionsToNewCard } from '@/lib/repin-subscriptions'
 import { getStripeClient, getPublishableKey } from '@/lib/stripe'
 
 export async function GET(request: NextRequest) {
@@ -110,6 +111,10 @@ export async function POST(request: NextRequest) {
         default_payment_method: setupIntent.payment_method as string
       }
     })
+
+    // Re-point any subscription-level pinned card to the new one — otherwise
+    // pinned subs keep charging the old card no matter what the member updates
+    await repinSubscriptionsToNewCard(stripe, setupIntent.customer as string, setupIntent.payment_method as string)
 
     // Try to pay newest open overdue invoice immediately and resume if paid
     try {
