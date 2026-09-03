@@ -3453,7 +3453,7 @@ function AdminDashboardContent() {
                     })
                     const json = await resp.json()
                     if (resp.ok && json.success) {
-                      alert('Plan changed successfully')
+                      alert('Plan changed successfully' + (json.prorationNote ? `\n\n${json.prorationNote}` : ''))
                       setShowChangePlanModal(false)
                       fetchAdminData()
                     } else {

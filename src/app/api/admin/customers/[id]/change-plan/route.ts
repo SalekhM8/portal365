@@ -228,7 +228,11 @@ export async function POST(
         proration_behavior: 'always_invoice'
       })
 
-      // Find and pay the proration invoice
+      // Find and pay the proration invoice; on a DOWNGRADE the invoice total is
+      // negative and Stripe auto-credits the member's balance instead — surface
+      // that to the admin so nobody adds a manual credit note on top (double
+      // compensation — happened 3 Sep 2026, Asad family).
+      let prorationNote: string | null = null
       try {
         const invoices = await stripe.invoices.list({
           customer: (stripeSub as any).customer as string,
@@ -240,6 +244,12 @@ export async function POST(
         if (prorationInvoice?.id && prorationInvoice.amount_due > 0) {
           await stripe.invoices.pay(prorationInvoice.id)
           console.log(`✅ Active upgrade charged: £${(prorationInvoice.amount_due / 100).toFixed(2)}`)
+          prorationNote = `£${(prorationInvoice.amount_due / 100).toFixed(2)} proration charged now.`
+        } else {
+          const latest = invoices.data[0]
+          if (latest && latest.total < 0) {
+            prorationNote = `Stripe automatically credited £${Math.abs(latest.total / 100).toFixed(2)} to the member's balance for unused time on the old plan — their next invoice(s) will be reduced by this. Do NOT add a manual credit note for the plan change.`
+          }
         }
       } catch (e: any) {
         console.error('Charge now payment failed:', e?.message)
@@ -249,7 +259,7 @@ export async function POST(
       await prisma.membership.updateMany({ where: { userId }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
       await prisma.subscription.update({ where: { id: sub.id }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
 
-      return NextResponse.json({ success: true, applied: 'now', settlement: 'charge_now' })
+      return NextResponse.json({ success: true, applied: 'now', settlement: 'charge_now', prorationNote })
     } else {
       // DEFER: proration added to next invoice, DON'T change access yet
       await stripe.subscriptions.update(stripeSub.id, {
