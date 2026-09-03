@@ -2771,7 +2771,7 @@ function AdminDashboardContent() {
       {/* Update Payment Method Modal */}
       {showUpdatePM && updatePMClientSecret && updatePMPublishableKey && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             {updatePMSuccess ? (
               <div className="text-center space-y-3 py-4">
                 <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
@@ -2803,7 +2803,7 @@ function AdminDashboardContent() {
       {/* Password Reset Success Modal */}
       {showResetSuccess && resetPasswordResult && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="text-center space-y-4">
               <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
                 <Key className="h-8 w-8 text-green-400" />
@@ -3078,7 +3078,7 @@ function AdminDashboardContent() {
       {/* Payment Modal */}
       {showPaymentModal && paymentClientSecret && createdSubscriptionId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4 text-white">Setup Payment Method</h3>
             <p className="text-sm text-white/70 mb-4">
               Please have the customer enter their payment details to activate their membership.
@@ -3114,7 +3114,7 @@ function AdminDashboardContent() {
       {/* 🚀 NEW: Membership Action Modal */}
       {showMembershipActionModal && membershipAction && selectedCustomer && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4 text-white">
               {membershipAction === 'pause' && 'Pause Membership'}
               {membershipAction === 'resume' && 'Resume Membership'}
@@ -3335,7 +3335,7 @@ function AdminDashboardContent() {
       {/* Extend Pause Modal */}
       {showExtendPause && selectedCustomer && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-white/15 rounded-2xl max-w-sm w-full p-6">
+          <div className="bg-zinc-900 border border-white/15 rounded-2xl max-w-sm w-full p-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-white text-lg font-semibold">Extend pause</h3>
             <p className="text-white/50 text-sm mt-1 mb-4">{selectedCustomer.name} stays paused (no billing) until this date. First charge is the day after. Max 3 months total.</p>
             <Label className="text-white mb-1.5 block">Paused until (inclusive)</Label>
@@ -3368,7 +3368,7 @@ function AdminDashboardContent() {
       {/* 🚀 NEW: Change Plan (Admin) Modal */}
       {showChangePlanModal && selectedCustomer && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-lg w-full mx-4">
+          <div className="bg-black border border-white/20 p-6 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4 text-white">Change Customer Plan</h3>
             <div className="space-y-4">
               <div className="bg-white/5 border border-white/10 p-3 rounded">
