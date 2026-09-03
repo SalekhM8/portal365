@@ -379,10 +379,20 @@ export async function GET(request: Request) {
     const activities = [
       ...recentPayments.map((payment: any) => ({
         type: 'payment',
-        icon: payment.status === 'CONFIRMED' ? 'CreditCard' : 'AlertCircle',
-        color: payment.status === 'CONFIRMED' ? 'text-green-600' : 'text-red-600',
-        message: payment.status === 'CONFIRMED' 
+        icon: payment.status === 'CONFIRMED' ? 'CreditCard' : ['CREDITED', 'REFUNDED', 'VOIDED'].includes(payment.status) ? 'CreditCard' : 'AlertCircle',
+        color: payment.status === 'CONFIRMED' ? 'text-green-600'
+          : payment.status === 'CREDITED' ? 'text-blue-500'
+          : payment.status === 'REFUNDED' ? 'text-amber-500'
+          : payment.status === 'VOIDED' ? 'text-zinc-500'
+          : 'text-red-600',
+        message: payment.status === 'CONFIRMED'
           ? `${payment.user?.firstName} ${payment.user?.lastName} paid £${payment.amount}`
+          : payment.status === 'CREDITED'
+          ? `Credit note applied for ${payment.user?.firstName} ${payment.user?.lastName} (£${Math.abs(Number(payment.amount))})`
+          : payment.status === 'REFUNDED'
+          ? `Refunded ${payment.user?.firstName} ${payment.user?.lastName} £${Math.abs(Number(payment.amount))}`
+          : payment.status === 'VOIDED'
+          ? `Payment voided for ${payment.user?.firstName} ${payment.user?.lastName} (£${Math.abs(Number(payment.amount))})`
           : `Payment failed for ${payment.user?.firstName} ${payment.user?.lastName} (£${payment.amount})`,
         // For now, always show Sporting U as the routed entity label in activity
         detail: `Sporting U • ${new Date(payment.createdAt).toLocaleString()}`,
