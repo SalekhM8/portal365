@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 import { getPlanDbFirst } from '@/lib/plans'
+import { settlePlanChangeNow } from '@/lib/plan-change-settlement'
 
 export async function POST(
   request: NextRequest,
@@ -37,18 +38,24 @@ export async function POST(
     const prices = await stripe.prices.list({ limit: 100, active: true, type: 'recurring', currency: 'gbp' })
     const price = prices.data.find(p => p.unit_amount === details.monthlyPrice * 100 && p.recurring?.interval === 'month')
     const priceId = price ? price.id : (await stripe.prices.create({ unit_amount: details.monthlyPrice * 100, currency: 'gbp', recurring: { interval: 'month' }, product: stripeSub.items.data[0].price.product as string })).id
+    const currentMonthly = (stripeSub.items.data[0]?.price?.unit_amount || 0) / 100
+    if (priceId === stripeSub.items.data[0].price.id) return NextResponse.json({ error: 'Already on this plan' }, { status: 400 })
 
-    await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-      items: [{ id: stripeSub.items.data[0].id, price: priceId }],
-      proration_behavior: 'create_prorations'
+    // Settle the difference NOW (charge upgrade / refund downgrade). If the
+    // charge declines the plan is left unchanged — no free upgrades.
+    const settled = await settlePlanChangeNow({
+      stripe, account: stripeAccount, stripeSub, newPriceId: priceId,
+      currentMonthly, newMonthly: details.monthlyPrice,
+      dbSubscriptionId: subscription.id, planLabel: details.name || newMembershipType
     })
+    if (!settled.ok) return NextResponse.json({ error: settled.error || 'Plan change failed' }, { status: 402 })
 
     await prisma.$transaction(async (tx) => {
       await tx.membership.updateMany({ where: { userId: childId }, data: { membershipType: newMembershipType, monthlyPrice: details.monthlyPrice } })
       await tx.subscription.update({ where: { id: subscription.id }, data: { membershipType: newMembershipType, monthlyPrice: details.monthlyPrice } })
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, message: `Plan changed to ${details.name || newMembershipType}.${settled.note ? ' ' + settled.note : ''}` })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Change plan failed' }, { status: 500 })
   }
