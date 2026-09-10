@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { ageMismatchMessage } from '@/lib/plan-age-rules'
 import { assignUniquePin } from '@/lib/pin'
 import { getStripeClient } from '@/lib/stripe'
 
@@ -70,6 +71,9 @@ export async function POST(request: NextRequest) {
     if (!firstName || !lastName || !membershipType) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
     }
+    // Age-banded plans (Ages 4-6, Under 14s, ...) must match the child's DOB
+    const ageError = ageMismatchMessage(membershipType, dateOfBirth ? new Date(dateOfBirth) : null)
+    if (ageError) return NextResponse.json({ error: ageError }, { status: 400 })
 
     const parentEmergency = parseEmergencyContact(parent.emergencyContact)
     const inheritedEmergency = {

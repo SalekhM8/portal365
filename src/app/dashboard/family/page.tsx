@@ -65,10 +65,10 @@ export default function FamilyPage() {
       const res = await fetch('/api/plans')
       const data = await res.json()
       if (res.ok && data.success) {
-        const list = (data.plans as Array<any>).map(p => ({ key: p.key, displayName: p.displayName || p.name }))
+        const list = (data.plans as Array<any>).map(p => ({ key: p.key, displayName: `${p.displayName || p.name}${p.monthlyPrice != null ? ` — £${p.monthlyPrice}/mo` : ''}` }))
         setPlans(list)
-        if (!childPlan && list[0]) setChildPlan(list[0].key)
-        if (!newPlan && list[0]) setNewPlan(list[0].key)
+        // No default plan: parents must choose explicitly (a pre-selected
+        // first-alphabetical plan put an 11-year-old on 'Ages 4 to 6')
       }
     } catch {}
   }
@@ -229,7 +229,7 @@ export default function FamilyPage() {
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-                <Button onClick={addChild} disabled={saving}>{saving ? 'Saving...' : 'Add Child'}</Button>
+                <Button onClick={addChild} disabled={saving || !childPlan || !childDob}>{saving ? 'Saving...' : 'Add Child'}</Button>
               </div>
             </div>
           )}
