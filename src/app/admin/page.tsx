@@ -333,6 +333,9 @@ function AdminDashboardContent() {
   const [switchPkgBusy, setSwitchPkgBusy] = useState(false)
   const loadOfflinePkgs = () => fetch('/api/admin/offline-packages').then(r => r.json()).then(j => setOfflinePkgs((j.packages || []).filter((x: any) => x.active))).catch(() => {})
   const [addPackageId, setAddPackageId] = useState('')
+  const [addPackageMonths, setAddPackageMonths] = useState('')
+  const [addPackagePrice, setAddPackagePrice] = useState('')
+  const [addPackageCash, setAddPackageCash] = useState('')
   const [addPackageStart, setAddPackageStart] = useState(() => new Date().toISOString().slice(0, 10))
   const [packagesTodo, setPackagesTodo] = useState<any[]>([])
   const [showExtendPause, setShowExtendPause] = useState(false)
@@ -658,6 +661,20 @@ function AdminDashboardContent() {
     })
   }
 
+  // Create a member; on a possible duplicate (same name or phone) ask before forcing
+  const postCreateCustomer = async (payload: any): Promise<{ resp: Response; json: any }> => {
+    let resp = await fetch('/api/admin/customers/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    let json = await resp.json()
+    if (resp.status === 409 && json.code === 'POSSIBLE_DUPLICATE') {
+      const list = (json.duplicates || []).map((d: any) => `• ${d.name} — ${d.email}${d.phone ? `, ${d.phone}` : ''} (joined ${d.joined}, ${d.membership} ${d.status}, matched by ${d.matchedBy})`).join('\n')
+      const go = confirm(`Looks like this member already exists:\n\n${list}\n\nIf it's the same person, open their card and use "Switch to cash package" instead of creating a second account.\n\nCreate a NEW account anyway?`)
+      if (!go) return { resp, json: { error: 'Not created — possible duplicate. Use the existing member\'s card.' } }
+      resp = await fetch('/api/admin/customers/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, force: true }) })
+      json = await resp.json()
+    }
+    return { resp, json }
+  }
+
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault()
     setAddCustomerLoading(true)
@@ -667,42 +684,33 @@ function AdminDashboardContent() {
       if (addBillingMode === 'package') {
         const pkg = offlinePkgs.find((x: any) => x.id === addPackageId)
         if (!pkg) { setAddCustomerError('Pick a package'); setAddCustomerLoading(false); return }
-        const resp = await fetch('/api/admin/customers/create', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            firstName: addCustomerData.firstName, lastName: addCustomerData.lastName,
-            email: addCustomerData.email, phone: addCustomerData.phone,
-            dateOfBirth: addCustomerData.dateOfBirth,
-            offlinePackageId: addPackageId, customPrice: Number(pkg.price) || 1,
-            startDate: addPackageStart,
-            emergencyContact: addCustomerData.emergencyContact.name ? addCustomerData.emergencyContact : undefined
-          })
+        const { resp, json: rj } = await postCreateCustomer({
+          firstName: addCustomerData.firstName, lastName: addCustomerData.lastName,
+          email: addCustomerData.email, phone: addCustomerData.phone,
+          dateOfBirth: addCustomerData.dateOfBirth,
+          offlinePackageId: addPackageId, customPrice: Number(pkg.price) || 1,
+          packageMonths: addPackageMonths !== '' ? Number(addPackageMonths) : undefined,
+          packagePrice: addPackagePrice !== '' ? Number(addPackagePrice) : undefined,
+          packageCashPaid: addPackageCash !== '' ? Number(addPackageCash) : undefined,
+          startDate: addPackageStart,
+          emergencyContact: addCustomerData.emergencyContact.name ? addCustomerData.emergencyContact : undefined
         })
-        const rj = await resp.json()
         if (resp.ok && rj.success) { alert(rj.message); setShowAddCustomer(false); fetchAdminData() }
         else setAddCustomerError(rj.error || 'Failed to add package member')
         setAddCustomerLoading(false)
         return
       }
-      const response = await fetch('/api/admin/customers/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          firstName: addCustomerData.firstName,
-          lastName: addCustomerData.lastName,
-          email: addCustomerData.email,
-          phone: addCustomerData.phone,
-          dateOfBirth: addCustomerData.dateOfBirth,
-          membershipType: addCustomerData.membershipType,
-          customPrice: parseFloat(addCustomerData.customPrice),
-          startDate: addCustomerData.startDate,
-          emergencyContact: addCustomerData.emergencyContact.name ? addCustomerData.emergencyContact : undefined
-        })
+      const { json: result } = await postCreateCustomer({
+        firstName: addCustomerData.firstName,
+        lastName: addCustomerData.lastName,
+        email: addCustomerData.email,
+        phone: addCustomerData.phone,
+        dateOfBirth: addCustomerData.dateOfBirth,
+        membershipType: addCustomerData.membershipType,
+        customPrice: parseFloat(addCustomerData.customPrice),
+        startDate: addCustomerData.startDate,
+        emergencyContact: addCustomerData.emergencyContact.name ? addCustomerData.emergencyContact : undefined
       })
-
-      const result = await response.json()
 
       if (result.success && result.subscription?.clientSecret) {
         // Customer created successfully, now collect payment
@@ -3081,7 +3089,7 @@ function AdminDashboardContent() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <Label className="text-white">Package *</Label>
-                    <Select value={addPackageId} onValueChange={setAddPackageId}>
+                    <Select value={addPackageId} onValueChange={(v) => { setAddPackageId(v); const pk = offlinePkgs.find((x: any) => x.id === v); if (pk) { setAddPackageMonths(String(pk.months)); setAddPackagePrice(String(pk.price)) } }}>
                       <SelectTrigger className="bg-white/5 border-white/20 text-white"><SelectValue placeholder="Pick a package" /></SelectTrigger>
                       <SelectContent className="bg-black border-white/20">
                         {offlinePkgs.map((pk: any) => (
@@ -3095,6 +3103,19 @@ function AdminDashboardContent() {
                     <Label className="text-white">Package start date *</Label>
                     <Input type="date" value={addPackageStart} onChange={(e) => setAddPackageStart(e.target.value)} className="bg-white/5 border-white/20 text-white [color-scheme:dark]" />
                     <p className="text-xs text-white/60 mt-1">Paid in cash at the desk — no Stripe, no billing.</p>
+                  </div>
+                  <div>
+                    <Label className="text-white">Months</Label>
+                    <Input type="number" min={1} max={24} value={addPackageMonths} onChange={(e) => setAddPackageMonths(e.target.value)} className="bg-white/5 border-white/20 text-white" />
+                    <p className="text-xs text-white/60 mt-1">Defaults to the package; change it for a bespoke deal.</p>
+                  </div>
+                  <div>
+                    <Label className="text-white">Price (£)</Label>
+                    <Input type="number" min={0} step="0.01" value={addPackagePrice} onChange={(e) => setAddPackagePrice(e.target.value)} className="bg-white/5 border-white/20 text-white" />
+                  </div>
+                  <div>
+                    <Label className="text-white">Cash taken (£, optional)</Label>
+                    <Input type="number" min={0} step="0.01" value={addPackageCash} onChange={(e) => setAddPackageCash(e.target.value)} className="bg-white/5 border-white/20 text-white" />
                   </div>
                 </div>
               )}
