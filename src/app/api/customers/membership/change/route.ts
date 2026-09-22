@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     if (!settled.ok) return NextResponse.json({ error: settled.error || 'Plan change failed' }, { status: 402 })
 
     await prisma.membership.updateMany({
-      where: { userId: user.id, status: 'ACTIVE' },
+      where: { userId: user.id, endDate: null, status: 'ACTIVE' },
       data: { membershipType: newMembershipType, monthlyPrice: newDetails.monthlyPrice }
     })
     await prisma.subscription.update({

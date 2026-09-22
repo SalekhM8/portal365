@@ -36,7 +36,7 @@ export async function POST(
       } catch {}
       await prisma.$transaction(async (tx) => {
         await tx.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED', cancelAtPeriodEnd: false } })
-        await tx.membership.updateMany({ where: { userId: childId, status: { in: ['ACTIVE', 'SUSPENDED'] } }, data: { status: 'CANCELLED' } })
+        await tx.membership.updateMany({ where: { userId: childId, endDate: null, status: { in: ['ACTIVE', 'SUSPENDED'] } }, data: { status: 'CANCELLED' } })
       })
     } else {
       await s.subscriptions.update(subscription.stripeSubscriptionId, { cancel_at_period_end: true })

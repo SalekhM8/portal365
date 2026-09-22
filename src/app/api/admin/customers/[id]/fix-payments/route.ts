@@ -68,7 +68,7 @@ async function performFix(userId: string) {
       normalized === 'CANCELLED' ? 'CANCELLED' :
       'ACTIVE'
     await prisma.subscription.updateMany({ where: { userId: user.id }, data: { status: normalized } })
-    await prisma.membership.updateMany({ where: { userId: user.id }, data: { status: mappedMembership } })
+    await prisma.membership.updateMany({ where: { userId: user.id, endDate: null }, data: { status: mappedMembership } })
   }
 
   return { success: true, updatedPayments, stripeSubStatus, hasPaidInvoice }

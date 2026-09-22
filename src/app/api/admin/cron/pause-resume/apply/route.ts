@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
             data: { status: 'PAUSED' }
           })
           await tx.membership.updateMany({
-            where: { userId: sub.userId, status: { in: ['ACTIVE','SUSPENDED'] } },
+            where: { userId: sub.userId, endDate: null, status: { in: ['ACTIVE','SUSPENDED'] } },
             data: { status: 'SUSPENDED' }
           })
           await tPW.update({
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
             data: { status: 'ACTIVE' }
           })
           await tx.membership.updateMany({
-            where: { userId: sub.userId, status: { in: ['SUSPENDED','ACTIVE'] } },
+            where: { userId: sub.userId, endDate: null, status: { in: ['SUSPENDED','ACTIVE'] } },
             data: { status: 'ACTIVE' }
           })
           await tPW.update({

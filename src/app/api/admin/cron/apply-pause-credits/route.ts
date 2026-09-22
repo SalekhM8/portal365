@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
 
         // Update membership status
         await prisma.membership.updateMany({
-          where: { userId: sub.userId },
+          where: { userId: sub.userId, endDate: null },
           data: { status: 'PAUSED' }
         })
 
@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
           data: { status: 'ACTIVE' }
         })
         await prisma.membership.updateMany({
-          where: { userId: sub.userId },
+          where: { userId: sub.userId, endDate: null },
           data: { status: 'ACTIVE' }
         })
 

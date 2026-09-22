@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     })
 
     await prisma.subscription.updateMany({ where: { userId: user.id }, data: { status: 'ACTIVE' } })
-    await prisma.membership.updateMany({ where: { userId: user.id }, data: { status: 'ACTIVE' } })
+    await prisma.membership.updateMany({ where: { userId: user.id, endDate: null }, data: { status: 'ACTIVE' } })
 
     return NextResponse.json({ success: true, updatedPaymentId: updated.id, invoiceId: mostRecentPaid.id, amount: paidAmount })
   } catch (e: any) {

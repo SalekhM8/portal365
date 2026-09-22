@@ -102,7 +102,7 @@ export async function handleSetupIntentConfirmation(body: { setupIntentId: strin
       nextBillingDate
     }
   })
-  await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
+  await prisma.membership.updateMany({ where: { userId: subscription.userId, endDate: null }, data: { status: 'ACTIVE' } })
 
   console.log(`✅ Payment method setup completed for ${subscription.user.email}`)
   console.log(`🔄 Subscription status: PENDING_PAYMENT (will activate via webhook after payment)`)
@@ -169,7 +169,7 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
   }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
 
   const subscription = await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' }, include: { user: true } })
-  await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'ACTIVE' } })
+  await prisma.membership.updateMany({ where: { userId: subscription.userId, endDate: null }, data: { status: 'ACTIVE' } })
 
   // Write the prorated payment row here too — do NOT rely solely on the webhook.
   // Historically (Sept 2025 "de dup") this write was removed and delegated entirely to

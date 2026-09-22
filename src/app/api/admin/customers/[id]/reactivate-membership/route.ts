@@ -250,7 +250,7 @@ export async function POST(
           }
         })
         await tx.membership.updateMany({
-          where: { userId: customer.id, status: 'CANCELLED' },
+          where: { userId: customer.id, endDate: null, status: 'CANCELLED' },
           data: { status: 'ACTIVE' }
         })
       })

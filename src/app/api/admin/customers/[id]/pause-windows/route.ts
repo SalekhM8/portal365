@@ -243,7 +243,7 @@ export async function POST(
 
         // Also update membership status
         await prisma.membership.updateMany({
-          where: { userId: subscription.userId },
+          where: { userId: subscription.userId, endDate: null },
           data: { status: 'PAUSED' }
         })
 
@@ -388,7 +388,7 @@ export async function DELETE(
 
         // Update membership status
         await prisma.membership.updateMany({
-          where: { userId: sub.userId },
+          where: { userId: sub.userId, endDate: null },
           data: { status: 'ACTIVE' }
         })
 
