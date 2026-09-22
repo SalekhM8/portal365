@@ -116,6 +116,14 @@ export async function GET(request: NextRequest) {
       status: activeMembership.status,
       price: activeMembership.monthlyPrice,
       nextBilling: activeMembership.nextBillingDate.toISOString().split('T')[0],
+      // Cash package: fixed term, no billing date
+      packageEnd: (activeMembership as any).endDate ? (activeMembership as any).endDate.toISOString().split('T')[0] : null,
+      // Scheduled monthly -> cash package switch (applies when the current month ends)
+      pendingPackage: (activeMembership as any).pendingPackageName ? {
+        name: (activeMembership as any).pendingPackageName,
+        start: (activeMembership as any).pendingPackageStart?.toISOString().split('T')[0] ?? null,
+        end: (activeMembership as any).pendingPackageEnd?.toISOString().split('T')[0] ?? null
+      } : null,
       accessPermissions: JSON.parse(activeMembership.accessPermissions),
       scheduleAccess: effectiveSchedule
     } : null

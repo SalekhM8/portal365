@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { applyPendingPackage } from '@/lib/package-handover'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
 
 /**
@@ -69,6 +70,9 @@ export async function GET(request: NextRequest) {
       // Stripe sub is canceled/incomplete_expired/not found — the member is NOT
       // being billed. Portal must not show them live.
       await prisma.subscription.update({ where: { id: sub.id }, data: { status: 'CANCELLED', cancelAtPeriodEnd: false } })
+      // Backstop for a missed subscription-deleted webhook: apply a scheduled
+      // monthly -> cash-package switch (row gains endDate, excluded below)
+      await applyPendingPackage(sub.userId, 'cron:reconcile-sub-status')
       // Don't touch offline/cash memberships (endDate set) — only the sub-driven row
       await prisma.membership.updateMany({
         where: { userId: sub.userId, endDate: null, status: { in: ['ACTIVE', 'SUSPENDED', 'PAUSED'] } },

@@ -90,6 +90,9 @@ interface CustomerDetail {
   subscriptionStatus: string
   membershipStatus: string
   cancelAtPeriodEnd: boolean
+  packageEnd?: string | null
+  packageCashPaid?: number | null
+  pendingPackage?: { name: string; start: string | null; end: string | null; price: number | null; cash: number | null } | null
   joinDate: string
   lastPayment: string
   totalPaid: number
@@ -320,6 +323,15 @@ function AdminDashboardContent() {
     fetch(`/api/reception/photo?userId=${id}`).then(r => r.json()).then(j => setSummaryPhoto(j.photo || null)).catch(() => {})
   }, [(selectedCustomer as any)?.id])
   const [offlinePkgs, setOfflinePkgs] = useState<any[]>([])
+  // Switch monthly -> cash package (same account)
+  const [switchPkgOpen, setSwitchPkgOpen] = useState(false)
+  const [switchPkgId, setSwitchPkgId] = useState('')
+  const [switchPkgMonths, setSwitchPkgMonths] = useState('')
+  const [switchPkgPrice, setSwitchPkgPrice] = useState('')
+  const [switchPkgCash, setSwitchPkgCash] = useState('')
+  const [switchPkgPlan, setSwitchPkgPlan] = useState<any>(null)
+  const [switchPkgBusy, setSwitchPkgBusy] = useState(false)
+  const loadOfflinePkgs = () => fetch('/api/admin/offline-packages').then(r => r.json()).then(j => setOfflinePkgs((j.packages || []).filter((x: any) => x.active))).catch(() => {})
   const [addPackageId, setAddPackageId] = useState('')
   const [addPackageStart, setAddPackageStart] = useState(() => new Date().toISOString().slice(0, 10))
   const [packagesTodo, setPackagesTodo] = useState<any[]>([])
@@ -2050,7 +2062,11 @@ function AdminDashboardContent() {
                             <Badge variant={getStatusBadgeVariant(customer.status)}>
                               {customer.status}
                             </Badge>
-                            {customer.cancelAtPeriodEnd && (
+                            {(customer as any).pendingPackage ? (
+                              <Badge variant="outline" className="text-xs border-green-500/40 text-green-300">
+                                → {(customer as any).pendingPackage.name}
+                              </Badge>
+                            ) : customer.cancelAtPeriodEnd && (
                               <Badge variant="destructive" className="text-xs">
                                 Ending Soon
                               </Badge>
@@ -2599,7 +2615,9 @@ function AdminDashboardContent() {
                         <p className="text-white"><strong className="text-white/90">Last Payment:</strong> £{last ? Number(last.amount).toLocaleString() : '—'}</p>
                       )
                     })()}
-                  {(selectedCustomer as any).packageEnd ? (
+                  {selectedCustomer.pendingPackage ? (
+                    <p className="text-white"><strong className="text-white/90">Switching:</strong> monthly ends {selectedCustomer.pendingPackage.start ? new Date(new Date(selectedCustomer.pendingPackage.start).getTime() - 86400000).toLocaleDateString() : '—'}, then <span className="text-green-300">{selectedCustomer.pendingPackage.name}</span> until {selectedCustomer.pendingPackage.end ? new Date(selectedCustomer.pendingPackage.end).toLocaleDateString() : '—'}</p>
+                  ) : (selectedCustomer as any).packageEnd ? (
                     <p className="text-white"><strong className="text-white/90">Package {new Date((selectedCustomer as any).packageEnd) >= new Date() ? 'ends' : 'ended'}:</strong> <span className={new Date((selectedCustomer as any).packageEnd) < new Date() ? 'text-red-400 font-semibold' : ''}>{new Date((selectedCustomer as any).packageEnd).toLocaleDateString()}</span></p>
                   ) : (
                     <p className="text-white"><strong className="text-white/90">Next Billing:</strong> {new Date(selectedCustomer.nextBilling).toLocaleDateString()}</p>
@@ -2736,7 +2754,85 @@ function AdminDashboardContent() {
                     )}
                   </div>
                 )}
-                {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && (
+                {/* Scheduled switch to a cash package: banner + undo */}
+                {selectedCustomer.pendingPackage && (
+                  <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5 space-y-2">
+                    <p className="text-sm text-white">📦 Switching to <strong>{selectedCustomer.pendingPackage.name}</strong> on {selectedCustomer.pendingPackage.start ? new Date(selectedCustomer.pendingPackage.start).toLocaleDateString() : '—'}{selectedCustomer.pendingPackage.end ? `, runs until ${new Date(selectedCustomer.pendingPackage.end).toLocaleDateString()}` : ''}{selectedCustomer.pendingPackage.cash != null ? ` · £${selectedCustomer.pendingPackage.cash} cash taken` : ''}</p>
+                    <p className="text-xs text-white/60">The monthly ends by itself on that date and the package takes over. Any unpaid monthly invoice stays in To-Do.</p>
+                    <Button variant="outline" disabled={switchPkgBusy} onClick={async () => {
+                      if (!confirm(`Undo the switch to ${selectedCustomer.pendingPackage?.name}? The monthly membership will continue as normal.`)) return
+                      setSwitchPkgBusy(true)
+                      try {
+                        const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/undo-switch-to-package`, { method: 'POST' })
+                        const j = await resp.json()
+                        if (resp.ok && j.success) { alert(j.message); setSelectedCustomer({ ...selectedCustomer, pendingPackage: null, cancelAtPeriodEnd: false }); await fetchAdminData() }
+                        else alert('Failed: ' + (j.error || 'Unknown error'))
+                      } finally { setSwitchPkgBusy(false) }
+                    }} className="border-orange-500/20 text-orange-400 hover:bg-orange-500/10 w-full">Undo switch</Button>
+                  </div>
+                )}
+                {/* Switch an existing monthly member to a cash package — same account, package starts when the paid month ends */}
+                {!selectedCustomer.pendingPackage && !(selectedCustomer as any).packageEnd && ['ACTIVE', 'TRIALING', 'PAST_DUE'].includes(selectedCustomer.subscriptionStatus) && (
+                  <div className="flex flex-col gap-2">
+                    {!switchPkgOpen ? (
+                      <Button variant="outline" onClick={() => { setSwitchPkgOpen(true); setSwitchPkgId(''); setSwitchPkgMonths(''); setSwitchPkgPrice(''); setSwitchPkgCash(''); setSwitchPkgPlan(null); loadOfflinePkgs() }} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Switch to cash package</Button>
+                    ) : (
+                      <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5 space-y-3">
+                        <p className="text-xs text-white/70">Package starts when the current paid month ends (the 1st). Same account, same PIN. Nothing is refunded; anything owed stays in To-Do.</p>
+                        <div>
+                          <Label className="text-white/70 text-xs mb-1 block">Package</Label>
+                          <Select value={switchPkgId} onValueChange={(v) => { setSwitchPkgId(v); setSwitchPkgPlan(null); const pk = offlinePkgs.find((x: any) => x.id === v); if (pk) { setSwitchPkgMonths(String(pk.months)); setSwitchPkgPrice(String(pk.price)) } }}>
+                            <SelectTrigger className="bg-white/5 border-white/20 text-white h-9"><SelectValue placeholder="Pick a package" /></SelectTrigger>
+                            <SelectContent className="bg-black border-white/20">
+                              {offlinePkgs.map((pk: any) => (<SelectItem key={pk.id} value={pk.id} className="text-white hover:bg-white/10">{pk.name} — {pk.months}mo · £{pk.price}</SelectItem>))}
+                              {offlinePkgs.length === 0 && <SelectItem value="_none" disabled className="text-white/50">No packages — create one in Package Management</SelectItem>}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <Label className="text-white/70 text-xs mb-1 block">Months</Label>
+                            <input type="number" min={1} max={24} value={switchPkgMonths} onChange={e => { setSwitchPkgMonths(e.target.value); setSwitchPkgPlan(null) }} className="w-full h-9 px-2 rounded-md bg-white/5 border border-white/20 text-white text-sm" />
+                          </div>
+                          <div>
+                            <Label className="text-white/70 text-xs mb-1 block">Price (£)</Label>
+                            <input type="number" min={0} step="0.01" value={switchPkgPrice} onChange={e => { setSwitchPkgPrice(e.target.value); setSwitchPkgPlan(null) }} className="w-full h-9 px-2 rounded-md bg-white/5 border border-white/20 text-white text-sm" />
+                          </div>
+                          <div>
+                            <Label className="text-white/70 text-xs mb-1 block">Cash taken (£)</Label>
+                            <input type="number" min={0} step="0.01" value={switchPkgCash} onChange={e => { setSwitchPkgCash(e.target.value); setSwitchPkgPlan(null) }} placeholder="optional" className="w-full h-9 px-2 rounded-md bg-white/5 border border-white/20 text-white text-sm" />
+                          </div>
+                        </div>
+                        {switchPkgPlan && (
+                          <div className="p-2 rounded bg-white/5 text-sm text-white space-y-1">
+                            <p><strong>Monthly ends:</strong> {new Date(switchPkgPlan.monthlyEnds).toLocaleDateString()}</p>
+                            <p><strong>Package:</strong> {switchPkgPlan.packageName} — {new Date(switchPkgPlan.packageStart).toLocaleDateString()} to {new Date(switchPkgPlan.packageEnd).toLocaleDateString()}{switchPkgPlan.price != null ? ` · £${switchPkgPlan.price}` : ''}{switchPkgPlan.cashPaid != null ? ` · £${switchPkgPlan.cashPaid} cash` : ''}</p>
+                            {switchPkgPlan.notes?.map((n: string, i: number) => <p key={i} className="text-xs text-orange-300">⚠️ {n}</p>)}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Button variant="outline" onClick={() => setSwitchPkgOpen(false)} className="border-white/20 text-white hover:bg-white/10">Cancel</Button>
+                          <Button disabled={switchPkgBusy || !(Number(switchPkgMonths) >= 1)} onClick={async () => {
+                            setSwitchPkgBusy(true)
+                            try {
+                              const body = { offlinePackageId: switchPkgId || undefined, months: Number(switchPkgMonths), price: switchPkgPrice !== '' ? Number(switchPkgPrice) : undefined, cashPaid: switchPkgCash !== '' ? Number(switchPkgCash) : undefined, dryRun: !switchPkgPlan }
+                              if (switchPkgPlan && !confirm(`Confirm: ${selectedCustomer.name}'s monthly ends ${new Date(switchPkgPlan.monthlyEnds).toLocaleDateString()}, then ${switchPkgPlan.packageName} until ${new Date(switchPkgPlan.packageEnd).toLocaleDateString()}?`)) return
+                              const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/switch-to-package`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                              const j = await resp.json()
+                              if (!resp.ok || !j.success) { alert((j.blockers && j.blockers.join('\n')) || j.error || 'Failed'); return }
+                              if (j.dryRun) { setSwitchPkgPlan(j.plan); return }
+                              alert(j.message)
+                              setSwitchPkgOpen(false); setSwitchPkgPlan(null)
+                              setSelectedCustomer({ ...selectedCustomer, cancelAtPeriodEnd: true, pendingPackage: j.plan ? { name: j.plan.packageName, start: j.plan.packageStart, end: j.plan.packageEnd, price: j.plan.price ?? null, cash: j.plan.cashPaid ?? null } : null })
+                              await fetchAdminData()
+                            } finally { setSwitchPkgBusy(false) }
+                          }} className="flex-1 bg-white text-black hover:bg-white/90">{switchPkgBusy ? 'Working…' : (switchPkgPlan ? 'Confirm switch' : 'Preview')}</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {(selectedCustomer.subscriptionStatus === 'ACTIVE' || selectedCustomer.status === 'ACTIVE') && !selectedCustomer.pendingPackage && (
           <div className="flex flex-col gap-2">
                         <Button variant="outline" onClick={() => openMembershipActionModal('pause')} className="border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/10">Pause</Button>
                         <Button variant="outline" onClick={() => openMembershipActionModal('cancel')} className="border-red-500/20 text-red-400 hover:bg-red-500/10">Cancel</Button>
@@ -2755,7 +2851,7 @@ function AdminDashboardContent() {
                 {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && (
           <Button variant="outline" onClick={() => openMembershipActionModal('reactivate')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Reactivate</Button>
                     )}
-                    {selectedCustomer.cancelAtPeriodEnd && (
+                    {selectedCustomer.cancelAtPeriodEnd && !selectedCustomer.pendingPackage && (
                       <div className="flex flex-col gap-2">
                         <div className="text-orange-400 text-xs">⚠️ Scheduled for cancellation at period end</div>
                         <Button variant="outline" onClick={async () => {

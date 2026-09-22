@@ -279,14 +279,19 @@ function DashboardContent() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Monthly Price</p>
-              <p className="text-2xl font-bold">£{membershipData?.price || 0}/month</p>
+              <p className="text-sm font-medium text-muted-foreground">{(membershipData as any)?.packageEnd ? 'Package' : 'Monthly Price'}</p>
+              <p className="text-2xl font-bold">{(membershipData as any)?.packageEnd ? membershipData?.type : `£${membershipData?.price || 0}/month`}</p>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Next Billing</p>
+              <p className="text-sm font-medium text-muted-foreground">{(membershipData as any)?.packageEnd ? 'Package ends' : 'Next Billing'}</p>
               <p className="text-lg font-semibold">
-                {membershipData?.nextBilling ? new Date(membershipData.nextBilling).toLocaleDateString() : 'N/A'}
+                {(membershipData as any)?.packageEnd
+                  ? new Date((membershipData as any).packageEnd).toLocaleDateString()
+                  : (membershipData?.nextBilling ? new Date(membershipData.nextBilling).toLocaleDateString() : 'N/A')}
               </p>
+              {(membershipData as any)?.pendingPackage && (
+                <p className="text-xs text-muted-foreground">Switching to {(membershipData as any).pendingPackage.name} on {new Date((membershipData as any).pendingPackage.start).toLocaleDateString()}{(membershipData as any).pendingPackage.end ? ` (until ${new Date((membershipData as any).pendingPackage.end).toLocaleDateString()})` : ''}</p>
+              )}
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">Member Since</p>
