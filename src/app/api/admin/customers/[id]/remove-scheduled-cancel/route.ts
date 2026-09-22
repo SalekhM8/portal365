@@ -63,6 +63,12 @@ export async function POST(
 
     await stripe.subscriptions.update(subscription.stripeSubscriptionId, { cancel_at_period_end: false })
     await prisma.subscription.update({ where: { id: subscription.id }, data: { cancelAtPeriodEnd: false } })
+    // If the cancellation was there because of a scheduled switch to a cash package, that switch is off too
+    const pendingSwitch = await prisma.membership.findFirst({ where: { userId: customerId, endDate: null, pendingPackageName: { not: null } } })
+    if (pendingSwitch) {
+      await prisma.membership.update({ where: { id: pendingSwitch.id }, data: { pendingPackageName: null, pendingPackageStart: null, pendingPackageEnd: null, pendingPackagePrice: null, pendingPackageCash: null } })
+      try { await stripe.subscriptions.update(subscription.stripeSubscriptionId, { metadata: { pending_package: '', pending_package_start: '' } }) } catch {}
+    }
 
     try {
       await prisma.subscriptionAuditLog.create({
@@ -81,7 +87,7 @@ export async function POST(
     console.log(`✅ Removed scheduled cancellation for ${subscription.user.email} (${subscription.stripeSubscriptionId})`)
     return NextResponse.json({
       success: true,
-      message: `Scheduled cancellation removed — ${subscription.user.firstName}'s membership continues as normal.`
+      message: `Scheduled cancellation removed — ${subscription.user.firstName}'s membership continues as normal.${pendingSwitch ? ` The scheduled switch to "${pendingSwitch.pendingPackageName}" was removed too.` : ''}`
     })
   } catch (e: any) {
     console.error('❌ remove-scheduled-cancel failed:', e)

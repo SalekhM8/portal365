@@ -47,7 +47,9 @@ export async function GET() {
       childName: `${m.user.firstName} ${m.user.lastName}`,
       membershipType: m.membershipType,
       status: m.status,
-      nextBilling: m.nextBillingDate
+      nextBilling: m.nextBillingDate,
+      packageEnd: (m as any).endDate ? (m as any).endDate.toISOString().slice(0, 10) : null,
+      pendingPackage: (m as any).pendingPackageName ? { name: (m as any).pendingPackageName, start: (m as any).pendingPackageStart?.toISOString().slice(0, 10) ?? null } : null
     }))
 
     return NextResponse.json({ success: true, parentId: parent.id, parentHasDefaultPm, children })

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { applyPendingPackage } from '@/lib/package-handover'
 import { sendDunningAttemptSms, sendSuspendedSms, sendSuccessSms, sendActionRequiredSms } from '@/lib/notify'
 import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActionRequiredEmail } from '@/lib/email'
 import { isAutoSuspendEnabled, isPauseCollectionEnabled } from '@/lib/flags'
@@ -792,6 +793,14 @@ export async function handleSubscriptionCancelled(stripeSubscription: any, accou
       where: { id: subscription.id }, 
       data: { status: 'CANCELLED', cancelAtPeriodEnd: false } 
     })
+
+    // Scheduled monthly -> cash-package switch: convert the row in place FIRST
+    // (it gains an endDate, so the sub-driven cancel below no longer matches it)
+    const handedOver = await applyPendingPackage(subscription.userId, 'webhook:subscription.deleted')
+    if (handedOver) {
+      console.log(`✅ [${operationId}] Monthly ended; cash package now active for ${subscription.user.email}`)
+      return
+    }
     
     await prisma.membership.updateMany({ 
       where: { userId: subscription.userId, endDate: null }, 

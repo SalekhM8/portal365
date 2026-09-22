@@ -148,6 +148,16 @@ model Membership {
   familyGroupId   String?
   isPrimaryMember Boolean @default(true)
 
+  // Scheduled switch monthly -> cash package. Set by admin "Switch to cash
+  // package"; applied (row converted in place: type/startDate/endDate/price)
+  // by the package handover when the Stripe subscription ends on the 1st.
+  pendingPackageName  String?
+  pendingPackageStart DateTime?
+  pendingPackageEnd   DateTime?
+  pendingPackagePrice Float?
+  pendingPackageCash  Float?   // cash taken at the desk — kept OFF the payments table (no VAT routing)
+  packageCashPaid     Float?   // copied from pendingPackageCash at handover (or set on package creation)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -57,6 +57,12 @@ export async function POST(
       prorate = true 
     } = await request.json()
 
+    // A scheduled monthly -> cash-package switch must be undone before this action
+    {
+      const pendingSwitch = await prisma.membership.findFirst({ where: { userId: customerId, endDate: null, pendingPackageName: { not: null } }, select: { pendingPackageName: true, pendingPackageStart: true } })
+      if (pendingSwitch && cancelationType === 'immediate') return NextResponse.json({ success: false, error: `A switch to "${pendingSwitch.pendingPackageName}" is scheduled for ${pendingSwitch.pendingPackageStart?.toISOString().slice(0, 10)} — undo the switch first.`, code: 'PACKAGE_SWITCH_PENDING' }, { status: 409 })
+    }
+
     if (!customerId) {
       return NextResponse.json({ 
         success: false, 

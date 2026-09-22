@@ -51,6 +51,12 @@ export async function POST(
     const sub = await prisma.subscription.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } })
     if (!sub) return NextResponse.json({ error: 'No subscription' }, { status: 404 })
 
+    // A scheduled monthly -> cash-package switch must be undone before this action
+    {
+      const pendingSwitch = await prisma.membership.findFirst({ where: { userId: userId, endDate: null, pendingPackageName: { not: null } }, select: { pendingPackageName: true, pendingPackageStart: true } })
+      if (pendingSwitch) return NextResponse.json({ success: false, error: `A switch to "${pendingSwitch.pendingPackageName}" is scheduled for ${pendingSwitch.pendingPackageStart?.toISOString().slice(0, 10)} — undo the switch first.`, code: 'PACKAGE_SWITCH_PENDING' }, { status: 409 })
+    }
+
     // Use the correct Stripe account for this subscription
     const stripeAccount = ((sub as any).stripeAccountKey as StripeAccountKey) || 'SU'
     const stripe = getStripeClient(stripeAccount)

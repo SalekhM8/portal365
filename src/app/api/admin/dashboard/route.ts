@@ -526,7 +526,13 @@ export async function GET(request: Request) {
                 membershipType: true,
                 status: true,
                 nextBillingDate: true,
-                endDate: true
+                endDate: true,
+                pendingPackageName: true,
+                pendingPackageStart: true,
+                pendingPackageEnd: true,
+                pendingPackagePrice: true,
+                pendingPackageCash: true,
+                packageCashPaid: true
               }
             },
             subscriptions: {
@@ -966,6 +972,14 @@ export async function GET(request: Request) {
         routedEntity: customer.payments[0]?.routedEntity?.displayName || 'N/A',
         nextBilling: isOfflinePackage ? 'N/A' : nextBillingIso,
         packageEnd,
+        packageCashPaid: (membership as any)?.packageCashPaid ?? null,
+        pendingPackage: (membership as any)?.pendingPackageName ? {
+          name: (membership as any).pendingPackageName,
+          start: (membership as any).pendingPackageStart?.toISOString().split('T')[0] ?? null,
+          end: (membership as any).pendingPackageEnd?.toISOString().split('T')[0] ?? null,
+          price: (membership as any).pendingPackagePrice ?? null,
+          cash: (membership as any).pendingPackageCash ?? null
+        } : null,
         startsOn,
         pauseScheduleLabel,
         emergencyContact: effectiveEmergency,
