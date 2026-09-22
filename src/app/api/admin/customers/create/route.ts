@@ -4,6 +4,7 @@ import { authOptions, hasPermission } from '@/lib/auth'
 import { z } from 'zod'
 import * as bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
+import { packageEndFor } from '@/lib/package-handover'
 import { assignUniquePin } from '@/lib/pin'
 import { SubscriptionProcessor, getPublishableKey, type StripeAccountKey } from '@/lib/stripe'
 
@@ -21,6 +22,10 @@ const adminCreateCustomerSchema = z.object({
   }).optional(),
   membershipType: z.enum(['WEEKEND_ADULT', 'KIDS_WEEKEND_UNDER14', 'FULL_ADULT', 'KIDS_UNLIMITED_UNDER14', 'MASTERS', 'PERSONAL_TRAINING', 'WOMENS_CLASSES', 'WELLNESS_PACKAGE']).optional(),
   offlinePackageId: z.string().optional(), // cash/offline package — no Stripe, fixed term
+  packageMonths: z.number().int().min(1).max(24).optional(),   // per-member override of the catalogue length
+  packagePrice: z.number().min(0).optional(),                  // per-member override of the catalogue price (bespoke deals)
+  packageCashPaid: z.number().min(0).optional(),               // cash taken at the desk — recorded on the membership only (no VAT routing)
+  force: z.boolean().optional(),                               // create even though a possible duplicate member exists
   customPrice: z.number().min(1, 'Price must be greater than 0'),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Start date must be YYYY-MM-DD'),
   routedEntity: z.string().optional()
@@ -56,6 +61,32 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Soft duplicate guard: same name, or same phone, as an existing member.
+    // Creating a second account is how cash-package conversions used to be
+    // done (14 duplicate accounts) — the right tool for an existing member is
+    // "Switch to cash package" on their own card. Admin can still force it.
+    if (!validatedData.force) {
+      const fn = validatedData.firstName.trim(), ln = validatedData.lastName.trim(), ph = (validatedData.phone || '').replace(/\s+/g, '')
+      const lookalikes = await prisma.user.findMany({
+        where: {
+          role: 'CUSTOMER',
+          OR: [
+            { AND: [{ firstName: { equals: fn, mode: 'insensitive' } }, { lastName: { equals: ln, mode: 'insensitive' } }] },
+            ...(ph.length >= 10 ? [{ phone: { contains: ph.slice(-10) } }] : [])
+          ]
+        },
+        select: { id: true, firstName: true, lastName: true, email: true, phone: true, createdAt: true, memberships: { orderBy: { createdAt: 'desc' }, take: 1, select: { membershipType: true, status: true, endDate: true } } },
+        take: 5
+      })
+      if (lookalikes.length > 0) {
+        return NextResponse.json({
+          error: 'Looks like this member already exists',
+          code: 'POSSIBLE_DUPLICATE',
+          duplicates: lookalikes.map(u => ({ id: u.id, name: `${u.firstName} ${u.lastName}`, email: u.email, phone: u.phone, joined: u.createdAt.toISOString().slice(0, 10), membership: u.memberships[0]?.membershipType || '—', status: u.memberships[0]?.status || '—', matchedBy: (u.firstName.trim().toLowerCase() === fn.toLowerCase() && u.lastName.trim().toLowerCase() === ln.toLowerCase()) ? 'name' : 'phone' }))
+        }, { status: 409 })
+      }
+    }
     
     // Generate a temporary password (customer will set up payment method instead)
     const tempPassword = Math.random().toString(36).slice(-8)
@@ -87,7 +118,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unknown or inactive package' }, { status: 400 })
       }
       const start = new Date(validatedData.startDate)
-      const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + pkg.months, start.getUTCDate()))
+      // Bespoke deals: length and price can be set per member (catalogue values are the defaults)
+      const months = validatedData.packageMonths ?? pkg.months
+      const price = validatedData.packagePrice ?? Number(pkg.price)
+      const end = packageEndFor(start, months)
       await prisma.membership.create({
         data: {
           userId: user.id,
@@ -95,7 +129,8 @@ export async function POST(request: NextRequest) {
           status: 'ACTIVE',
           startDate: start,
           endDate: end,
-          monthlyPrice: Number(pkg.price),
+          monthlyPrice: price,
+          packageCashPaid: validatedData.packageCashPaid ?? null,
           setupFee: 0,
           accessPermissions: JSON.stringify({ martialArts: ['bjj', 'boxing', 'muay_thai', 'mma'], personalTraining: false, womensClasses: false, wellness: false }),
           scheduleAccess: JSON.stringify({ weekdays: true, weekends: true, timeSlots: ['morning', 'afternoon', 'evening'] }),
@@ -108,7 +143,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         offlinePackage: true,
-        message: `${validatedData.firstName} added on ${pkg.name} — runs ${start.toISOString().slice(0, 10)} to ${end.toISOString().slice(0, 10)}. PIN: ${freshUser?.pin}`,
+        message: `${validatedData.firstName} added on ${pkg.name} (${months} months, £${price}) — runs ${start.toISOString().slice(0, 10)} to ${end.toISOString().slice(0, 10)}. PIN: ${freshUser?.pin}`,
         customer: { id: user.id, pin: freshUser?.pin, packageEnd: end.toISOString().slice(0, 10) }
       })
     }
