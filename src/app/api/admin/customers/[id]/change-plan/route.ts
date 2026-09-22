@@ -167,7 +167,7 @@ export async function POST(
         }
 
         // Update Portal immediately - they paid
-        await prisma.membership.updateMany({ where: { userId }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
+        await prisma.membership.updateMany({ where: { userId, endDate: null }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
         await prisma.subscription.update({ where: { id: sub.id }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
         
         return NextResponse.json({ 
@@ -256,7 +256,7 @@ export async function POST(
       }
 
       // Update Portal immediately - they paid
-      await prisma.membership.updateMany({ where: { userId }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
+      await prisma.membership.updateMany({ where: { userId, endDate: null }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
       await prisma.subscription.update({ where: { id: sub.id }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
 
       return NextResponse.json({ success: true, applied: 'now', settlement: 'charge_now', prorationNote })

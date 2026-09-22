@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
 
           // Update membership status to match
           await prisma.membership.updateMany({
-            where: { userId: localSub.userId },
+            where: { userId: localSub.userId, endDate: null },
             data: { status: expectedMembershipStatus }
           })
 
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
         } else {
           // Even if subscription status matches, fix membership if it's wrong
           await prisma.membership.updateMany({
-            where: { userId: localSub.userId, NOT: { status: expectedMembershipStatus } },
+            where: { userId: localSub.userId, endDate: null, NOT: { status: expectedMembershipStatus } },
             data: { status: expectedMembershipStatus }
           })
           syncResults.push({

@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
 
           // Set statuses
           await prisma.subscription.update({ where: { id: sub.id }, data: { status: 'ACTIVE', currentPeriodStart: new Date(sub.currentPeriodStart), currentPeriodEnd: new Date(sub.currentPeriodEnd) } })
-          await prisma.membership.updateMany({ where: { userId: user.id }, data: { status: 'ACTIVE' } })
+          await prisma.membership.updateMany({ where: { userId: user.id, endDate: null }, data: { status: 'ACTIVE' } })
 
           // Create/Tag payment idempotently (same-day, same-amount)
           const paidAtMsCreate = (inv.status_transitions?.paid_at || inv.created) * 1000
@@ -253,7 +253,7 @@ export async function POST(request: NextRequest) {
                 })
               }
               await prisma.subscription.update({ where: { id: targetSub.id }, data: { status: 'ACTIVE' } })
-              await prisma.membership.updateMany({ where: { userId: user.id }, data: { status: 'ACTIVE' } })
+              await prisma.membership.updateMany({ where: { userId: user.id, endDate: null }, data: { status: 'ACTIVE' } })
               imported++
             }
           }

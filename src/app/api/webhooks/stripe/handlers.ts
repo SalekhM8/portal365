@@ -281,7 +281,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
           
           // Update membership to ACTIVE
           await prisma.membership.updateMany({
-            where: { userId: subscription.userId },
+            where: { userId: subscription.userId, endDate: null },
             data: { status: 'ACTIVE' }
           })
           console.log(`✅ [${operationId}] Updated memberships for user ${subscription.userId} to ACTIVE`)
@@ -357,7 +357,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     
     // STEP 9: Update membership status
     const updatedMemberships = await prisma.membership.updateMany({ 
-      where: { userId: subscription.userId }, 
+      where: { userId: subscription.userId, endDate: null }, 
       data: { status: 'ACTIVE' } 
     })
     
@@ -375,7 +375,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
           
           // Update Portal membership and subscription to the new plan
           await prisma.membership.updateMany({
-            where: { userId: subscription.userId },
+            where: { userId: subscription.userId, endDate: null },
             data: { membershipType: pendingPlan }
           })
           await prisma.subscription.update({
@@ -508,7 +508,7 @@ export async function handlePaymentFailed(invoice: any, account?: StripeAccountK
       if (attempt >= 3) {
         if (isAutoSuspendEnabled()) {
           await prisma.subscription.update({ where: { id: subscription.id }, data: { status: 'PAST_DUE' } })
-          await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { status: 'SUSPENDED' } })
+          await prisma.membership.updateMany({ where: { userId: subscription.userId, endDate: null }, data: { status: 'SUSPENDED' } })
           // mark a dunning-suspended flag for webhook subscription.updated logic
           try { await prisma.systemSetting.create({ data: { key: `dunning:suspended:${subscription.id}`, value: '1', category: 'dunning' } }) } catch {}
           if (isPauseCollectionEnabled()) {
@@ -731,7 +731,7 @@ export async function handleSubscriptionUpdated(stripeSubscription: any, account
     }
     
     const updatedMemberships = await prisma.membership.updateMany({ 
-      where: { userId: subscription.userId }, 
+      where: { userId: subscription.userId, endDate: null }, 
       data: { status: membershipStatus } 
     })
     
@@ -746,7 +746,7 @@ export async function handleSubscriptionUpdated(stripeSubscription: any, account
         const nowSec = Math.floor(Date.now() / 1000)
         // If we have crossed or are at the scheduled timestamp, flip membership to the pending plan
         if (!isNaN(pendingTs) && nowSec >= pendingTs) {
-          await prisma.membership.updateMany({ where: { userId: subscription.userId }, data: { membershipType: pendingPlan } })
+          await prisma.membership.updateMany({ where: { userId: subscription.userId, endDate: null }, data: { membershipType: pendingPlan } })
           // Clear metadata to avoid repeat
           try {
             await stripe.subscriptions.update(stripeSubscription.id, { metadata: { ...stripeSubscription.metadata, pending_plan: '', pending_apply_ts: '' } })
@@ -779,13 +779,22 @@ export async function handleSubscriptionCancelled(stripeSubscription: any, accou
       throw new Error(`Subscription not found: ${stripeSubscription.id}`)
     }
     
+    // Idempotent: if this sub is already CANCELLED in our DB (admin cancelled it,
+    // or this is a replayed/late event), do NOT touch memberships — the member
+    // may since have been reactivated on a NEW subscription, or switched to a
+    // cash package (endDate set; excluded by the scope below regardless).
+    if (subscription.status === 'CANCELLED') {
+      console.log(`⏭️ [${operationId}] Subscription already CANCELLED locally — no membership change`)
+      return
+    }
+
     await prisma.subscription.update({ 
       where: { id: subscription.id }, 
-      data: { status: 'CANCELLED' } 
+      data: { status: 'CANCELLED', cancelAtPeriodEnd: false } 
     })
     
     await prisma.membership.updateMany({ 
-      where: { userId: subscription.userId }, 
+      where: { userId: subscription.userId, endDate: null }, 
       data: { status: 'CANCELLED' } 
     })
     
@@ -848,7 +857,7 @@ export async function activateFromPaymentIntent(pi: any, account?: StripeAccount
       }, { idempotencyKey: `start-sub:${dbSub.id}:${trialEndTimestamp}` })
 
       await prisma.subscription.update({ where: { id: dbSub.id }, data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' } })
-      await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+      await prisma.membership.updateMany({ where: { userId: dbSub.userId, endDate: null }, data: { status: 'ACTIVE' } })
     } catch (subErr) {
       // Did the concurrent confirm-payment call already create the real sub?
       const refreshed = await prisma.subscription.findUnique({ where: { id: dbSub.id } })
@@ -861,7 +870,7 @@ export async function activateFromPaymentIntent(pi: any, account?: StripeAccount
       // Otherwise the other path won the race and the sub exists; ensure DB reflects
       // ACTIVE, then fall through to write the payment row.
       console.warn(`activateFromPaymentIntent: sub-create lost idempotency race for ${dbSub.id}, continuing to payment-row write`, (subErr as any)?.message)
-      await prisma.membership.updateMany({ where: { userId: dbSub.userId }, data: { status: 'ACTIVE' } })
+      await prisma.membership.updateMany({ where: { userId: dbSub.userId, endDate: null }, data: { status: 'ACTIVE' } })
     }
   }
 
@@ -1011,7 +1020,7 @@ export async function activateFromSetupIntent(si: any, account?: StripeAccountKe
     data: { stripeSubscriptionId: stripeSubscription.id, status: 'ACTIVE' }
   })
   await prisma.membership.updateMany({
-    where: { userId: dbSub.userId },
+    where: { userId: dbSub.userId, endDate: null },
     data: { status: 'ACTIVE' }
   })
 

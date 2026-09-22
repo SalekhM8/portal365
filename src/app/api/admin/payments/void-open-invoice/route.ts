@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     }
     if (customerId) {
       await prisma.membership.updateMany({
-        where: { userId: customerId },
+        where: { userId: customerId, endDate: null },
         data: { status: 'ACTIVE' }
       })
     }

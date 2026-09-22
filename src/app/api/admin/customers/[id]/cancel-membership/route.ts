@@ -236,7 +236,7 @@ export async function POST(
           // Update membership status immediately (SUSPENDED/PAUSED covers paused members)
           await tx.membership.updateMany({
             where: { 
-              userId: customer.id,
+              userId: customer.id, endDate: null,
               status: { in: ['ACTIVE', 'SUSPENDED', 'PAUSED', 'PENDING_PAYMENT'] }
             },
             data: { status: 'CANCELLED' }
