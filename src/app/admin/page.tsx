@@ -2848,7 +2848,7 @@ function AdminDashboardContent() {
             <Button variant="outline" onClick={() => openMembershipActionModal('cancel')} className="border-red-500/20 text-red-400 hover:bg-red-500/10 w-full">Cancel membership</Button>
           </div>
                     )}
-                {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && (
+                {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && !((selectedCustomer as any).packageEnd && new Date((selectedCustomer as any).packageEnd) >= new Date()) && (
           <Button variant="outline" onClick={() => openMembershipActionModal('reactivate')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Reactivate</Button>
                     )}
                     {selectedCustomer.cancelAtPeriodEnd && !selectedCustomer.pendingPackage && (

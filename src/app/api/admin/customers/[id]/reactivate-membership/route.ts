@@ -104,6 +104,14 @@ export async function POST(
       }, { status: 409 })
     }
 
+    // Bouncer: a member on a LIVE cash package (endDate in the future) must not
+    // be given a second, Stripe-billed membership. Their old CANCELLED sub is
+    // exactly what a monthly->package switch leaves behind.
+    const livePackage = await prisma.membership.findFirst({ where: { userId: customerId, endDate: { gte: new Date() } }, orderBy: { createdAt: 'desc' } })
+    if (livePackage) {
+      return NextResponse.json({ success: false, error: `${customer.firstName} is on a cash package (${livePackage.membershipType}) until ${livePackage.endDate!.toISOString().slice(0, 10)} — Reactivate would bill them monthly on top. Use Renew for the package, or wait for it to end before reactivating a monthly.`, code: 'ON_CASH_PACKAGE' }, { status: 409 })
+    }
+
     if (!cancelledSub.stripeCustomerId) {
       return NextResponse.json({ success: false, error: 'Cancelled subscription has no Stripe customer', code: 'NO_STRIPE_CUSTOMER' }, { status: 400 })
     }
