@@ -65,7 +65,11 @@ export default function FamilyPage() {
       const res = await fetch('/api/plans')
       const data = await res.json()
       if (res.ok && data.success) {
-        const list = (data.plans as Array<any>).map(p => ({ key: p.key, displayName: `${p.displayName || p.name}${p.monthlyPrice != null ? ` — £${p.monthlyPrice}/mo` : ''}` }))
+        // Same rule as the public signup: only plans tagged to a business are
+        // offered. Untagged leftovers (old prices) must never appear here.
+        const list = (data.plans as Array<any>)
+          .filter(p => Array.isArray(p.preferredEntities) && p.preferredEntities.length > 0)
+          .map(p => ({ key: p.key, displayName: `${p.displayName || p.name}${p.monthlyPrice != null ? ` — £${p.monthlyPrice}/mo` : ''}` }))
         setPlans(list)
         // No default plan: parents must choose explicitly (a pre-selected
         // first-alphabetical plan put an 11-year-old on 'Ages 4 to 6')
