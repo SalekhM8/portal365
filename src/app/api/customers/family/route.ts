@@ -73,6 +73,13 @@ export async function POST(request: NextRequest) {
     if (!firstName || !lastName || !membershipType) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
     }
+    // Only plans a signup link could offer (active, not migration-only, tagged to a business)
+    {
+      const planRow = await prisma.membershipPlan.findUnique({ where: { key: membershipType }, select: { active: true, migrationOnly: true, preferredEntities: true } })
+      let tagged = false
+      try { tagged = Array.isArray(JSON.parse(planRow?.preferredEntities || '[]')) && JSON.parse(planRow?.preferredEntities || '[]').length > 0 } catch {}
+      if (!planRow || !planRow.active || planRow.migrationOnly || !tagged) return NextResponse.json({ error: 'That plan is not available. Please pick one of the listed plans.' }, { status: 400 })
+    }
     // Age-banded plans (Ages 4-6, Under 14s, ...) must match the child's DOB
     const ageError = ageMismatchMessage(membershipType, dateOfBirth ? new Date(dateOfBirth) : null)
     if (ageError) return NextResponse.json({ error: ageError }, { status: 400 })

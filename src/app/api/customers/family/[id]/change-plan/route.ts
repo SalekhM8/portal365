@@ -31,6 +31,13 @@ export async function POST(
     const stripeAccount = ((subscription as any).stripeAccountKey as StripeAccountKey) || 'SU'
     const stripe = getStripeClient(stripeAccount)
 
+    // Only plans a signup link could offer (active, not migration-only, tagged to a business)
+    {
+      const planRow = await prisma.membershipPlan.findUnique({ where: { key: newMembershipType }, select: { active: true, migrationOnly: true, preferredEntities: true } })
+      let tagged = false
+      try { tagged = Array.isArray(JSON.parse(planRow?.preferredEntities || '[]')) && JSON.parse(planRow?.preferredEntities || '[]').length > 0 } catch {}
+      if (!planRow || !planRow.active || planRow.migrationOnly || !tagged) return NextResponse.json({ error: 'That plan is not available. Please pick one of the listed plans.' }, { status: 400 })
+    }
     const details = await getPlanDbFirst(newMembershipType)
     const stripeSub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId)
 
