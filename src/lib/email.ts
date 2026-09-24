@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import { ukDate } from '@/lib/uk-time'
 import fs from 'fs'
 import path from 'path'
 import { prisma } from '@/lib/prisma'
@@ -109,7 +110,7 @@ export async function sendDunningAttemptEmail(opts: {
   if (!allow) return
   const key = `email:dunning:${opts.invoiceId}:${opts.attempt}`
   if (!(await once(key))) return
-  const next = opts.nextRetryISO ? new Date(opts.nextRetryISO).toLocaleDateString('en-GB') : 'tomorrow'
+  const next = opts.nextRetryISO ? ukDate(opts.nextRetryISO) : 'tomorrow'
   const subject = `Payment failed (${opts.attempt}/${opts.total})`
   const text = `Hi,\n\nYour membership payment failed (attempt ${opts.attempt}/${opts.total}). We'll retry on ${next}.\n\nPlease update your card here: ${opts.manageUrl}\n\nIf you have questions, call 07825 443 999.\n\nThank you,\nAura MMA`
   // Prefer hosted invoice link when available so the member can pay/3DS without logging in

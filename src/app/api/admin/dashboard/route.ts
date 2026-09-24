@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions, hasPermission } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { ukDateTime } from '@/lib/uk-time'
 import { VATCalculationEngine } from '@/lib/vat-routing'
 import { getStripeClient, type StripeAccountKey, ALL_STRIPE_ACCOUNTS } from '@/lib/stripe'
 
@@ -395,7 +396,7 @@ export async function GET(request: Request) {
           ? `Payment voided for ${payment.user?.firstName} ${payment.user?.lastName} (£${Math.abs(Number(payment.amount))})`
           : `Payment failed for ${payment.user?.firstName} ${payment.user?.lastName} (£${payment.amount})`,
         // For now, always show Sporting U as the routed entity label in activity
-        detail: `Sporting U • ${new Date(payment.createdAt).toLocaleString()}`,
+        detail: `Sporting U • ${ukDateTime(payment.createdAt)}`,
         timestamp: payment.createdAt,
         amount: `£${payment.amount}`,
         status: payment.status,
@@ -406,7 +407,7 @@ export async function GET(request: Request) {
         icon: 'UserPlus',
         color: 'text-blue-600',
         message: `${user.firstName} ${user.lastName} signed up`,
-        detail: `${user.memberships[0]?.membershipType || 'No membership'} • ${new Date(user.createdAt).toLocaleString()}`,
+        detail: `${user.memberships[0]?.membershipType || 'No membership'} • ${ukDateTime(user.createdAt)}`,
         timestamp: user.createdAt,
         amount: null,
         status: 'NEW',
@@ -417,7 +418,7 @@ export async function GET(request: Request) {
         icon: 'TrendingUp',
         color: 'text-purple-600',
         message: `${membership.user?.firstName} ${membership.user?.lastName} changed membership`,
-        detail: `Now: ${membership.membershipType} (£${membership.monthlyPrice}) • ${new Date(membership.updatedAt).toLocaleString()}`,
+        detail: `Now: ${membership.membershipType} (£${membership.monthlyPrice}) • ${ukDateTime(membership.updatedAt)}`,
         timestamp: membership.updatedAt,
         amount: `£${membership.monthlyPrice}`,
         status: 'UPDATED',
@@ -429,7 +430,7 @@ export async function GET(request: Request) {
         color: subscription.status === 'CANCELLED' ? 'text-red-600' 
               : subscription.status === 'ACTIVE' ? 'text-green-600' : 'text-yellow-600',
         message: `${subscription.user?.firstName} ${subscription.user?.lastName} subscription ${subscription.status.toLowerCase()}`,
-        detail: `${subscription.membershipType} • ${new Date(subscription.updatedAt).toLocaleString()}`,
+        detail: `${subscription.membershipType} • ${ukDateTime(subscription.updatedAt)}`,
         timestamp: subscription.updatedAt,
         amount: null,
         status: subscription.status,

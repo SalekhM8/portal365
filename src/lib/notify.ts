@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { ukDate } from '@/lib/uk-time'
 
 type SmsSendResult = { success: boolean; sid?: string; error?: string }
 
@@ -68,7 +69,7 @@ export async function sendDunningAttemptSms(opts: {
   const isNew = await recordIdempotentDunningKey(key)
   if (!isNew) return
 
-  const nextDay = opts.nextRetryDateISO ? new Date(opts.nextRetryDateISO).toLocaleDateString('en-GB') : 'tomorrow'
+  const nextDay = opts.nextRetryDateISO ? ukDate(opts.nextRetryDateISO) : 'tomorrow'
   const body = `Aura MMA: Payment failed (attempt ${opts.attempt}/${opts.totalAttempts}). We will retry on ${nextDay}. Update card: ${opts.managePaymentUrl}`
   await sendTwilioSms(opts.userPhone, body)
 }
