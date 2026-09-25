@@ -229,11 +229,38 @@ export async function GET(request: NextRequest) {
 
         const monthlyPrice = decimalToNumber(sub.monthlyPrice)
 
+        // Was the pause-start month actually PAID? Only that month can be
+        // "creditable" (later months start on the 1st). If its subscription
+        // invoice is void/open/uncollectible the month is written off: no credit.
+        const unpaidMonths = new Set<string>()
+        try {
+          const ws = new Date(window.startDate)
+          const y = ws.getUTCFullYear(), m = ws.getUTCMonth()
+          if (ws.getUTCDate() > 1) {
+            const monthInvoices = await stripe.invoices.list({
+              subscription: sub.stripeSubscriptionId,
+              created: { gte: Math.floor(Date.UTC(y, m, 1) / 1000) - 86400, lte: Math.floor(Date.UTC(y, m + 1, 1) / 1000) },
+              limit: 10
+            })
+            const cycle = monthInvoices.data.find(i => i.billing_reason === 'subscription_cycle' || i.billing_reason === 'subscription_create')
+            const paid = !!cycle && cycle.status === 'paid' && (cycle.amount_paid || 0) > 0
+            if (!paid) {
+              unpaidMonths.add(`${y}-${String(m + 1).padStart(2, '0')}`)
+              console.log(`⚠️ Window ${windowId}: ${y}-${String(m + 1).padStart(2, '0')} invoice ${cycle ? cycle.status : 'not found'} — month written off, no pause credit`)
+            }
+          }
+        } catch (e: any) {
+          // Cannot verify → do NOT credit blindly
+          const ws = new Date(window.startDate)
+          if (ws.getUTCDate() > 1) unpaidMonths.add(`${ws.getUTCFullYear()}-${String(ws.getUTCMonth() + 1).padStart(2, '0')}`)
+          console.error(`⚠️ Window ${windowId}: could not verify month invoice (${e?.message}) — withholding credit`)
+        }
+
         const settlement = calculateSettlementBreakdown({
           startDate: new Date(window.startDate),
           endDate: new Date(window.endDate),
           monthlyPrice
-        })
+        }, { unpaidMonths })
 
         console.log(`📊 Window ${windowId}:`)
         console.log(`   Monthly price: £${monthlyPrice}`)
