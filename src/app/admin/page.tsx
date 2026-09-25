@@ -2074,7 +2074,7 @@ function AdminDashboardContent() {
                               <Badge variant="outline" className="text-xs border-green-500/40 text-green-300">
                                 → {(customer as any).pendingPackage.name}
                               </Badge>
-                            ) : customer.cancelAtPeriodEnd && (
+                            ) : customer.cancelAtPeriodEnd && ['ACTIVE', 'PAUSED', 'PAST_DUE', 'SUSPENDED', 'TRIALING'].includes(customer.status) && (
                               <Badge variant="destructive" className="text-xs">
                                 Ending Soon
                               </Badge>
@@ -2859,7 +2859,7 @@ function AdminDashboardContent() {
                 {(selectedCustomer.subscriptionStatus === 'CANCELLED' || selectedCustomer.status === 'CANCELLED') && !((selectedCustomer as any).packageEnd && new Date((selectedCustomer as any).packageEnd) >= new Date()) && (
           <Button variant="outline" onClick={() => openMembershipActionModal('reactivate')} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Reactivate</Button>
                     )}
-                    {selectedCustomer.cancelAtPeriodEnd && !selectedCustomer.pendingPackage && (
+                    {selectedCustomer.cancelAtPeriodEnd && !selectedCustomer.pendingPackage && ['ACTIVE', 'TRIALING', 'PAST_DUE', 'PAUSED'].includes(selectedCustomer.subscriptionStatus) && (
                       <div className="flex flex-col gap-2">
                         <div className="text-orange-400 text-xs">⚠️ Scheduled for cancellation at period end</div>
                         <Button variant="outline" onClick={async () => {
