@@ -476,11 +476,21 @@ export interface PartialMonthSettlement {
   // voided the invoice, so there is nothing to refund and the unpaused tail of the
   // month is unbilled time the customer used.
   creditable: boolean
+  writtenOff?: boolean // month's invoice was never paid (void/open) → no credit AND no charge
   usedDays: number // days customer used after resume in this month (0 when creditable)
   chargeAmount: number // £, only > 0 when non-creditable and usedDays > 0
 }
 
-export function calculateSettlementBreakdown(period: PausePeriod): SettlementBreakdown {
+/**
+ * @param opts.unpaidMonths  'YYYY-MM' keys of months whose subscription invoice
+ *   was NOT actually paid (void / open / uncollectible). The calendar alone
+ *   cannot know this: a pause starting after the 1st USED to be treated as
+ *   "customer was charged" purely from the date, which credited paused days
+ *   of months the gym never received (Zeeshan Mushtaq Rasul £30.97 and
+ *   Zakariya Ali £49.68, Aug 2026). An unpaid month is written off: no credit,
+ *   no post-resume charge.
+ */
+export function calculateSettlementBreakdown(period: PausePeriod, opts?: { unpaidMonths?: Set<string> }): SettlementBreakdown {
   const { startDate, endDate, monthlyPrice } = period
   
   // Normalize dates to UTC midnight
@@ -529,11 +539,15 @@ export function calculateSettlementBreakdown(period: PausePeriod): SettlementBre
       //    invoice, customer was not charged. The days between pause-end and the
       //    end of the month are days the customer used but was never billed for,
       //    so charge proration on those days against the next renewal.
-      const customerWasCharged = overlapStart.getTime() > monthStart.getTime()
+      const monthKey = `${year}-${String(monthNum + 1).padStart(2, '0')}`
+      const writtenOff = !!opts?.unpaidMonths?.has(monthKey)
+      // "Charged" requires BOTH: the pause began after the 1st (Stripe raised the
+      // month's invoice) AND that invoice was actually paid.
+      const customerWasCharged = overlapStart.getTime() > monthStart.getTime() && !writtenOff
       const dailyRate = monthlyPrice / daysInMonth
       const credit = pausedDaysInMonth * dailyRate
       const roundedCredit = Math.round(credit * 100) / 100
-      const usedDays = customerWasCharged ? 0 : (daysInMonth - pausedDaysInMonth)
+      const usedDays = (customerWasCharged || writtenOff) ? 0 : (daysInMonth - pausedDaysInMonth)
       const charge = usedDays * dailyRate
       const roundedCharge = Math.round(charge * 100) / 100
 
@@ -545,6 +559,7 @@ export function calculateSettlementBreakdown(period: PausePeriod): SettlementBre
         totalDaysInMonth: daysInMonth,
         creditAmount: customerWasCharged ? roundedCredit : 0,
         creditable: customerWasCharged,
+        ...(writtenOff ? { writtenOff: true } : {}),
         usedDays,
         chargeAmount: customerWasCharged ? 0 : roundedCharge
       })
