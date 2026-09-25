@@ -127,6 +127,14 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
       ...(line0?.metadata || {})
     } as Record<string, any>
 
+    // One-off invoices (reactivation prorate, pause settlement, plan-change
+    // delta, manual charges) carry NO Stripe subscription. They are money, not
+    // membership: record the payment, but never flip status or billing periods
+    // from them. A stray reactivation-prorate invoice paid days later must not
+    // revive a cancelled member (Zaynab Isaan, 25 Sep 2026), and a settlement
+    // invoice's period (= its creation instant) must not overwrite nextBillingDate.
+    const isOneOffInvoice = !subscriptionId
+
     // STEP 1: Strongest signal: our DB subscription id embedded in invoice/line metadata
     let subscription = null
     let mappingMethod = 'UNKNOWN'
@@ -268,6 +276,9 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
           })
           console.log(`✅ [${operationId}] Updated payment ${existingPaymentAnyUser.id} from FAILED to CONFIRMED`)
           
+          if (isOneOffInvoice) {
+            console.log(`ℹ️ [${operationId}] One-off invoice — payment recorded, subscription status/periods left unchanged`)
+          } else {
           // Update subscription to ACTIVE
           await prisma.subscription.update({
             where: { id: subscription.id },
@@ -286,6 +297,7 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
             data: { status: 'ACTIVE' }
           })
           console.log(`✅ [${operationId}] Updated memberships for user ${subscription.userId} to ACTIVE`)
+          }
           
           // Clear any dunning suspension flag
           try {
@@ -343,7 +355,11 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     
     console.log(`✅ [${operationId}] Created invoice record: ${invoiceRecord.id}`)
 
-    // STEP 8: Update subscription status and billing periods
+    // STEP 8/9: Update subscription status, billing periods and membership —
+    // ONLY for invoices of a real Stripe subscription (see isOneOffInvoice above)
+    if (isOneOffInvoice) {
+      console.log(`ℹ️ [${operationId}] One-off invoice — payment recorded, subscription status/periods left unchanged`)
+    } else {
     const updatedSubscription = await prisma.subscription.update({ 
       where: { id: subscription.id }, 
       data: { 
@@ -356,13 +372,13 @@ export async function handlePaymentSucceeded(invoice: any, account?: StripeAccou
     
     console.log(`✅ [${operationId}] Updated subscription status: ${updatedSubscription.status}`)
     
-    // STEP 9: Update membership status
     const updatedMemberships = await prisma.membership.updateMany({ 
       where: { userId: subscription.userId, endDate: null }, 
       data: { status: 'ACTIVE' } 
     })
     
     console.log(`✅ [${operationId}] Updated ${updatedMemberships.count} memberships to ACTIVE`)
+    }
     
     // STEP 9b: Apply pending plan change if deferred plan switch was scheduled
     try {

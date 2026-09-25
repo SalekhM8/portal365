@@ -154,6 +154,26 @@ export async function POST(
     // STEP 1: optional prorate
     let prorateInvoiceId: string | null = null
     let prorateChargedPence = 0
+    // Cleanup for a failed proration: never leave an open invoice (or a pending
+    // invoice item) behind — Stripe would collect it from the next card added,
+    // or roll the item into the next invoice, for a reactivation that never happened.
+    let pendingItemId: string | null = null
+    let createdInvoiceId: string | null = null
+    const abandonProrate = async () => {
+      try {
+        if (createdInvoiceId) {
+          const cur = await stripeClient.invoices.retrieve(createdInvoiceId)
+          if (cur.status === 'draft') await stripeClient.invoices.del(createdInvoiceId)
+          else if (cur.status === 'open') await stripeClient.invoices.voidInvoice(createdInvoiceId)
+          console.log(`🧹 [${operationId}] Abandoned prorate invoice ${createdInvoiceId} (${cur.status} → ${cur.status === 'draft' ? 'deleted' : 'void'})`)
+        } else if (pendingItemId) {
+          await stripeClient.invoiceItems.del(pendingItemId)
+          console.log(`🧹 [${operationId}] Removed pending prorate item ${pendingItemId}`)
+        }
+      } catch (cleanupErr: any) {
+        console.error(`⚠️ [${operationId}] Prorate cleanup failed — check Stripe for an open invoice:`, cleanupErr?.message)
+      }
+    }
     if (prorateAmountPence > 0) {
       try {
         const sharedMeta = {
@@ -163,13 +183,14 @@ export async function POST(
           userId: customer.id,
           operationId,
         }
-        await stripeClient.invoiceItems.create({
+        const prorateItem = await stripeClient.invoiceItems.create({
           customer: cancelledSub.stripeCustomerId,
           amount: prorateAmountPence,
           currency: 'gbp',
           description: `Reactivation prorate for ${customer.firstName} ${customer.lastName}`,
           metadata: sharedMeta,
         }, { idempotencyKey: `${operationId}:ii` })
+        pendingItemId = prorateItem.id
 
         const inv = await stripeClient.invoices.create({
           customer: cancelledSub.stripeCustomerId,
@@ -179,14 +200,16 @@ export async function POST(
           description: `Reactivation prorate for ${customer.firstName} ${customer.lastName}`,
           metadata: sharedMeta,
         }, { idempotencyKey: `${operationId}:inv` })
+        createdInvoiceId = inv.id!
 
         const finalized = await stripeClient.invoices.finalizeInvoice(inv.id!)
         const paid = await stripeClient.invoices.pay(finalized.id!)
 
         if (paid.status !== 'paid') {
+          await abandonProrate()
           return NextResponse.json({
             success: false,
-            error: `Prorate invoice did not pay (status=${paid.status}). New subscription was NOT created.`,
+            error: `Prorate invoice did not pay (status=${paid.status}). New subscription was NOT created; nothing is owed.`,
             code: 'PRORATE_PAYMENT_FAILED',
             invoiceId: finalized.id,
             operationId
@@ -197,9 +220,10 @@ export async function POST(
         console.log(`✅ [${operationId}] Prorate paid £${(prorateChargedPence/100).toFixed(2)} invoice=${prorateInvoiceId}`)
       } catch (e: any) {
         console.error(`❌ [${operationId}] Prorate failed`, e)
+        await abandonProrate()
         return NextResponse.json({
           success: false,
-          error: 'Failed to collect prorate. New subscription was NOT created.',
+          error: 'Card declined for the prorate. New subscription was NOT created; nothing is owed. Update the card and try again.',
           details: e.message,
           code: 'PRORATE_FAILED',
           operationId
