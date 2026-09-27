@@ -134,10 +134,13 @@ export default function FamilyPage() {
           router.push('/dashboard')
         }, 1200)
       } else {
-        alert('Activation failed: ' + (data.error || 'Unknown error'))
+        // Show the reason on the page (a declined card must be fixed under Payment
+        // Methods before Activate can work — re-pressing it does nothing)
+        setError(data.error || 'Activation failed. Please try again or contact the desk.')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
       }
     } catch {
-      alert('Network error during activation')
+      setError('Network error during activation. Please try again.')
     } finally {
       setActivatingId(null)
     }
@@ -185,7 +188,12 @@ export default function FamilyPage() {
 
       {error && (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="flex flex-wrap items-center gap-2">
+            <span>{error}</span>
+            {/declined|card/i.test(error) && (
+              <Button size="sm" variant="outline" onClick={() => router.push('/dashboard/payment-methods')}>Update card</Button>
+            )}
+          </AlertDescription>
         </Alert>
       )}
 

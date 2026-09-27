@@ -49,7 +49,19 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'Failed to activate child membership' }, { status: 500 })
+    const msg: string = e?.message || ''
+    // Card declined on the child's prorated first payment: tell the parent exactly
+    // what to do instead of a bare 500 (they were re-pressing Activate against an
+    // expired card with no idea why — Ibrahim Ganny, 26 Sep 2026).
+    if (/Prorated charge failed/i.test(msg) || /card/i.test(msg)) {
+      const reason = msg.replace(/^Prorated charge failed:\s*/i, '').replace(/\.$/, '')
+      return NextResponse.json({
+        error: `Payment declined: ${reason}. Update your card under Payment Methods, then press Activate again.`,
+        code: 'CARD_DECLINED',
+        reason
+      }, { status: 402 })
+    }
+    return NextResponse.json({ error: msg || 'Failed to activate child membership' }, { status: 500 })
   }
 }
 
