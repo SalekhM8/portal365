@@ -38,40 +38,48 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       }
     })
     if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
-    const subscription = customer.subscriptions[0]
+    const subscription = customer.subscriptions[0] ?? null
     const membership = customer.memberships[0]
-    if (!subscription || !membership) return NextResponse.json({ error: 'No pending signup found for this member' }, { status: 404 })
+    if (!membership) return NextResponse.json({ error: 'No membership found for this member' }, { status: 404 })
 
-    // ── Guards: must be an abandoned online signup with zero money ──
-    if (!['PENDING_PAYMENT', 'INCOMPLETE', 'INCOMPLETE_EXPIRED'].includes(subscription.status)) {
-      return NextResponse.json({ error: `Subscription is ${subscription.status} — only pending/incomplete signups can be linked to a cash package` }, { status: 400 })
+    // ── Guards: must be an abandoned online signup, OR a family member who was
+    //    added but never activated (membership PENDING_PAYMENT, no subscription
+    //    row at all) — with zero money either way ──
+    if (subscription) {
+      if (!['PENDING_PAYMENT', 'INCOMPLETE', 'INCOMPLETE_EXPIRED'].includes(subscription.status)) {
+        return NextResponse.json({ error: `Subscription is ${subscription.status} — only pending/incomplete signups can be linked to a cash package` }, { status: 400 })
+      }
+      if (subscription.stripeSubscriptionId?.startsWith('sub_')) {
+        return NextResponse.json({ error: 'This member has a real Stripe subscription — cancel it via Membership Management first' }, { status: 400 })
+      }
+      const paidInvoice = await prisma.invoice.findFirst({ where: { subscriptionId: subscription.id, status: 'paid' } })
+      if (paidInvoice) return NextResponse.json({ error: 'Subscription has a paid invoice; cannot convert' }, { status: 400 })
+    } else if (membership.status !== 'PENDING_PAYMENT') {
+      return NextResponse.json({ error: `Membership is ${membership.status} with no subscription — nothing to link` }, { status: 400 })
     }
-    if (subscription.stripeSubscriptionId?.startsWith('sub_')) {
-      return NextResponse.json({ error: 'This member has a real Stripe subscription — cancel it via Membership Management first' }, { status: 400 })
-    }
-    const paidInvoice = await prisma.invoice.findFirst({ where: { subscriptionId: subscription.id, status: 'paid' } })
-    if (paidInvoice) return NextResponse.json({ error: 'Subscription has a paid invoice; cannot convert' }, { status: 400 })
-    const confirmed = await prisma.payment.findFirst({ where: { userId: customer.id, status: 'CONFIRMED', createdAt: { gte: subscription.createdAt } } })
+    const confirmed = await prisma.payment.findFirst({ where: { userId: customer.id, status: 'CONFIRMED', createdAt: { gte: subscription?.createdAt ?? membership.createdAt } } })
     if (confirmed) return NextResponse.json({ error: 'Member has confirmed payments since signup; cannot convert' }, { status: 400 })
 
     const start = new Date(`${startDateStr}T00:00:00.000Z`)
     const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + months, start.getUTCDate()))
     const packageName = `${months}-Month Cash`
-    const placeholderId = subscription.stripeSubscriptionId
-    const placeholderAccount = (subscription.stripeAccountKey as StripeAccountKey) || 'SU'
+    const placeholderId = subscription?.stripeSubscriptionId ?? null
+    const placeholderAccount = ((subscription?.stripeAccountKey as StripeAccountKey) || 'SU')
 
     await prisma.$transaction(async (tx) => {
-      // Same cleanup as void-signup — proven deletes, nothing new
-      await tx.invoice.deleteMany({ where: { subscriptionId: subscription.id, status: { in: ['open', 'void', 'uncollectible', 'draft'] } } })
-      const orphan = await tx.payment.findMany({ where: { userId: customer.id, status: { in: ['PENDING', 'FAILED'] }, createdAt: { gte: subscription.createdAt } }, select: { id: true } })
-      const ids = orphan.map(p => p.id)
-      if (ids.length > 0) {
-        await tx.paymentRouting.deleteMany({ where: { paymentId: { in: ids } } })
-        await tx.payment.deleteMany({ where: { id: { in: ids } } })
+      if (subscription) {
+        // Same cleanup as void-signup — proven deletes, nothing new
+        await tx.invoice.deleteMany({ where: { subscriptionId: subscription.id, status: { in: ['open', 'void', 'uncollectible', 'draft'] } } })
+        const orphan = await tx.payment.findMany({ where: { userId: customer.id, status: { in: ['PENDING', 'FAILED'] }, createdAt: { gte: subscription.createdAt } }, select: { id: true } })
+        const ids = orphan.map(p => p.id)
+        if (ids.length > 0) {
+          await tx.paymentRouting.deleteMany({ where: { paymentId: { in: ids } } })
+          await tx.payment.deleteMany({ where: { id: { in: ids } } })
+        }
+        await tx.subscriptionRouting.deleteMany({ where: { subscriptionId: subscription.id } })
+        await tx.subscriptionAuditLog.deleteMany({ where: { subscriptionId: subscription.id } })
+        await tx.subscription.delete({ where: { id: subscription.id } })
       }
-      await tx.subscriptionRouting.deleteMany({ where: { subscriptionId: subscription.id } })
-      await tx.subscriptionAuditLog.deleteMany({ where: { subscriptionId: subscription.id } })
-      await tx.subscription.delete({ where: { id: subscription.id } })
 
       // Convert the membership row IN PLACE into a cash package (same shape as
       // admin-created offline members: endDate set, no subscription)
@@ -96,7 +104,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     // Audit: no subscription FK available (placeholder deleted) — record on the
     // membership via a payment-free system log line
-    console.log(`✅ [link-cash-package] ${customer.email}: ${packageName} ${startDateStr} -> ${end.toISOString().slice(0,10)} cashPaid=${cashPaid ?? '-'} by ${admin.firstName} ${admin.lastName} (removed placeholder ${placeholderId})`)
+    console.log(`✅ [link-cash-package] ${customer.email}: ${packageName} ${startDateStr} -> ${end.toISOString().slice(0,10)} cashPaid=${cashPaid ?? '-'} by ${admin.firstName} ${admin.lastName} (removed placeholder ${placeholderId ?? 'none — unactivated family member'})`)
 
     return NextResponse.json({
       success: true,
