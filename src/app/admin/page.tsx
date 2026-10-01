@@ -2718,7 +2718,7 @@ function AdminDashboardContent() {
                   <div className="px-3 pb-3 space-y-3">
                     <div className="p-2 bg-blue-500/10 rounded text-xs text-blue-300">Subscription: {selectedCustomer.subscriptionStatus} • Membership: {selectedCustomer.membershipStatus}{selectedCustomer.cancelAtPeriodEnd && ' • Scheduled for cancellation'}</div>
                 {/* Abandoned online signup (no card, no money) -> cash package */}
-                {['PENDING_PAYMENT', 'INCOMPLETE', 'INCOMPLETE_EXPIRED'].includes(selectedCustomer.subscriptionStatus) && (
+                {(['PENDING_PAYMENT', 'INCOMPLETE', 'INCOMPLETE_EXPIRED'].includes(selectedCustomer.subscriptionStatus) || (selectedCustomer.subscriptionStatus === 'NO_SUBSCRIPTION' && selectedCustomer.membershipStatus === 'PENDING_PAYMENT' && !(selectedCustomer as any).packageEnd)) && (
                   <div className="flex flex-col gap-2">
                     {!linkPkgOpen ? (
                       <Button variant="outline" onClick={() => { setLinkPkgOpen(true); setLinkPkgMonths(6); setLinkPkgStart(selectedCustomer.joinDate || new Date().toISOString().slice(0, 10)); setLinkPkgCash('') }} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Link to cash package</Button>
