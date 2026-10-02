@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient, getPublishableKey } from '@/lib/stripe'
+import { reconcileLateSignupPrice, remainingMonthProrationPence, firstOfNextMonthUTC, storedFirstBillHasPassed } from '@/lib/late-signup'
 
 /**
  * Resume a pending signup by returning a usable client_secret for either:
@@ -73,10 +74,13 @@ export async function POST(_request: NextRequest) {
           'requires_payment_method','requires_action','requires_confirmation'
         ])
         if (existing.client_secret && reusableStatuses.has(existing.status)) {
+          // First-bill date already passed? Re-price for today before they pay.
+          const repriced = await reconcileLateSignupPrice(stripe, existing, subscription as any).catch(() => existing)
           return NextResponse.json({
             mode: 'payment_intent',
             subscriptionId: subscription.id,
-            clientSecret: existing.client_secret,
+            amount: repriced.amount,
+            clientSecret: repriced.client_secret || existing.client_secret,
             publishableKey: getPublishableKey((subscription as any).stripeAccountKey || 'SU')
           })
         }
@@ -85,10 +89,13 @@ export async function POST(_request: NextRequest) {
       // Create a fresh PaymentIntent mirroring the original intent
       // Compute prorated amount consistent with original logic
       const now = new Date()
-      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-      const daysRemaining = daysInMonth - now.getDate() + 1
-      const fullAmountPence = Math.round(Number(subscription.monthlyPrice) * 100)
-      const proratedAmountPence = Math.max(0, Math.round(fullAmountPence * (daysRemaining / daysInMonth)))
+      const proratedAmountPence = remainingMonthProrationPence(Number(subscription.monthlyPrice), now)
+      // The first full bill is the next 1st from TODAY (the stored one may have passed)
+      const firstBill = storedFirstBillHasPassed(subscription.nextBillingDate, now) ? firstOfNextMonthUTC(now) : new Date(subscription.nextBillingDate)
+      if (firstBill.getTime() !== new Date(subscription.nextBillingDate).getTime()) {
+        await prisma.subscription.update({ where: { id: subscription.id }, data: { nextBillingDate: firstBill } })
+        await prisma.membership.updateMany({ where: { userId: subscription.userId, endDate: null }, data: { nextBillingDate: firstBill } })
+      }
 
       const pi = await stripe.paymentIntents.create({
         amount: proratedAmountPence,
@@ -100,7 +107,7 @@ export async function POST(_request: NextRequest) {
           userId: subscription.userId,
           membershipType: subscription.membershipType,
           routedEntityId: subscription.routedEntityId,
-          nextBillingDate: new Date(subscription.nextBillingDate).toISOString().split('T')[0],
+          nextBillingDate: firstBill.toISOString().split('T')[0],
           reason: 'prorated_first_period',
           dbSubscriptionId: subscription.id
         }
