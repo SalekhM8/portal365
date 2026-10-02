@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { applyPendingPackage } from '@/lib/package-handover'
+import { settleLateActivation } from '@/lib/late-signup'
 import { sendDunningAttemptSms, sendSuspendedSms, sendSuccessSms, sendActionRequiredSms } from '@/lib/notify'
 import { sendDunningAttemptEmail, sendSuspendedEmail, sendSuccessEmail, sendActionRequiredEmail } from '@/lib/email'
 import { isAutoSuspendEnabled, isPauseCollectionEnabled } from '@/lib/flags'
@@ -864,8 +865,14 @@ export async function activateFromPaymentIntent(pi: any, account?: StripeAccount
     try {
       // Build price and create Stripe subscription starting next billing
       const membershipType = dbSub.membershipType
-      const nextBilling = new Date(dbSub.nextBillingDate)
-      const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(nextBilling.getTime() / 1000))
+      // Stalled signup completed after its first-bill date? Charge the rest of the
+      // current month (net of what the stalled payment covered) instead of clamping
+      // the trial forward and giving the month away.
+      const late = await settleLateActivation({
+        stripe, account: ((dbSub as any).stripeAccountKey || account || 'SU') as StripeAccountKey,
+        dbSub: dbSub as any, paidPence: Number(pi.amount || 0), paidForFirst: (pi.metadata?.nextBillingDate as string) || null
+      })
+      const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(late.trialEnd.getTime() / 1000))
 
       // Get price via lightweight helper from confirm-payment handler (must be account-aware)
       const { getOrCreatePrice } = await import('@/app/api/confirm-payment/handlers') as any

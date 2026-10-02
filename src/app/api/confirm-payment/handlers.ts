@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getStripeClient, clampTrialEndToFutureFirst } from '@/lib/stripe' // getStripeClient for multi-account
+import { settleLateActivation } from '@/lib/late-signup'
 import { prisma } from '@/lib/prisma'
 import { getPlanDbFirst } from '@/lib/plans'
 
@@ -157,7 +158,13 @@ export async function handlePaymentIntentConfirmation(body: { paymentIntentId: s
   }
   const membershipDetails = await getPlanDbFirst(dbSub.membershipType)
   const priceId = await getOrCreatePrice(membershipDetails, (dbSub as any).stripeAccountKey || 'SU')
-  const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(new Date(dbSub.nextBillingDate).getTime() / 1000))
+  // Stalled signup completed after its first-bill date → charge the rest of this
+  // month (net of the stalled payment) rather than clamping the trial forward
+  const late = await settleLateActivation({
+    stripe, account: ((dbSub as any).stripeAccountKey || 'SU'),
+    dbSub: dbSub as any, paidPence: Number(paymentIntent.amount || 0), paidForFirst: (paymentIntent.metadata?.nextBillingDate as string) || null
+  })
+  const trialEndTimestamp = clampTrialEndToFutureFirst(Math.floor(late.trialEnd.getTime() / 1000))
 
   const stripeSubscription = await stripe.subscriptions.create({
     customer: paymentIntent.customer as string,
