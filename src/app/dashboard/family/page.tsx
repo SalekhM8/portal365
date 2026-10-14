@@ -255,7 +255,7 @@ export default function FamilyPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-semibold">{c.childName}</p>
-                      <p className="text-sm text-muted-foreground">{c.membershipType} • Next billing {new Date(c.nextBilling).toLocaleDateString()}</p>
+                      <p className="text-sm text-muted-foreground">{c.membershipType} • {(c as any).packageEnd ? `Cash package until ${new Date((c as any).packageEnd).toLocaleDateString()}` : (c as any).pendingPackage ? `Switching to ${(c as any).pendingPackage.name} on ${new Date((c as any).pendingPackage.start).toLocaleDateString()}` : `Next billing ${new Date(c.nextBilling).toLocaleDateString()}`}</p>
                     </div>
                     <div className="flex gap-2">
                       {c.status === 'PENDING_PAYMENT' ? (
@@ -300,7 +300,7 @@ export default function FamilyPage() {
                     {c.status === 'PAUSED' && (
                       <p className="text-sm text-muted-foreground w-full">Membership paused — speak to the desk to resume.</p>
                     )}
-                    {c.status !== 'CANCELLED' && (
+                    {c.status !== 'CANCELLED' && !(c as any).packageEnd && (
                       <>
                         <Button variant="outline" onClick={() => cancelChild(c.childId, 'end_of_period')}>Cancel at Period End</Button>
                         <Button variant="outline" onClick={() => cancelChild(c.childId, 'immediate')} className="border-red-500/20 text-red-400 hover:bg-red-500/10">Cancel Now</Button>
