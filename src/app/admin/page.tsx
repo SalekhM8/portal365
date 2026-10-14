@@ -342,6 +342,7 @@ function AdminDashboardContent() {
   const [linkPkgOpen, setLinkPkgOpen] = useState(false)
   const [linkPkgMonths, setLinkPkgMonths] = useState<number>(6)
   const [linkPkgStart, setLinkPkgStart] = useState('')
+  const [linkPkgPrice, setLinkPkgPrice] = useState('')
   const [linkPkgCash, setLinkPkgCash] = useState('')
   const [linkPkgBusy, setLinkPkgBusy] = useState(false)
   const [extendPauseDate, setExtendPauseDate] = useState('')
@@ -1037,7 +1038,7 @@ function AdminDashboardContent() {
         : 'Are you sure you want to PAUSE this customer\'s membership? They will lose access immediately.',
       resume: 'Are you sure you want to RESUME this customer\'s membership? Billing will restart.',
       cancel: cancelationType === 'immediate'
-        ? 'Are you sure you want to IMMEDIATELY CANCEL this membership? This cannot be undone.'
+        ? 'Are you sure you want to IMMEDIATELY CANCEL this membership? This cannot be undone.\n\nMoving them to a cash package? Use "Switch to cash package" (starts on the 1st), or cancel and then "Link to cash package" (starts when you choose).'
         : 'Are you sure you want to schedule this membership for CANCELLATION at period end?',
       reactivate: (Number(reactivateProrateAmount) || 0) > 0
         ? `Reactivate this membership? £${(Number(reactivateProrateAmount) || 0).toFixed(2)} will be charged to the saved card NOW, then a new subscription will be created.`
@@ -2718,13 +2719,13 @@ function AdminDashboardContent() {
                   <div className="px-3 pb-3 space-y-3">
                     <div className="p-2 bg-blue-500/10 rounded text-xs text-blue-300">Subscription: {selectedCustomer.subscriptionStatus} • Membership: {selectedCustomer.membershipStatus}{selectedCustomer.cancelAtPeriodEnd && ' • Scheduled for cancellation'}</div>
                 {/* Abandoned online signup (no card, no money) -> cash package */}
-                {(['PENDING_PAYMENT', 'INCOMPLETE', 'INCOMPLETE_EXPIRED'].includes(selectedCustomer.subscriptionStatus) || (selectedCustomer.subscriptionStatus === 'NO_SUBSCRIPTION' && selectedCustomer.membershipStatus === 'PENDING_PAYMENT' && !(selectedCustomer as any).packageEnd)) && (
+                {(['PENDING_PAYMENT', 'INCOMPLETE', 'INCOMPLETE_EXPIRED'].includes(selectedCustomer.subscriptionStatus) || (selectedCustomer.subscriptionStatus === 'NO_SUBSCRIPTION' && selectedCustomer.membershipStatus === 'PENDING_PAYMENT' && !(selectedCustomer as any).packageEnd) || (selectedCustomer.subscriptionStatus === 'CANCELLED' && !(selectedCustomer as any).packageEnd && !selectedCustomer.pendingPackage)) && (
                   <div className="flex flex-col gap-2">
                     {!linkPkgOpen ? (
-                      <Button variant="outline" onClick={() => { setLinkPkgOpen(true); setLinkPkgMonths(6); setLinkPkgStart(selectedCustomer.joinDate || new Date().toISOString().slice(0, 10)); setLinkPkgCash('') }} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Link to cash package</Button>
+                      <Button variant="outline" onClick={() => { setLinkPkgOpen(true); setLinkPkgMonths(6); setLinkPkgStart(selectedCustomer.subscriptionStatus === 'CANCELLED' ? new Date().toISOString().slice(0, 10) : (selectedCustomer.joinDate || new Date().toISOString().slice(0, 10))); setLinkPkgPrice(''); setLinkPkgCash('') }} className="border-green-500/20 text-green-400 hover:bg-green-500/10 w-full">Link to cash package</Button>
                     ) : (
                       <div className="p-3 rounded-lg border border-green-500/20 bg-green-500/5 space-y-3">
-                        <p className="text-xs text-white/70">Paid cash at the desk? Converts this pending online signup into a fixed-term cash package. No card, no Stripe billing.</p>
+                        <p className="text-xs text-white/70">{selectedCustomer.subscriptionStatus === 'CANCELLED' ? 'Paid cash at the desk? Puts this cancelled member on a fixed-term cash package on the same account. Nothing is charged or refunded; anything still owed stays in To-Do.' : 'Paid cash at the desk? Converts this pending online signup into a fixed-term cash package. No card, no Stripe billing.'}</p>
                         <div className="flex gap-2">
                           {[6, 12].map(m => (
                             <button key={m} type="button" onClick={() => setLinkPkgMonths(m)} className={`flex-1 h-9 rounded-md text-sm border ${linkPkgMonths === m ? 'bg-white text-black border-white' : 'border-white/20 text-white hover:bg-white/10'}`}>{m} months</button>
@@ -2737,6 +2738,10 @@ function AdminDashboardContent() {
                             <input type="date" value={linkPkgStart} onChange={e => setLinkPkgStart(e.target.value)} className="w-full h-9 px-2 rounded-md bg-white/5 border border-white/20 text-white text-sm [color-scheme:dark]" />
                           </div>
                           <div>
+                            <Label className="text-white/70 text-xs mb-1 block">Package price (£)</Label>
+                            <input type="number" min={0} step="0.01" value={linkPkgPrice} onChange={e => setLinkPkgPrice(e.target.value)} placeholder="e.g. 300" className="w-full h-9 px-2 rounded-md bg-white/5 border border-white/20 text-white text-sm" />
+                          </div>
+                          <div>
                             <Label className="text-white/70 text-xs mb-1 block">Cash paid (£, optional)</Label>
                             <input type="number" min={0} step="0.01" value={linkPkgCash} onChange={e => setLinkPkgCash(e.target.value)} placeholder="e.g. 300" className="w-full h-9 px-2 rounded-md bg-white/5 border border-white/20 text-white text-sm" />
                           </div>
@@ -2744,10 +2749,10 @@ function AdminDashboardContent() {
                         <div className="flex gap-2">
                           <Button variant="outline" onClick={() => setLinkPkgOpen(false)} className="border-white/20 text-white hover:bg-white/10">Cancel</Button>
                           <Button disabled={linkPkgBusy || !linkPkgStart || !Number.isInteger(linkPkgMonths) || linkPkgMonths < 1 || linkPkgMonths > 24} onClick={async () => {
-                            if (!confirm(`Link ${selectedCustomer.name} to a ${linkPkgMonths}-month cash package from ${linkPkgStart}? The pending online signup will be removed.`)) return
+                            if (!confirm(`Link ${selectedCustomer.name} to a ${linkPkgMonths}-month cash package from ${linkPkgStart}?${selectedCustomer.subscriptionStatus === 'CANCELLED' ? ' Same account, nothing charged or refunded.' : ' The pending online signup will be removed.'}`)) return
                             setLinkPkgBusy(true)
                             try {
-                              const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/link-cash-package`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months: linkPkgMonths, startDate: linkPkgStart, cashPaid: linkPkgCash ? Number(linkPkgCash) : null }) })
+                              const resp = await fetch(`/api/admin/customers/${selectedCustomer.id}/link-cash-package`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months: linkPkgMonths, startDate: linkPkgStart, price: linkPkgPrice ? Number(linkPkgPrice) : null, cashPaid: linkPkgCash ? Number(linkPkgCash) : null }) })
                               const j = await resp.json()
                               if (resp.ok && j.success) {
                                 alert(j.message)

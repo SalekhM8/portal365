@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getStripeClient, type StripeAccountKey } from '@/lib/stripe'
+import { packageEndFor } from '@/lib/package-handover'
 
 /**
  * Convert an abandoned ONLINE signup (no card, no money) into a CASH package.
@@ -45,29 +46,50 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     // ── Guards: must be an abandoned online signup, OR a family member who was
     //    added but never activated (membership PENDING_PAYMENT, no subscription
     //    row at all) — with zero money either way ──
-    if (subscription) {
+    // Three shapes are accepted:
+    //  (a) abandoned online signup: placeholder subscription, zero money
+    //  (b) family member added but never activated: no subscription row
+    //  (c) CANCELLED member (desk cancelled them to move them onto cash; the
+    //      Stripe subscription has ended). Nothing is charged or refunded here —
+    //      any open invoice stays in To-Do; the cancelled sub row is kept as history.
+    if (membership.endDate) return NextResponse.json({ error: 'Already on a cash package — use Renew instead' }, { status: 400 })
+    if (membership.pendingPackageName) return NextResponse.json({ error: `A switch to "${membership.pendingPackageName}" is already scheduled — undo it first` }, { status: 400 })
+    let mode: 'placeholder' | 'unactivated' | 'cancelled'
+    if (subscription && subscription.status === 'CANCELLED') {
+      if (subscription.stripeSubscriptionId?.startsWith('sub_')) {
+        const stripe = getStripeClient((subscription.stripeAccountKey as StripeAccountKey) || 'SU')
+        const ss = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId).catch(() => null)
+        if (ss && ss.status !== 'canceled') return NextResponse.json({ error: `Stripe still shows this subscription as ${ss.status} — cancel it via Membership Management first` }, { status: 400 })
+      }
+      mode = 'cancelled'
+    } else if (subscription) {
       if (!['PENDING_PAYMENT', 'INCOMPLETE', 'INCOMPLETE_EXPIRED'].includes(subscription.status)) {
-        return NextResponse.json({ error: `Subscription is ${subscription.status} — only pending/incomplete signups can be linked to a cash package` }, { status: 400 })
+        return NextResponse.json({ error: `Subscription is ${subscription.status} — cancel the membership first, then link to a cash package` }, { status: 400 })
       }
       if (subscription.stripeSubscriptionId?.startsWith('sub_')) {
         return NextResponse.json({ error: 'This member has a real Stripe subscription — cancel it via Membership Management first' }, { status: 400 })
       }
       const paidInvoice = await prisma.invoice.findFirst({ where: { subscriptionId: subscription.id, status: 'paid' } })
       if (paidInvoice) return NextResponse.json({ error: 'Subscription has a paid invoice; cannot convert' }, { status: 400 })
-    } else if (membership.status !== 'PENDING_PAYMENT') {
-      return NextResponse.json({ error: `Membership is ${membership.status} with no subscription — nothing to link` }, { status: 400 })
+      const confirmed = await prisma.payment.findFirst({ where: { userId: customer.id, status: 'CONFIRMED', createdAt: { gte: subscription.createdAt } } })
+      if (confirmed) return NextResponse.json({ error: 'Member has confirmed payments since signup; cannot convert' }, { status: 400 })
+      mode = 'placeholder'
+    } else {
+      if (membership.status !== 'PENDING_PAYMENT') return NextResponse.json({ error: `Membership is ${membership.status} with no subscription — nothing to link` }, { status: 400 })
+      const confirmed = await prisma.payment.findFirst({ where: { userId: customer.id, status: 'CONFIRMED', createdAt: { gte: membership.createdAt } } })
+      if (confirmed) return NextResponse.json({ error: 'Member has confirmed payments since signup; cannot convert' }, { status: 400 })
+      mode = 'unactivated'
     }
-    const confirmed = await prisma.payment.findFirst({ where: { userId: customer.id, status: 'CONFIRMED', createdAt: { gte: subscription?.createdAt ?? membership.createdAt } } })
-    if (confirmed) return NextResponse.json({ error: 'Member has confirmed payments since signup; cannot convert' }, { status: 400 })
+    const price = body.price != null && Number.isFinite(Number(body.price)) ? Number(body.price) : 0
 
     const start = new Date(`${startDateStr}T00:00:00.000Z`)
-    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + months, start.getUTCDate()))
+    const end = packageEndFor(start, months)
     const packageName = `${months}-Month Cash`
     const placeholderId = subscription?.stripeSubscriptionId ?? null
     const placeholderAccount = ((subscription?.stripeAccountKey as StripeAccountKey) || 'SU')
 
     await prisma.$transaction(async (tx) => {
-      if (subscription) {
+      if (subscription && mode === 'placeholder') {
         // Same cleanup as void-signup — proven deletes, nothing new
         await tx.invoice.deleteMany({ where: { subscriptionId: subscription.id, status: { in: ['open', 'void', 'uncollectible', 'draft'] } } })
         const orphan = await tx.payment.findMany({ where: { userId: customer.id, status: { in: ['PENDING', 'FAILED'] }, createdAt: { gte: subscription.createdAt } }, select: { id: true } })
@@ -90,15 +112,24 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
           status: 'ACTIVE',
           startDate: start,
           endDate: end,
-          monthlyPrice: 0,
+          monthlyPrice: price,
+          packageCashPaid: cashPaid,
           nextBillingDate: end
         }
       })
       await tx.user.update({ where: { id: customer.id }, data: { status: 'ACTIVE' } })
+      if (subscription && mode === 'cancelled') {
+        await tx.subscriptionAuditLog.create({ data: {
+          subscriptionId: subscription.id, action: 'LINKED_TO_CASH_PACKAGE', performedBy: admin.id, performedByName: `${admin.firstName} ${admin.lastName}`,
+          reason: `Cancelled member linked to ${packageName} ${startDateStr} → ${end.toISOString().slice(0, 10)}${price ? ` £${price}` : ''}${cashPaid != null ? ` (cash £${cashPaid})` : ''}`,
+          operationId: `link_pkg_${membership.id}_${Date.now()}`,
+          metadata: JSON.stringify({ membershipId: membership.id, months, price, cashPaid, start: startDateStr, end: end.toISOString().slice(0, 10) })
+        } })
+      }
     })
 
     // Best-effort: cancel the dangling online payment request so it can't linger
-    if (placeholderId?.startsWith('pi_')) {
+    if (mode === 'placeholder' && placeholderId?.startsWith('pi_')) {
       try { await getStripeClient(placeholderAccount).paymentIntents.cancel(placeholderId) } catch {}
     }
 
