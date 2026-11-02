@@ -54,8 +54,12 @@ export async function POST(
     const { 
       reason, 
       cancelationType = 'end_of_period', // 'immediate' or 'end_of_period'
-      prorate = true 
     } = await request.json()
+    // Never prorate on cancel. Stripe's prorate flag does not refund — it books a credit
+    // on the customer balance that only surfaces on a future invoice (none for a solo
+    // member; the parent's next bill for a family child). Refunds go through the Refund
+    // button so they are visible. Whatever the client sent, this is false.
+    const prorate = false
 
     // A scheduled monthly -> cash-package switch must be undone before this action
     {
@@ -187,7 +191,7 @@ export async function POST(
         stripeResult = await s.subscriptions.cancel(
           activeSubscription.stripeSubscriptionId,
           {
-            prorate: prorate
+            prorate: false // never — see note above; Refund button is the only way money goes back
           }
         )
       } else {

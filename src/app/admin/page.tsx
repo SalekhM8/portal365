@@ -1103,7 +1103,9 @@ function AdminDashboardContent() {
         }
       } else if (membershipAction === 'cancel') {
         requestBody.cancelationType = cancelationType
-        requestBody.prorate = true
+        // No Stripe prorate-on-cancel: it never refunds the card, it parks an invisible
+        // credit on the Stripe balance that silently reduces a later bill (family payers).
+        // Money back = the Refund button, which is visible in History.
       } else if (membershipAction === 'resume') {
         requestBody.resumeImmediately = true
       } else if (membershipAction === 'reactivate') {
@@ -3520,8 +3522,8 @@ function AdminDashboardContent() {
               <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg mb-4">
                 <p className="text-red-300 text-sm font-medium">⚠️ Warning: Immediate Cancellation</p>
                 <p className="text-red-300/80 text-xs mt-1">
-                  This will immediately cancel the subscription and remove access. 
-                  Consider if a prorated refund is needed.
+                  Cancels the subscription now and removes access. Nothing is refunded or credited automatically.
+                  If money should go back, use the Refund button on the payment afterwards.
                 </p>
               </div>
             )}
