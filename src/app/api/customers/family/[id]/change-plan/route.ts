@@ -62,6 +62,7 @@ export async function POST(
       await tx.subscription.update({ where: { id: subscription.id }, data: { membershipType: newMembershipType, monthlyPrice: details.monthlyPrice } })
     })
 
+    await prisma.subscriptionAuditLog.create({ data: { subscriptionId: subscription.id, action: 'PLAN_CHANGED', performedBy: parent.id, performedByName: `${parent.firstName} ${parent.lastName}`.trim() + ' (parent, family page)', reason: `${membership.membershipType} (£${currentMonthly}) → ${newMembershipType} (£${details.monthlyPrice}), effective now. ${settled.note || 'No difference owed.'}`, operationId: `plan_change_${subscription.id}_${Date.now()}`, metadata: JSON.stringify({ fromPlan: membership.membershipType, toPlan: newMembershipType, fromMonthly: currentMonthly, toMonthly: details.monthlyPrice, chargedPence: settled.chargedPence, refundedPence: settled.refundedPence }) } }).catch(e => console.error('audit PLAN_CHANGED failed', e?.message))
     return NextResponse.json({ success: true, message: `Plan changed to ${details.name || newMembershipType}.${settled.note ? ' ' + settled.note : ''}` })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Change plan failed' }, { status: 500 })

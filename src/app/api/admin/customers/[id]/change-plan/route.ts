@@ -35,8 +35,9 @@ export async function POST(
   try {
     const session = await getServerSession(authOptions) as any
     if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const admin = await prisma.user.findUnique({ where: { email: session.user.email }, select: { role: true } })
+    const admin = await prisma.user.findUnique({ where: { email: session.user.email }, select: { id: true, role: true, firstName: true, lastName: true } })
     if (!admin || !['ADMIN','SUPER_ADMIN'].includes(admin.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const adminName = `${admin.firstName} ${admin.lastName}`.trim() || session.user.email
 
     const params = await context.params
     const userId = params.id
@@ -112,6 +113,7 @@ export async function POST(
 
       // Keep access as-is; flip on rollover via webhook
       await prisma.subscription.update({ where: { id: sub.id }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
+      await prisma.subscriptionAuditLog.create({ data: { subscriptionId: sub.id, action: 'PLAN_CHANGED', performedBy: admin.id, performedByName: adminName, reason: `${sub.membershipType} (£${currentMonthly}) → ${newMembershipType} (£${newMonthly}) from the next billing date ${nextBillingDate.toISOString().slice(0, 10)}. Mid-month difference added to that invoice.`, operationId: `plan_change_${sub.id}_${Date.now()}`, metadata: JSON.stringify({ fromPlan: sub.membershipType, toPlan: newMembershipType, fromMonthly: currentMonthly, toMonthly: newMonthly, effective: 'period_end' }) } }).catch(e => console.error('audit PLAN_CHANGED failed', e?.message))
       return NextResponse.json({ success: true, applied: 'period_end', nextBillingDate: nextBillingDate.toISOString().split('T')[0] })
     }
 
@@ -264,6 +266,7 @@ export async function POST(
       // Update Portal immediately - they paid
       await prisma.membership.updateMany({ where: { userId, endDate: null }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
       await prisma.subscription.update({ where: { id: sub.id }, data: { membershipType: newMembershipType, monthlyPrice: newMonthly } })
+      await prisma.subscriptionAuditLog.create({ data: { subscriptionId: sub.id, action: 'PLAN_CHANGED', performedBy: admin.id, performedByName: adminName, reason: `${sub.membershipType} (£${currentMonthly}) → ${newMembershipType} (£${newMonthly}), effective now.${prorationNote ? ' ' + prorationNote : ''}`, operationId: `plan_change_${sub.id}_${Date.now()}`, metadata: JSON.stringify({ fromPlan: sub.membershipType, toPlan: newMembershipType, fromMonthly: currentMonthly, toMonthly: newMonthly, effective: 'now' }) } }).catch(e => console.error('audit PLAN_CHANGED failed', e?.message))
 
       return NextResponse.json({ success: true, applied: 'now', settlement: 'charge_now', prorationNote })
     } else {

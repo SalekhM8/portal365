@@ -43,6 +43,7 @@ export async function POST(
       await prisma.subscription.update({ where: { id: subscription.id }, data: { cancelAtPeriodEnd: true } })
     }
 
+    await prisma.subscriptionAuditLog.create({ data: { subscriptionId: subscription.id, action: cancelationType === 'immediate' ? 'CANCEL_IMMEDIATE' : 'CANCEL_SCHEDULED', performedBy: parent.id, performedByName: `${parent.firstName} ${parent.lastName}`.trim() + ' (parent, family page)', reason: cancelationType === 'immediate' ? 'Cancelled immediately by the parent from the family page.' : 'Parent scheduled cancellation for the end of the paid period from the family page.', operationId: `family_cancel_${subscription.id}_${Date.now()}`, metadata: JSON.stringify({ cancelationType, prorate: cancelationType === 'immediate', source: 'family_page' }) } }).catch(e => console.error('audit family cancel failed', e?.message))
     return NextResponse.json({ success: true })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Cancel failed' }, { status: 500 })

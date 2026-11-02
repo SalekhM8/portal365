@@ -151,6 +151,7 @@ export async function POST(
       })
     }
 
+    if (sub) await prisma.subscriptionAuditLog.create({ data: { subscriptionId: sub.id, action: 'REFUND', performedBy: admin.id, performedByName: `${admin.firstName} ${admin.lastName}`.trim(), reason: `Refunded £${((amountInPence ?? Math.round(Number(payment.amount) * 100)) / 100).toFixed(2)} to card${amountInPence ? ' (partial)' : ''} for payment of £${Number(payment.amount).toFixed(2)}.${reason ? ' Reason: ' + reason : ''}`, operationId: `refund_${payment.id}_${Date.now()}`, metadata: JSON.stringify({ paymentId: payment.id, paymentIntentId, refundId: refund.id, refundedPence: amountInPence ?? Math.round(Number(payment.amount) * 100) }) } }).catch(e => console.error('audit REFUND failed', e?.message))
     return NextResponse.json({ success: true, refund })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Refund failed' }, { status: 500 })

@@ -241,7 +241,29 @@ function AdminDashboardContent() {
   const [membershipsLoading, setMembershipsLoading] = useState(false)
   const [customerPayments, setCustomerPayments] = useState<Array<{ id: string; amount: number; currency: string; status: string; description: string; failureReason: string | null; stripeInvoiceId: string | null; createdAt: string; processedAt: string | null; routedEntity: string }>>([])
   const [customerPaymentsLoading, setCustomerPaymentsLoading] = useState(false)
-  const [openPill, setOpenPill] = useState<'personal'|'contact'|'payments'|'management'|null>('personal')
+  const [openPill, setOpenPill] = useState<'personal'|'contact'|'payments'|'management'|'history'|null>('personal')
+  // Member History (why things happened): loaded live from Stripe + audit log when the pill opens
+  type HistoryEvent = { id: string; at: string; atLabel: string; kind: 'payment'|'refund'|'action'|'system'; title: string; details: string[]; who: string | null; member: string | null; amount: number | null }
+  const [historyFor, setHistoryFor] = useState<string | null>(null)
+  const [historyEvents, setHistoryEvents] = useState<HistoryEvent[]>([])
+  const [historyChildren, setHistoryChildren] = useState<Array<{ id: string; name: string }>>([])
+  const [historyWarnings, setHistoryWarnings] = useState<string[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyMonth, setHistoryMonth] = useState<string>('all')      // 'all' | 'YYYY-MM'
+  const [historyKind, setHistoryKind] = useState<'all'|'money'|'actions'>('all')
+  const [historyShowSystem, setHistoryShowSystem] = useState(false)
+  const [historySearch, setHistorySearch] = useState('')
+  const loadHistory = async (customerId: string) => {
+    if (historyFor === customerId && historyEvents.length) return
+    setHistoryLoading(true); setHistoryFor(customerId); setHistoryEvents([]); setHistoryWarnings([]); setHistoryMonth('all'); setHistorySearch('')
+    try {
+      const resp = await fetch(`/api/admin/customers/${customerId}/history`)
+      const json = await resp.json()
+      if (resp.ok) { setHistoryEvents(json.events || []); setHistoryChildren(json.children || []); setHistoryWarnings(json.warnings || []) }
+      else setHistoryWarnings([json?.error || 'Could not load history'])
+    } catch { setHistoryWarnings(['Could not load history']) }
+    finally { setHistoryLoading(false) }
+  }
   const [showAddCustomer, setShowAddCustomer] = useState(false)
   const [addCustomerData, setAddCustomerData] = useState({
     firstName: '',
@@ -2708,6 +2730,74 @@ function AdminDashboardContent() {
                       }} className="border-white/20 text-white hover:bg-white/10">View all payments</Button>
               </div>
             </div>
+                )}
+
+                {/* History — every charge, credit, refund and admin action with the reason, newest first */}
+    <button onClick={() => { const next = openPill==='history' ? null : 'history'; setOpenPill(next); if (next) loadHistory(selectedCustomer.id) }} className="w-full flex items-center justify-between px-3 py-2 text-left">
+                  <span className="text-white text-base sm:text-lg font-semibold">History{historyFor === selectedCustomer.id && !historyLoading ? ` (${historyEvents.filter(e => e.kind !== 'system').length})` : ''}</span>
+                  <span className="text-white/60 text-xs">{openPill==='history' ? '▾' : '▸'}</span>
+                </button>
+                {openPill==='history' && (
+                  <div className="px-3 pb-3 space-y-2">
+                    <p className="text-white/60 text-xs">Everything that happened on this account and why, in UK time. Children's events are labelled with the child's name because they bill to this card.</p>
+                    {(() => {
+                      const months = Array.from(new Set(historyEvents.map(e => e.at.slice(0, 7)))).sort().reverse()
+                      const monthLabel = (m: string) => new Date(m + '-01T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'Europe/London' })
+                      const q = historySearch.trim().toLowerCase()
+                      const visible = historyEvents.filter(e =>
+                        (historyShowSystem || e.kind !== 'system') &&
+                        (historyKind === 'all' || (historyKind === 'money' ? (e.kind === 'payment' || e.kind === 'refund') : (e.kind === 'action' || e.kind === 'system'))) &&
+                        (historyMonth === 'all' || e.at.startsWith(historyMonth)) &&
+                        (!q || [e.title, e.who || '', e.member || '', ...e.details].join(' ').toLowerCase().includes(q))
+                      )
+                      const systemCount = historyEvents.filter(e => e.kind === 'system').length
+                      return (
+                        <>
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <select value={historyMonth} onChange={e => setHistoryMonth(e.target.value)} className="bg-white/10 border border-white/20 text-white text-xs rounded px-2 py-1">
+                              <option value="all">All months</option>
+                              {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+                            </select>
+                            <select value={historyKind} onChange={e => setHistoryKind(e.target.value as any)} className="bg-white/10 border border-white/20 text-white text-xs rounded px-2 py-1">
+                              <option value="all">Money + actions</option>
+                              <option value="money">Money only</option>
+                              <option value="actions">Actions only</option>
+                            </select>
+                            <input value={historySearch} onChange={e => setHistorySearch(e.target.value)} placeholder="Search (e.g. credit, cancel, £21.60)" className="flex-1 min-w-[160px] bg-white/10 border border-white/20 text-white text-xs rounded px-2 py-1 placeholder:text-white/40" />
+                            {systemCount > 0 && (
+                              <label className="text-white/60 text-xs flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={historyShowSystem} onChange={e => setHistoryShowSystem(e.target.checked)} /> Show {systemCount} automatic retries</label>
+                            )}
+                          </div>
+                          {historyWarnings.map((w, i) => <div key={i} className="text-amber-300 text-xs">{w}</div>)}
+                          {historyLoading ? (
+                            <div className="text-white/60 text-sm py-4 text-center">Loading history from Stripe…</div>
+                          ) : visible.length === 0 ? (
+                            <div className="text-white/60 text-sm py-3">Nothing to show{historyMonth !== 'all' || q ? ' for this filter' : ''}.</div>
+                          ) : (
+                            <ol className="divide-y divide-white/10">
+                              {visible.map(e => (
+                                <li key={e.id} className="py-2 text-sm">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <div className="text-white">
+                                        <span className={e.kind === 'refund' ? 'text-amber-300' : e.kind === 'payment' ? (e.title.startsWith('Invoice') ? 'text-red-300' : 'text-green-300') : e.kind === 'system' ? 'text-white/50' : 'text-blue-300'}>{e.title}</span>
+                                        {e.member && <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-200">{e.member}</span>}
+                                      </div>
+                                      {e.details.map((d, i) => <div key={i} className="text-white/70 text-xs mt-0.5">{d}</div>)}
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <div className="text-white/80 text-xs whitespace-nowrap">{e.atLabel}</div>
+                                      {e.who && <div className="text-white/50 text-xs">{e.who}</div>}
+                                    </div>
+                                  </div>
+                                </li>
+                              ))}
+                            </ol>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
                 )}
 
                 {/* Membership Management */}

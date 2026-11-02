@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
       data: { membershipType: newMembershipType, monthlyPrice: newDetails.monthlyPrice }
     })
 
+    await prisma.subscriptionAuditLog.create({ data: { subscriptionId: subscription.id, action: 'PLAN_CHANGED', performedBy: user.id, performedByName: 'Member (self-serve)', reason: `${currentMembership.membershipType} (£${currentMonthly}) → ${newMembershipType} (£${newMonthly}), effective now. ${settled.note || 'No difference owed.'}`, operationId: `plan_change_${subscription.id}_${Date.now()}`, metadata: JSON.stringify({ fromPlan: currentMembership.membershipType, toPlan: newMembershipType, fromMonthly: currentMonthly, toMonthly: newMonthly, chargedPence: settled.chargedPence, refundedPence: settled.refundedPence }) } }).catch(e => console.error('audit PLAN_CHANGED failed', e?.message))
     console.log(`✅ Membership changed from ${currentMembership.membershipType} to ${newMembershipType} for user ${user.email} (${settled.note || 'no difference owed'})`)
 
     return NextResponse.json({
