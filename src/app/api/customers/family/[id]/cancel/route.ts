@@ -29,11 +29,12 @@ export async function POST(
 
     const s = getStripeClient((subscription as any)?.stripeAccountKey || 'SU')
     if (cancelationType === 'immediate') {
-      const result = await s.subscriptions.cancel(subscription.stripeSubscriptionId, { prorate: true })
-      try {
-        const invoices = await s.invoices.list({ customer: result.customer as string, limit: 3 })
-        for (const inv of invoices.data) if (inv.status === 'open' && inv.id) await s.invoices.voidInvoice(inv.id as string)
-      } catch {}
+      // prorate:false — same rule as the desk: cancelling never refunds or credits the current
+      // month. (prorate:true parked unused-time credit on the PARENT's Stripe balance, which
+      // then silently reduced the parent's own bills weeks later.)
+      // Also no invoice voiding here: the Stripe customer is the parent, so voiding "open
+      // invoices on the customer" could void the parent's or a sibling's unpaid invoice.
+      await s.subscriptions.cancel(subscription.stripeSubscriptionId, { prorate: false })
       await prisma.$transaction(async (tx) => {
         await tx.subscription.update({ where: { id: subscription.id }, data: { status: 'CANCELLED', cancelAtPeriodEnd: false } })
         await tx.membership.updateMany({ where: { userId: childId, endDate: null, status: { in: ['ACTIVE', 'SUSPENDED'] } }, data: { status: 'CANCELLED' } })
@@ -43,7 +44,7 @@ export async function POST(
       await prisma.subscription.update({ where: { id: subscription.id }, data: { cancelAtPeriodEnd: true } })
     }
 
-    await prisma.subscriptionAuditLog.create({ data: { subscriptionId: subscription.id, action: cancelationType === 'immediate' ? 'CANCEL_IMMEDIATE' : 'CANCEL_SCHEDULED', performedBy: parent.id, performedByName: `${parent.firstName} ${parent.lastName}`.trim() + ' (parent, family page)', reason: cancelationType === 'immediate' ? 'Cancelled immediately by the parent from the family page.' : 'Parent scheduled cancellation for the end of the paid period from the family page.', operationId: `family_cancel_${subscription.id}_${Date.now()}`, metadata: JSON.stringify({ cancelationType, prorate: cancelationType === 'immediate', source: 'family_page' }) } }).catch(e => console.error('audit family cancel failed', e?.message))
+    await prisma.subscriptionAuditLog.create({ data: { subscriptionId: subscription.id, action: cancelationType === 'immediate' ? 'CANCEL_IMMEDIATE' : 'CANCEL_SCHEDULED', performedBy: parent.id, performedByName: `${parent.firstName} ${parent.lastName}`.trim() + ' (parent, family page)', reason: cancelationType === 'immediate' ? 'Cancelled immediately by the parent from the family page.' : 'Parent scheduled cancellation for the end of the paid period from the family page.', operationId: `family_cancel_${subscription.id}_${Date.now()}`, metadata: JSON.stringify({ cancelationType, prorate: false, source: 'family_page' }) } }).catch(e => console.error('audit family cancel failed', e?.message))
     return NextResponse.json({ success: true })
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Cancel failed' }, { status: 500 })
