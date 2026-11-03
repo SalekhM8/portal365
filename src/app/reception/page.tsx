@@ -13,6 +13,7 @@ type Member = {
   blockedUntil?: string | null
   allowedDays?: string; outsidePlanDays?: string | null
   visits30?: number; visitsTotal?: number; offPlanVisits30?: number
+  notes?: Array<{ id: string; text: string; authorName: string; createdAt: string }>
 }
 type Entry = { userId?: string; time: string; name: string; photo: string | null; status: string; plan?: string | null; outsidePlanDays?: string | null }
 
@@ -238,6 +239,16 @@ function CheckIn() {
               </div>
               <StatusPill status={member.status} />
             </div>
+            {member.notes && member.notes.length > 0 && (
+              <div className="mt-4 rounded-xl bg-yellow-50 border border-yellow-200 px-4 py-3">
+                <p className="text-xs font-semibold text-yellow-900 uppercase tracking-wide mb-1">Desk notes</p>
+                {member.notes.map(n => (
+                  <p key={n.id} className="text-sm text-yellow-900 leading-snug mt-1">
+                    {n.text} <span className="text-yellow-700/70 text-xs">— {n.authorName}, {fmtDay(n.createdAt)}</span>
+                  </p>
+                ))}
+              </div>
+            )}
             {member.outsidePlanDays && !member.blockedUntil && (
               <div className="mt-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3.5 flex items-start gap-3">
                 <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>

@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     prisma.accessLog.findFirst({ where: { userId, accessMethod: 'PIN_RECEPTION' }, orderBy: { accessTime: 'asc' }, select: { accessTime: true } }),
     prisma.accessLog.findFirst({ where: { userId, accessMethod: 'PIN_RECEPTION' }, orderBy: { accessTime: 'desc' }, select: { accessTime: true } }),
   ])
+  const notes = await prisma.memberNote.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, select: { id: true, text: true, authorName: true, createdAt: true } })
   const allowed = planAllowedWeekdays(plan)
   const recent30 = recent90.filter(r => r.accessTime >= since30)
   const offPlan30 = allowed ? recent30.filter(r => !allowed.includes(ukWeekday(r.accessTime))).length : 0
@@ -43,6 +44,7 @@ export async function GET(request: NextRequest) {
       plan,
       status,
       allowedDays: planAccessDays(plan),
+      notes: notes.map(n => ({ id: n.id, text: n.text, authorName: n.authorName, createdAt: n.createdAt.toISOString() })),
       attendance: { visits30: recent30.length, visits90: recent90.length, visitsTotal, offPlanVisits30: offPlan30, firstVisit: first?.accessTime.toISOString() || null, lastVisit: last?.accessTime.toISOString() || null },
       packageEnd: isOffline ? membership!.endDate!.toISOString().slice(0, 10) : null,
       phone: u.phone || null,

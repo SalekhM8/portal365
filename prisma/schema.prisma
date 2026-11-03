@@ -106,6 +106,7 @@ model User {
   payments      Payment[]
   bookings      Booking[]
   accessLogs    AccessLog[]
+  memberNotes   MemberNote[]
   biometricData BiometricData?
   subscriptions Subscription[] // Subscriptions for this user
 
@@ -341,6 +342,21 @@ model Class {
 // ============================================================================
 // ACCESS CONTROL & TRACKING
 // ============================================================================
+
+// Desk notes: short free-text written by staff about a member ("owes £15 for weekday
+// sessions", "mum paying cash Friday"). Shown at check-in and on the member file.
+model MemberNote {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text       String
+  authorId   String
+  authorName String
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("member_notes")
+}
 
 model AccessLog {
   id     String @id @default(cuid())
