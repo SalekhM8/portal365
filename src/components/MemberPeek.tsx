@@ -11,7 +11,9 @@ type Peek = {
   emergency: { name: string; phone: string | null; relationship: string | null } | null
   allowedDays?: string
   attendance?: { visits30: number; visits90: number; visitsTotal: number; offPlanVisits30: number; firstVisit: string | null; lastVisit: string | null }
+  notes?: Note[]
 }
+type Note = { id: string; text: string; authorName: string; createdAt: string }
 const fmtDay = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/London' }) : '—'
 const planLabel = (p: string | null) => (p || '—').replace(/^MIG_/, '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 const pillCls = (s: string) =>
@@ -24,6 +26,24 @@ export default function MemberPeek({ userId, onClose }: { userId: string; onClos
   const [m, setM] = useState<Peek | null>(null)
   const [err, setErr] = useState('')
   const [camera, setCamera] = useState(false)
+  const [noteText, setNoteText] = useState('')
+  const [noteBusy, setNoteBusy] = useState(false)
+  const [noteErr, setNoteErr] = useState('')
+  const addNote = async () => {
+    const text = noteText.trim(); if (!text || noteBusy) return
+    setNoteBusy(true); setNoteErr('')
+    const r = await fetch('/api/reception/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, text }) })
+    const j = await r.json().catch(() => ({}))
+    setNoteBusy(false)
+    if (r.ok && j.note) { setM(p => p ? { ...p, notes: [j.note, ...(p.notes || [])] } : p); setNoteText('') }
+    else setNoteErr(j.error || 'Could not save the note')
+  }
+  const deleteNote = async (id: string) => {
+    if (!confirm('Delete this note?')) return
+    const r = await fetch('/api/reception/notes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    if (r.ok) setM(p => p ? { ...p, notes: (p.notes || []).filter(n => n.id !== id) } : p)
+    else { const j = await r.json().catch(() => ({})); setNoteErr(j.error || 'Could not delete') }
+  }
 
   useEffect(() => {
     fetch(`/api/reception/member?userId=${userId}`).then(r => r.json())
@@ -84,6 +104,27 @@ export default function MemberPeek({ userId, onClose }: { userId: string; onClos
                   <span className="text-zinc-800 break-words min-w-0">{value || '—'}</span>
                 </div>
               ))}
+            </div>
+            <div className="mt-4 pt-3 border-t border-zinc-100">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Desk notes</p>
+              {(m.notes || []).length === 0 && <p className="text-xs text-zinc-400 mb-2">No notes yet.</p>}
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {(m.notes || []).map(n => (
+                  <div key={n.id} className="rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2">
+                    <p className="text-sm text-yellow-900 leading-snug">{n.text}</p>
+                    <p className="text-[11px] text-yellow-800/70 mt-0.5 flex justify-between">
+                      <span>{n.authorName} · {new Date(n.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })}</span>
+                      <button onClick={() => deleteNote(n.id)} className="underline hover:text-red-700">delete</button>
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-2">
+                <input value={noteText} onChange={e => setNoteText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addNote() }} maxLength={500}
+                  placeholder="Add a note for the desk…" className="flex-1 h-10 px-3 rounded-lg border border-zinc-200 text-sm outline-none focus:border-zinc-900" />
+                <button onClick={addNote} disabled={noteBusy || !noteText.trim()} className="h-10 px-3 rounded-lg bg-zinc-900 text-white text-sm font-medium disabled:opacity-40">{noteBusy ? '…' : 'Add'}</button>
+              </div>
+              {noteErr && <p className="text-xs text-red-700 mt-1">{noteErr}</p>}
             </div>
             <button onClick={onClose} className="mt-4 w-full h-10 rounded-xl border border-zinc-200 text-sm font-medium text-zinc-600 hover:bg-zinc-50">Close</button>
           </>

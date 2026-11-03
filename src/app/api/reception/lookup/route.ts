@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
     const allowed = planAllowedWeekdays(plan)
     const offPlanVisits30 = allowed ? recent.filter(r => !allowed.includes(ukWeekday(r.accessTime))).length : 0
     const visitsTotal = await prisma.accessLog.count({ where: { userId: u.id, accessMethod: 'PIN_RECEPTION' } })
+    const notes = await prisma.memberNote.findMany({ where: { userId: u.id }, orderBy: { createdAt: 'desc' }, take: 3, select: { id: true, text: true, authorName: true, createdAt: true } })
     members.push({
       id: u.id,
       name: `${u.firstName} ${u.lastName}`.replace(/\s+/g, ' ').trim(),
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
       visits30: recent.length,
       visitsTotal,
       offPlanVisits30,
+      notes: notes.map(n => ({ id: n.id, text: n.text, authorName: n.authorName, createdAt: n.createdAt.toISOString() })),
       packageEnd: isOfflinePackage ? membership!.endDate!.toISOString() : null,
       lastVisit: lastCheckin ? lastCheckin.accessTime.toISOString() : null,
       checkedInToday: todayCheckin ? todayCheckin.accessTime.toISOString() : null,
