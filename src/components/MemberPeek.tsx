@@ -9,7 +9,10 @@ type Peek = {
   phone: string | null; email: string | null; dateOfBirth: string | null
   address: string | null; postcode: string | null
   emergency: { name: string; phone: string | null; relationship: string | null } | null
+  allowedDays?: string
+  attendance?: { visits30: number; visits90: number; visitsTotal: number; offPlanVisits30: number; firstVisit: string | null; lastVisit: string | null }
 }
+const fmtDay = (iso: string | null) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/London' }) : '—'
 const planLabel = (p: string | null) => (p || '—').replace(/^MIG_/, '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
 const pillCls = (s: string) =>
   s === 'ACTIVE' || s === 'TRIALING' ? 'bg-green-100 text-green-800'
@@ -47,7 +50,7 @@ export default function MemberPeek({ userId, onClose }: { userId: string; onClos
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-lg font-semibold tracking-tight truncate">{m.name}</h3>
-                <p className="text-sm text-zinc-500">{planLabel(m.plan)}{m.packageEnd ? ` · ends ${m.packageEnd}` : ''}</p>
+                <p className="text-sm text-zinc-500">{planLabel(m.plan)}{m.packageEnd ? ` · ends ${m.packageEnd}` : ''}{m.allowedDays ? ` · ${m.allowedDays}` : ''}</p>
               </div>
               <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${pillCls(m.status)}`}>{m.status.replace('_', ' ')}</span>
             </div>
@@ -55,6 +58,18 @@ export default function MemberPeek({ userId, onClose }: { userId: string; onClos
               <button onClick={() => setCamera(true)} className="text-xs font-medium text-zinc-600 hover:text-zinc-900 underline">{m.photo ? 'Retake photo' : 'Add photo'}</button>
               {m.photo && <button onClick={deletePhoto} className="text-xs font-medium text-red-500 hover:text-red-700 underline">Delete photo</button>}
             </div>
+            {m.attendance && (
+              <div className={`rounded-xl px-4 py-3 mb-3 text-sm ${m.attendance.offPlanVisits30 ? 'bg-red-50 border border-red-200 text-red-900' : 'bg-zinc-50 border border-zinc-100 text-zinc-700'}`}>
+                <div className="flex items-baseline justify-between">
+                  <span className="font-semibold">{m.attendance.visits30} visit{m.attendance.visits30 === 1 ? '' : 's'} in the last 30 days</span>
+                  <span className="text-xs opacity-70">{m.attendance.visits90} in 90 days · {m.attendance.visitsTotal} total</span>
+                </div>
+                <div className="text-xs opacity-80 mt-0.5">
+                  {m.attendance.offPlanVisits30 ? `${m.attendance.offPlanVisits30} of them on days the plan doesn't cover (${m.allowedDays}). ` : ''}
+                  First visit {fmtDay(m.attendance.firstVisit)} · last {fmtDay(m.attendance.lastVisit)}
+                </div>
+              </div>
+            )}
             <div className="divide-y divide-zinc-100 text-sm">
               {[
                 ['PIN', m.pin],

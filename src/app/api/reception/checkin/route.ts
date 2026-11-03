@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CHECKIN_BLOCK_MS, CHECKIN_BLOCK_HOURS } from '@/lib/checkin'
 import { effectiveMemberStatus } from '@/lib/member-status'
+import { outsidePlanDays } from '@/lib/plan-access'
 
 const ALLOWED = ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN']
 
@@ -39,16 +40,18 @@ export async function POST(request: NextRequest) {
   // snapshot the EFFECTIVE status (cash-package aware) — this is what the Today
   // list and the wall screen render, so a raw old CANCELLED sub must not leak here
   const { status } = effectiveMemberStatus(sub, membership)
+  // Flag (don't block) visits on days the plan doesn't cover, e.g. a weekend plan on a Monday
+  const offPlan = outsidePlanDays(membership?.membershipType || sub?.membershipType || null)
 
   const log = await prisma.accessLog.create({
     data: {
       userId,
       accessMethod: 'PIN_RECEPTION',
       accessGranted: true,
-      accessReason: `Checked in at reception (${status})`,
+      accessReason: `Checked in at reception (${status})${offPlan ? ` · OUTSIDE PLAN DAYS: ${offPlan}` : ''}`,
       location: 'Reception',
       membershipStatus: status,
     },
   })
-  return NextResponse.json({ success: true, checkedInAt: log.accessTime.toISOString() })
+  return NextResponse.json({ success: true, checkedInAt: log.accessTime.toISOString(), outsidePlanDays: offPlan })
 }

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { effectiveMemberStatus } from '@/lib/member-status'
+import { planAccessDays, planAllowedWeekdays, ukWeekday } from '@/lib/plan-access'
 
 const ALLOWED = ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN']
 
@@ -21,14 +22,28 @@ export async function GET(request: NextRequest) {
   let ec: any = {}
   try { ec = u.emergencyContact ? JSON.parse(u.emergencyContact) : {} } catch {}
   const { status, isOfflinePackage: isOffline } = effectiveMemberStatus(sub, membership)
+  const plan = membership?.membershipType || sub?.membershipType || null
+  const since30 = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+  const since90 = new Date(Date.now() - 90 * 24 * 3600 * 1000)
+  const [recent90, visitsTotal, first, last] = await Promise.all([
+    prisma.accessLog.findMany({ where: { userId, accessMethod: 'PIN_RECEPTION', accessTime: { gte: since90 } }, select: { accessTime: true } }),
+    prisma.accessLog.count({ where: { userId, accessMethod: 'PIN_RECEPTION' } }),
+    prisma.accessLog.findFirst({ where: { userId, accessMethod: 'PIN_RECEPTION' }, orderBy: { accessTime: 'asc' }, select: { accessTime: true } }),
+    prisma.accessLog.findFirst({ where: { userId, accessMethod: 'PIN_RECEPTION' }, orderBy: { accessTime: 'desc' }, select: { accessTime: true } }),
+  ])
+  const allowed = planAllowedWeekdays(plan)
+  const recent30 = recent90.filter(r => r.accessTime >= since30)
+  const offPlan30 = allowed ? recent30.filter(r => !allowed.includes(ukWeekday(r.accessTime))).length : 0
   return NextResponse.json({
     member: {
       id: u.id,
       name: `${u.firstName} ${u.lastName}`.replace(/\s+/g, ' ').trim(),
       photo: u.profileImage || null,
       pin: u.pin || null,
-      plan: membership?.membershipType || sub?.membershipType || null,
+      plan,
       status,
+      allowedDays: planAccessDays(plan),
+      attendance: { visits30: recent30.length, visits90: recent90.length, visitsTotal, offPlanVisits30: offPlan30, firstVisit: first?.accessTime.toISOString() || null, lastVisit: last?.accessTime.toISOString() || null },
       packageEnd: isOffline ? membership!.endDate!.toISOString().slice(0, 10) : null,
       phone: u.phone || null,
       email: /@child\.local$|@member\.local$|@local$/.test(u.email) ? null : u.email,

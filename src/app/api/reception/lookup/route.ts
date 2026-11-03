@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { CHECKIN_BLOCK_MS } from '@/lib/checkin'
 import { effectiveMemberStatus } from '@/lib/member-status'
+import { outsidePlanDays, planAccessDays, planAllowedWeekdays, ukWeekday } from '@/lib/plan-access'
 
 const ALLOWED = ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN']
 
@@ -53,14 +54,26 @@ export async function POST(request: NextRequest) {
     })
     const todayCheckin = lastCheckin && lastCheckin.accessTime >= startOfDay ? lastCheckin : null
     const { status, isOfflinePackage } = effectiveMemberStatus(sub, membership)
+    const plan = membership?.membershipType || sub?.membershipType || null
+    // How often they come, and how often on days their plan doesn't cover (last 30 days)
+    const since30 = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+    const recent = await prisma.accessLog.findMany({ where: { userId: u.id, accessMethod: 'PIN_RECEPTION', accessTime: { gte: since30 } }, select: { accessTime: true } })
+    const allowed = planAllowedWeekdays(plan)
+    const offPlanVisits30 = allowed ? recent.filter(r => !allowed.includes(ukWeekday(r.accessTime))).length : 0
+    const visitsTotal = await prisma.accessLog.count({ where: { userId: u.id, accessMethod: 'PIN_RECEPTION' } })
     members.push({
       id: u.id,
       name: `${u.firstName} ${u.lastName}`.replace(/\s+/g, ' ').trim(),
       photo: u.profileImage || null,
       pin: u.pin,
-      plan: membership?.membershipType || sub?.membershipType || null,
+      plan,
       price: Number(sub?.monthlyPrice ?? membership?.monthlyPrice ?? 0),
       status,
+      allowedDays: planAccessDays(plan),
+      outsidePlanDays: outsidePlanDays(plan),
+      visits30: recent.length,
+      visitsTotal,
+      offPlanVisits30,
       packageEnd: isOfflinePackage ? membership!.endDate!.toISOString() : null,
       lastVisit: lastCheckin ? lastCheckin.accessTime.toISOString() : null,
       checkedInToday: todayCheckin ? todayCheckin.accessTime.toISOString() : null,
