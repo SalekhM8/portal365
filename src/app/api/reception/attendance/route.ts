@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { outsidePlanDays } from '@/lib/plan-access'
 
 const ALLOWED = ['RECEPTIONIST', 'ADMIN', 'SUPER_ADMIN']
 
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
   const logs = await prisma.accessLog.findMany({
     where: { accessMethod: 'PIN_RECEPTION', accessTime: { gte: day, lt: next } },
     orderBy: { accessTime: 'desc' },
-    include: { user: { select: { firstName: true, lastName: true, profileImage: true } } },
+    include: { user: { select: { firstName: true, lastName: true, profileImage: true, memberships: { select: { membershipType: true }, orderBy: { updatedAt: 'desc' }, take: 1 } } } },
   })
   return NextResponse.json({
     date: day.toISOString().slice(0, 10),
@@ -29,6 +30,9 @@ export async function GET(request: NextRequest) {
       name: `${l.user.firstName} ${l.user.lastName}`.replace(/\s+/g, ' ').trim(),
       photo: l.user.profileImage || null,
       status: l.membershipStatus || '-',
+      plan: l.user.memberships?.[0]?.membershipType || null,
+      // Flag from the plan they are on now; the check-in reason also carries it if it was flagged at the time
+      outsidePlanDays: /OUTSIDE PLAN DAYS/.test(l.accessReason || '') ? (l.accessReason.split('OUTSIDE PLAN DAYS: ')[1] || 'outside plan days') : outsidePlanDays(l.user.memberships?.[0]?.membershipType || null, l.accessTime),
     })),
   })
 }

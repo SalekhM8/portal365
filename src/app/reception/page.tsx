@@ -11,8 +11,10 @@ type Member = {
   packageEnd?: string | null
   lastVisit: string | null; checkedInToday: string | null
   blockedUntil?: string | null
+  allowedDays?: string; outsidePlanDays?: string | null
+  visits30?: number; visitsTotal?: number; offPlanVisits30?: number
 }
-type Entry = { userId?: string; time: string; name: string; photo: string | null; status: string }
+type Entry = { userId?: string; time: string; name: string; photo: string | null; status: string; plan?: string | null; outsidePlanDays?: string | null }
 
 const PILL: Record<string, { label: string; sub: string; cls: string; dot: string }> = {
   ACTIVE:    { label: 'Active',        sub: 'Good to go',                           cls: 'bg-green-100 text-green-800',   dot: 'bg-green-600' },
@@ -236,6 +238,18 @@ function CheckIn() {
               </div>
               <StatusPill status={member.status} />
             </div>
+            {member.outsidePlanDays && !member.blockedUntil && (
+              <div className="mt-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3.5 flex items-start gap-3">
+                <svg className="h-5 w-5 text-red-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <div>
+                  <p className="text-sm font-semibold text-red-900">Not a plan day — {planLabel(member.plan)} is {member.allowedDays}</p>
+                  <p className="text-sm text-red-800 mt-0.5">
+                    {member.offPlanVisits30 ? `${member.offPlanVisits30} off-plan visit${member.offPlanVisits30 === 1 ? '' : 's'} in the last 30 days. ` : ''}
+                    Let them train only if they upgrade or pay for the session.
+                  </p>
+                </div>
+              </div>
+            )}
             {member.blockedUntil ? (
               <div className="mt-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3.5 flex items-start gap-3">
                 <svg className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -250,9 +264,10 @@ function CheckIn() {
                 <button onClick={() => setShowCamera(true)} className="text-xs font-medium text-zinc-500 hover:text-zinc-900 underline shrink-0 ml-3">
                   {member.photo ? 'Retake photo' : 'Add photo'}
                 </button>
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-zinc-400 text-right">
                   {member.checkedInToday ? `Already in today · ${fmtTime(member.checkedInToday)}`
                     : member.lastVisit ? `Last visit ${fmtDay(member.lastVisit)}` : 'First visit'}
+                  {typeof member.visits30 === 'number' && <><br />{member.visits30} visit{member.visits30 === 1 ? '' : 's'} in 30 days · {member.visitsTotal} total</>}
                 </p>
               </div>
             )}
@@ -326,7 +341,10 @@ function Today() {
         {shown.map((e, i) => (
           <div key={i} onClick={() => e.userId && setPeek(e.userId)} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-50 transition">
             <span className="h-9 w-9 rounded-full bg-zinc-100 grid place-items-center text-xs font-semibold text-zinc-600 shrink-0">{initials(e.name)}</span>
-            <span className="flex-1 font-medium text-zinc-900 truncate">{e.name}</span>
+            <span className="flex-1 min-w-0">
+              <span className="block font-medium text-zinc-900 truncate">{e.name}</span>
+              {e.outsidePlanDays && <span className="inline-flex items-center gap-1 mt-0.5 text-[11px] font-medium text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">Not a plan day · {planLabel(e.plan ?? null)}</span>}
+            </span>
             <StatusPill status={e.status} />
             <span className="text-sm text-zinc-400 tabular-nums w-12 text-right">{fmtTime(e.time)}</span>
           </div>
