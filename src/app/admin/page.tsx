@@ -79,6 +79,7 @@ interface VATStatus {
 
 interface CustomerDetail {
   id: string
+  pin?: string | null
   account?: string
   stripeCustomerId?: string | null
   name: string
@@ -497,6 +498,19 @@ function AdminDashboardContent() {
 
   // When arriving on the families tab with ?family=<id>, scroll that family into
   // view and briefly highlight it. Triggered by clicking "Part of family under X"
+  // ?customer=<id> opens that member's Member Summary once the list has loaded
+  // (Attendance page rows link here so the desk gets Call / SMS / WhatsApp / Email).
+  useEffect(() => {
+    const targetId = searchParams.get('customer')
+    if (!targetId || customers.length === 0) return
+    const c = customers.find(x => x.id === targetId)
+    if (c) { setCustomerPayments([]); setSelectedCustomer(c); fetchCustomerPayments(c.id) }
+    const params = new URLSearchParams(Array.from(searchParams.entries()))
+    params.delete('customer')
+    router.replace(`/admin?${params.toString()}`, { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, searchParams])
+
   // on a customer modal, and also works on direct URL load.
   useEffect(() => {
     if (activeTab !== 'families') return
@@ -1350,6 +1364,7 @@ function AdminDashboardContent() {
     const norm = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim()
     const term = norm(searchTerm)
     const matchesSearch = norm(customer.name).includes(term) ||
+                         (!!customer.pin && customer.pin === term) || // door PIN, exact
                          customer.email.toLowerCase().includes(term) ||
                          (customer.phone || '').toLowerCase().includes(term) ||
                          (customer.emergencyContact?.addressInfo?.postcode || '').toLowerCase().includes(term)
@@ -1961,7 +1976,7 @@ function AdminDashboardContent() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="Name, email, phone, postcode..."
+                  placeholder="Name, email, phone, postcode or PIN..."
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setPaymentsServerFiltered(false) }}
                   className="pl-10 w-64"
@@ -2199,7 +2214,7 @@ function AdminDashboardContent() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="Name, email, phone, postcode..."
+                  placeholder="Name, email, phone, postcode or PIN..."
                   value={searchTerm}
                   onChange={(e) => { setSearchTerm(e.target.value); setPaymentsServerFiltered(false) }}
                   className="pl-10 w-64"
