@@ -2,15 +2,29 @@ import { describe, it, expect } from 'vitest'
 import { planAllowedWeekdays, outsidePlanDays, ukWeekday, planAccessDays } from '@/lib/plan-access'
 
 describe('plan-access day rules', () => {
-  it('weekend plans allow Saturday and Sunday only; unlimited plans allow every day', () => {
+  it('kids weekend plans allow Saturday and Sunday only; unlimited plans allow every day', () => {
     expect(planAllowedWeekdays('KIDS_WEEKEND_UNDER14')).toEqual([6, 0])
-    expect(planAllowedWeekdays('WEEKEND_ADULT')).toEqual([6, 0])
     expect(planAllowedWeekdays('MIG_KIDS_WEEKEND')).toEqual([6, 0])
+    expect(planAllowedWeekdays('WEEKEND_CHILD')).toEqual([6, 0])
     expect(planAllowedWeekdays('WEEKEND_FEMALE_UNDER_16')).toEqual([5, 6, 0])
     expect(planAllowedWeekdays('Kids aged 4 to 6 only')).toEqual([0])
     expect(planAllowedWeekdays('KIDS_UNLIMITED_UNDER14')).toBeNull()
     expect(planAllowedWeekdays('FULL_ADULT')).toBeNull()
     expect(planAllowedWeekdays(null)).toBeNull()
+  })
+
+  it('adult weekend plans include Friday; female plans keep their existing days', () => {
+    expect(planAllowedWeekdays('WEEKEND_ADULT')).toEqual([5, 6, 0])
+    expect(planAllowedWeekdays('MIG_WEEKEND_55')).toEqual([5, 6, 0])
+    expect(planAccessDays('WEEKEND_ADULT')).toBe('Fridays, Saturdays & Sundays')
+    // Fri 13 Nov 2026 19:05 GMT — fine for an adult, flagged for a kid
+    expect(outsidePlanDays('WEEKEND_ADULT', '2026-11-13T19:05:00Z')).toBeNull()
+    expect(outsidePlanDays('KIDS_WEEKEND_UNDER14', '2026-11-13T19:05:00Z')).toBe('Friday visit on a saturdays & sundays plan')
+    // Thursday is still outside for an adult weekend plan
+    expect(outsidePlanDays('WEEKEND_ADULT', '2026-11-12T19:05:00Z')).toBe('Thursday visit on a fridays, saturdays & sundays plan')
+    // untouched
+    expect(planAllowedWeekdays('WEEKEND_FEMALE')).toEqual([6, 0])
+    expect(planAllowedWeekdays('WOMENS_CLASSES')).toBeNull()
   })
 
   it('evaluates the weekday in UK time', () => {

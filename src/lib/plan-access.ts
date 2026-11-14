@@ -7,6 +7,10 @@
 // different line; unknown plans fall back on the WEEKEND rule then "every day".
 const EXACT: Record<string, string> = {
   'KIDS AGED 4 TO 6 ONLY': 'Sundays, 4:30–5:15pm',
+  // Adult (men's) weekend plans include Friday — confirmed by the desk, Nov 2026.
+  // Kids weekend plans stay Sat & Sun. Female plans deliberately untouched.
+  'WEEKEND_ADULT': 'Fridays, Saturdays & Sundays',
+  'MIG_WEEKEND_55': 'Fridays, Saturdays & Sundays',
   'WEEKEND_FEMALE_UNDER_16': 'Fridays, Saturdays & Sundays',
   'PARENT_WEIGHT': 'Mon–Fri 5:00–6:30pm · Mon, Sat & Sun 10:00am–12:30pm',
 }
@@ -25,6 +29,8 @@ export function planAccessDays(planKey: string | null | undefined): string {
 // ---------------------------------------------------------------------------
 const EXACT_DAYS: Record<string, number[]> = {
   'KIDS AGED 4 TO 6 ONLY': [0],
+  'WEEKEND_ADULT': [5, 6, 0],
+  'MIG_WEEKEND_55': [5, 6, 0],
   'WEEKEND_FEMALE_UNDER_16': [5, 6, 0],
 }
 
